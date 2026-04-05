@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="常用日報 Jyoyou">
+<meta name="theme-color" content="#ff7e29">
+<title>常用日報 Jyoyou</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root {
+  --orange: #ff7e29;
+  --orange-light: #fff4ea;
+  --green: #32b36b;
+  --green-light: #eafaf1;
+  --bg: #f2f4f7;
+  --white: #ffffff;
+  --text: #1a1a2e;
+  --text2: #6b7280;
+  --border: #e5e7eb;
+  --shadow: 0 2px 10px rgba(0,0,0,0.07);
+  --radius: 14px;
+  --danger: #ef4444;
+  --blue: #3b82f6;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif; background: var(--bg); color: var(--text); font-size: 15px; overflow-x: hidden; }
+
+/* HEADER */
+.header { background: var(--white); box-shadow: 0 2px 10px rgba(0,0,0,0.08); position: sticky; top: 0; z-index: 100; }
+.header-main { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 10px; max-width: 700px; margin: 0 auto; }
+.header-title { font-size: 20px; font-weight: 900; letter-spacing: 0.02em; }
+.header-sub { font-size: 11px; color: var(--text2); margin-top: 1px; }
+.logo { font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 22px; font-weight: 900; color: var(--green); letter-spacing: 2px; }
+.header-stripe { height: 5px; background: linear-gradient(90deg, var(--orange) 50%, var(--green) 50%); }
+
+/* NAV */
+.bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--white); border-top: 1px solid var(--border); display: flex; z-index: 100; box-shadow: 0 -2px 10px rgba(0,0,0,0.06); }
+.nav-btn { flex: 1; padding: 8px 4px 12px; border: none; background: transparent; font-family: inherit; font-size: 11px; font-weight: 700; color: var(--text2); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.nav-btn .ni { font-size: 22px; }
+.nav-btn.active { color: var(--orange); }
+
+/* PANELS */
+.panel { display: none; padding: 16px 16px 100px; max-width: 700px; margin: 0 auto; }
+.panel.active { display: block; }
+
+/* CARDS */
+.card { background: var(--white); border-radius: var(--radius); padding: 16px; margin-bottom: 14px; box-shadow: var(--shadow); }
+.card-title { font-size: 14px; font-weight: 800; border-left: 4px solid var(--orange); padding-left: 9px; margin-bottom: 14px; color: var(--text); }
+.card-title.green { border-color: var(--green); }
+
+/* FORM */
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media(max-width:480px) { .grid3 { grid-template-columns: 1fr 1fr; } }
+.field label { display: block; font-size: 11px; font-weight: 700; color: var(--text2); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.05em; }
+.field input, .field select, .field textarea { width: 100%; padding: 10px; border: 1.5px solid var(--border); border-radius: 10px; font-family: inherit; font-size: 14px; color: var(--text); background: var(--white); -webkit-appearance: none; appearance: none; }
+.field input:focus, .field select:focus { outline: none; border-color: var(--orange); }
+.field textarea { min-height: 72px; resize: vertical; }
+.hint { font-size: 12px; color: var(--text2); margin-top: 6px; }
+
+/* BUTTONS */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 12px 20px; border: none; border-radius: 10px; font-family: inherit; font-size: 14px; font-weight: 800; cursor: pointer; transition: all 0.15s; }
+.btn:active { transform: translateY(1px); }
+.btn-orange { background: var(--orange); color: #fff; }
+.btn-green { background: var(--green); color: #fff; }
+.btn-gray { background: #9ca3af; color: #fff; }
+.btn-outline { background: var(--white); color: var(--text); border: 1.5px solid var(--border); }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-blue { background: var(--blue); color: #fff; }
+.btn-block { width: 100%; margin-bottom: 10px; }
+.btn-sm { padding: 7px 12px; font-size: 12px; border-radius: 8px; }
+
+/* WORKER */
+.workerCard { background: var(--bg); border-radius: 12px; padding: 14px; margin-bottom: 12px; border: 1.5px solid var(--border); }
+.workerTop { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px; align-items: end; }
+@media(max-width:480px) { .workerTop { grid-template-columns: 1fr 1fr; } }
+.worker-hours { font-size: 13px; color: var(--green); font-weight: 700; margin: 8px 0 0; padding: 6px 10px; background: var(--green-light); border-radius: 8px; display: inline-block; }
+.smallLabel { font-size: 11px; font-weight: 700; color: var(--text2); margin-bottom: 4px; }
+
+/* TOOLS */
+.tools-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 2px 16px; margin-top: 4px; }
+.tool-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; padding: 6px 0; border-bottom: 1px dashed var(--border); }
+.tool-item span { flex: 1; }
+.tool-item input[type="number"] { width: 64px; text-align: right; padding: 6px 8px; border: 1.5px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 13px; }
+.tool-item input[type="text"] { flex: 1; padding: 6px 8px; border: 1.5px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 13px; }
+
+/* SUMMARY */
+.summary { margin-top: 10px; font-size: 13px; display: flex; flex-wrap: wrap; gap: 8px; }
+.summary span { background: var(--orange-light); color: var(--orange); padding: 4px 12px; border-radius: 999px; font-weight: 700; }
+
+/* BANNER */
+.banner { padding: 12px 16px; border-radius: 10px; font-weight: 800; font-size: 14px; text-align: center; margin-bottom: 14px; }
+.banner.ok { background: var(--green-light); color: var(--green); border: 1.5px solid var(--green); }
+.banner.ng { background: #fef2f2; color: var(--danger); border: 1.5px solid var(--danger); }
+
+/* INFO */
+.info-row { display: flex; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.info-row:last-child { border-bottom: none; }
+.info-row .lbl { color: var(--text2); font-weight: 700; min-width: 90px; flex-shrink: 0; }
+
+/* SIGN */
+.sign-wrap { background: var(--bg); border-radius: 12px; padding: 14px; border: 1.5px dashed var(--border); text-align: center; margin-bottom: 14px; }
+.sign-label { font-size: 13px; font-weight: 700; color: var(--text2); margin-bottom: 10px; }
+#sign { width: 100%; height: 180px; background: var(--white); border-radius: 10px; border: 1.5px solid var(--border); touch-action: none; display: block; }
+.sign-btns { display: flex; gap: 10px; margin-top: 10px; justify-content: center; }
+
+/* TABLE */
+.tbl-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { background: var(--orange-light); padding: 9px 10px; font-weight: 800; color: var(--orange); white-space: nowrap; text-align: center; }
+td { padding: 9px 10px; border-top: 1px solid var(--border); text-align: center; }
+tr:hover td { background: var(--bg); }
+
+/* HISTORY */
+.hist-item { background: var(--white); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; box-shadow: var(--shadow); border: 1.5px solid transparent; }
+.hist-date { font-size: 13px; font-weight: 800; color: var(--orange); }
+.hist-info h4 { font-size: 14px; font-weight: 800; margin: 4px 0 2px; }
+.hist-info p { font-size: 12px; color: var(--text2); }
+.hist-actions { display: flex; gap: 6px; margin-top: 10px; }
+
+/* EXCEL */
+.month-sel { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.month-sel label { font-size: 13px; font-weight: 700; color: var(--text2); }
+.month-sel select { padding: 9px 14px; border: 1.5px solid var(--border); border-radius: 10px; font-family: inherit; font-size: 14px; background: var(--white); -webkit-appearance: none; appearance: none; }
+.monthly-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 14px; }
+.monthly-tbl { border-collapse: collapse; font-size: 11px; min-width: 500px; width: 100%; }
+.monthly-tbl th, .monthly-tbl td { border: 1px solid var(--border); padding: 5px 4px; text-align: center; white-space: nowrap; }
+.monthly-tbl th { background: var(--orange-light); color: var(--orange); font-weight: 800; font-size: 10px; }
+.monthly-tbl .sat { background: #dbeafe; }
+.monthly-tbl .sun { background: #fee2e2; }
+.monthly-tbl .total-col { background: #d1fae5; font-weight: 800; color: var(--green); }
+.monthly-tbl .total-row td { background: #d1fae5; font-weight: 800; }
+.monthly-tbl .val { color: var(--orange); font-weight: 800; }
+.monthly-tbl .row-hd { text-align: left; padding-left: 6px; font-weight: 800; min-width: 60px; }
+
+/* MISC */
+.empty { text-align: center; padding: 48px 20px; color: var(--text2); }
+.empty .ei { font-size: 52px; margin-bottom: 12px; }
+.section-title { font-size: 16px; font-weight: 800; margin-bottom: 14px; }
+.toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--text); color: #fff; padding: 12px 22px; border-radius: 30px; font-size: 14px; font-weight: 700; opacity: 0; transition: all 0.3s; z-index: 200; white-space: nowrap; pointer-events: none; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-main">
+    <div>
+      <div class="header-title">常用日報</div>
+      <div class="header-sub">常用工事　作業記録システム</div>
+    </div>
+    <span class="logo">TOKUWA</span>
+  </div>
+  <div class="header-stripe"></div>
+</div>
+
+<!-- 入力パネル -->
+<div class="panel active" id="panel-input">
+  <div class="card">
+    <div class="card-title">📋 基本情報</div>
+    <div class="grid3">
+      <div class="field"><label>日付</label><input id="date" type="date"></div>
+      <div class="field"><label>お客様名</label><input id="customer" type="text" placeholder=""></div>
+      <div class="field"><label>現場名</label><input id="site" type="text" placeholder=""></div>
+    </div>
+    <div class="field" style="margin-top:12px;">
+      <label>作業内容</label>
+      <textarea id="workDesc" placeholder="例：沓摺はつり　床面調整斫り　外部目地切断"></textarea>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">👷 作業員</div>
+    <div id="workers"></div>
+    <button class="btn btn-outline btn-block" type="button" onclick="addWorkerRow()">＋ 作業員を追加</button>
+    <div class="hint">※作業時間は30分刻み。12:00〜13:00は昼休憩として差し引きます。</div>
+    <div class="summary">
+      <span id="totalWorkers">作業員数：0人</span>
+      <span id="totalHours">合計時間：0.00h</span>
+      <span id="totalManDays">延べ人数：0.00人日</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔧 使用工具</div>
+    <div class="tools-grid" id="toolsContainer"></div>
+    <div id="otherToolsContainer" class="tools-grid" style="margin-top:4px;"></div>
+    <button type="button" class="btn btn-outline btn-sm" onclick="addOtherToolRow()" style="margin-top:10px;">＋ その他工具を追加</button>
+    <div class="hint">※数量が0の工具は確認書に表示されません。</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📝 備考</div>
+    <div class="field"><textarea id="note" placeholder="特記事項や注意事項などがあれば入力してください"></textarea></div>
+  </div>
+
+  <button class="btn btn-orange btn-block" type="button" onclick="goConfirm()">作業確認へ →</button>
+</div>
+
+<!-- 確認パネル -->
+<div class="panel hidden" id="panel-confirm">
+  <div id="statusBanner" class="banner ng">未保存</div>
+
+  <div class="card">
+    <div class="card-title">📋 基本情報</div>
+    <div class="info-row"><span class="lbl">作業日</span><span id="c-date"></span></div>
+    <div class="info-row"><span class="lbl">お客様名</span><span id="c-customer"></span></div>
+    <div class="info-row"><span class="lbl">現場名</span><span id="c-site"></span></div>
+    <div class="info-row"><span class="lbl">作業内容</span><span id="c-workDesc" style="white-space:pre-wrap;"></span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title green">👷 作業員</div>
+    <div id="c-workersList"></div>
+  </div>
+
+  <div class="card" id="c-toolsCard">
+    <div class="card-title">🔧 使用工具</div>
+    <div id="c-toolsList"></div>
+  </div>
+
+  <div class="card" id="c-noteCard">
+    <div class="card-title">📝 備考</div>
+    <div id="c-note" style="font-size:14px; white-space:pre-wrap;"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">✍️ お客様サイン</div>
+    <div class="sign-wrap">
+      <div class="sign-label">本日の作業内容をご確認の上、ご署名をお願いいたします。</div>
+      <canvas id="sign"></canvas>
+      <div class="sign-btns">
+        <button class="btn btn-gray btn-sm" onclick="clearSign()">署名クリア</button>
+      </div>
+    </div>
+    <button class="btn btn-green btn-block" id="saveBtn" onclick="saveAll()">✅ 保存（提出）</button>
+    <div class="hint">※データは端末内（localStorage）に保存されます。</div>
+  </div>
+
+  <button class="btn btn-outline btn-block" onclick="backToEdit()">← 入力に戻る</button>
+</div>
+
+<!-- 履歴パネル -->
+<div class="panel hidden" id="panel-history">
+  <div class="section-title">📋 日報履歴</div>
+  <div class="card">
+    <div class="card-title">📤 データ書き出し</div>
+    <p style="font-size:13px; color:var(--text2); margin-bottom:14px;">保存済みの日報データをファイルに書き出します。事務所の集計アプリに読み込んでください。</p>
+    <div class="grid2">
+      <div class="field">
+        <label>現場で絞り込む（任意）</label>
+        <select id="export-site"><option value="">全現場</option></select>
+      </div>
+      <div class="field">
+        <label>月で絞り込む（任意）</label>
+        <select id="export-month"><option value="">全期間</option></select>
+      </div>
+    </div>
+    <button class="btn btn-orange btn-block" onclick="exportData()" style="margin-top:4px;">📤 データファイルを書き出す</button>
+    <div class="hint">※書き出したファイルをメールで事務所に送ってください</div>
+  </div>
+  <div id="history-list"></div>
+</div>
+
+<!-- 集計表パネル -->
+<div class="panel hidden" id="panel-excel">
+  <div class="card">
+    <div class="card-title">📊 月間集計表</div>
+    <div class="month-sel">
+      <label>現場：</label>
+      <select id="sel-site" onchange="updateExcelMonths(); renderMonthlyTable();"></select>
+      <label>月：</label>
+      <select id="sel-month" onchange="renderMonthlyTable();"></select>
+    </div>
+    <div id="excel-client-label" style="font-size:12px; color:var(--text2);"></div>
+  </div>
+
+  <div id="table-area" class="hidden">
+    <div class="card">
+      <div class="card-title">作業員別 月間勤務時間（h）</div>
+      <div class="monthly-wrap"><div id="monthly-wrap-worker"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title green">日別 作業員一覧</div>
+      <div class="monthly-wrap"><div id="monthly-wrap-daily"></div></div>
+    </div>
+  </div>
+
+  <div id="table-empty" class="empty hidden">
+    <div class="ei">📭</div><p>この現場・月のデータがありません</p>
+  </div>
+
+  <button class="btn btn-blue btn-block hidden" id="excel-dl-btn" onclick="downloadExcel()">
+    ⬇️ Excelファイルをダウンロード
+  </button>
+</div>
+
+<!-- Bottom Nav -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" id="nav-input" onclick="switchNav('input')">
+    <span class="ni">📝</span>入力
+  </button>
+  <button class="nav-btn" id="nav-history" onclick="switchNav('history')">
+    <span class="ni">📋</span>履歴
+  </button>
+  <button class="nav-btn" id="nav-excel" onclick="switchNav('excel')">
+    <span class="ni">📊</span>集計表
+  </button>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const DB_KEY = "TOKUWA_JOYOU_RECORDS_V1";
+
+const WORKER_NAMES = ["渡部","佐藤","松沢","茂原","石井","その他（手入力）"];
+const TOOL_LIST = [
+  "電動ハンマー","電動ハンマー大","ハンマードリル","コンプレッサー",
+  "カッター5インチ","カッター6インチ","カッター7インチ",
+  "切断砥石5インチ","切断砥石6インチ","集塵機","集塵機（大）",
+  "送風機","フィルター","発電機（ポータブル）","発電機（3kVA）",
+  "セイバーソーブレード","カップリング","アセチレングス"
+];
+
+const TIME_OPTIONS = [];
+for (let h = 0; h < 24; h++)
+  for (let m = 0; m < 60; m += 30)
+    TIME_OPTIONS.push(`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`);
+
+// ストレージ
+function getRecords() { return JSON.parse(localStorage.getItem(DB_KEY) || "[]"); }
+function saveRecords(arr) { localStorage.setItem(DB_KEY, JSON.stringify(arr)); }
+
+// トースト
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2500);
+}
+
+// ナビ切替
+function switchNav(tab) {
+  document.querySelectorAll(".panel").forEach(p => { p.classList.remove("active"); p.classList.add("hidden"); });
+  document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+  document.getElementById(`panel-${tab}`).classList.remove("hidden");
+  document.getElementById(`panel-${tab}`).classList.add("active");
+  document.getElementById(`nav-${tab}`).classList.add("active");
+  if (tab === "history") renderHistory();
+  if (tab === "excel") { populateExcelSites(); renderMonthlyTable(); }
+}
+
+// 時間計算（昼休み12〜13控除）
+function timeDiffHours(start, end) {
+  if (!start || !end) return 0;
+  const [sh,sm] = start.split(":").map(Number);
+  const [eh,em] = end.split(":").map(Number);
+  let s = sh*60+sm, e = eh*60+em;
+  if (e <= s) return 0;
+  let diff = e - s;
+  const ov = Math.min(e, 13*60) - Math.max(s, 12*60);
+  if (ov > 0) diff -= ov;
+  return Math.round(Math.max(0, diff) / 60 * 100) / 100;
+}
+
+// 時刻セレクト
+function createTimeSelect() {
+  const sel = document.createElement("select");
+  sel.style.cssText = "width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;background:var(--white);-webkit-appearance:none;appearance:none;";
+  sel.innerHTML = '<option value="">--:--</option>' + TIME_OPTIONS.map(t => `<option value="${t}">${t}</option>`).join("");
+  sel.addEventListener("change", recalcAll);
+  return sel;
+}
+
+// 作業員追加
+const workersDiv = document.getElementById("workers");
+
+function addWorkerRow() {
+  const card = document.createElement("div");
+  card.className = "workerCard";
+
+  const sel = document.createElement("select");
+  sel.style.cssText = "width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;background:var(--white);-webkit-appearance:none;appearance:none;";
+  sel.innerHTML = '<option value="">選択</option>' + WORKER_NAMES.map(n => `<option>${n}</option>`).join("");
+
+  const otherInput = document.createElement("input");
+  otherInput.type = "text"; otherInput.placeholder = "氏名を入力";
+  otherInput.style.cssText = "display:none;margin-top:4px;width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;";
+  sel.addEventListener("change", () => { otherInput.style.display = sel.value === "その他（手入力）" ? "block" : "none"; });
+
+  const nameDiv = document.createElement("div");
+  nameDiv.appendChild(sel); nameDiv.appendChild(otherInput);
+
+  const startSel = createTimeSelect();
+  const endSel = createTimeSelect();
+
+  const delBtn = document.createElement("button");
+  delBtn.type = "button"; delBtn.textContent = "✕"; delBtn.className = "btn btn-danger btn-sm";
+  delBtn.onclick = () => { card.remove(); recalcAll(); };
+
+  const top = document.createElement("div");
+  top.className = "workerTop";
+  [[nameDiv,"氏名"],[startSel,"開始"],[endSel,"終了"],[delBtn,""]].forEach(([el, lbl]) => {
+    const d = document.createElement("div");
+    if (lbl) { const l = document.createElement("div"); l.className = "smallLabel"; l.textContent = lbl; d.appendChild(l); }
+    else { d.style.cssText = "display:flex;align-items:flex-end;padding-bottom:2px;"; }
+    d.appendChild(el); top.appendChild(d);
+  });
+
+  const hoursSpan = document.createElement("div");
+  hoursSpan.className = "worker-hours";
+  hoursSpan.textContent = "勤務時間：0.00h";
+
+  card._nameSel = sel;
+  card._nameOther = otherInput;
+  card._startSel = startSel;
+  card._endSel = endSel;
+  card._hoursSpan = hoursSpan;
+
+  card.appendChild(top);
+  card.appendChild(hoursSpan);
+  workersDiv.appendChild(card);
+  recalcAll();
+}
+
+function recalcAll() {
+  let totalH = 0;
+  workersDiv.querySelectorAll(".workerCard").forEach(card => {
+    const h = timeDiffHours(card._startSel.value, card._endSel.value);
+    card._hoursSpan.textContent = `勤務時間：${h.toFixed(2)}h`;
+    totalH += h;
+  });
+  const n = workersDiv.querySelectorAll(".workerCard").length;
+  document.getElementById("totalWorkers").textContent = `作業員数：${n}人`;
+  document.getElementById("totalHours").textContent = `合計時間：${totalH.toFixed(2)}h`;
+  document.getElementById("totalManDays").textContent = `延べ人数：${(totalH/8).toFixed(2)}人日`;
+}
+
+// 工具生成
+const toolsContainer = document.getElementById("toolsContainer");
+const otherToolsContainer = document.getElementById("otherToolsContainer");
+
+TOOL_LIST.forEach(name => {
+  const div = document.createElement("div"); div.className = "tool-item";
+  const sp = document.createElement("span"); sp.textContent = name;
+  const inp = document.createElement("input"); inp.type="number"; inp.min="0"; inp.step="1"; inp.value="0";
+  div.appendChild(sp); div.appendChild(inp); toolsContainer.appendChild(div);
+});
+
+function addOtherToolRow() {
+  const div = document.createElement("div"); div.className = "tool-item";
+  const ni = document.createElement("input"); ni.type="text"; ni.placeholder="工具名";
+  const qi = document.createElement("input"); qi.type="number"; qi.min="0"; qi.step="1"; qi.value="0";
+  div.appendChild(ni); div.appendChild(qi); otherToolsContainer.appendChild(div);
+}
+
+// データ収集
+function collectData() {
+  const workers = [];
+  workersDiv.querySelectorAll(".workerCard").forEach(card => {
+    const name = card._nameSel.value === "その他（手入力）"
+      ? (card._nameOther.value.trim() || "その他")
+      : card._nameSel.value;
+    if (!name || name === "選択" || name === "") return;
+    const start = card._startSel.value, end = card._endSel.value;
+    workers.push({ name, start, end, hours: timeDiffHours(start, end) });
+  });
+
+  const tools = [];
+  toolsContainer.querySelectorAll(".tool-item").forEach(div => {
+    const name = div.querySelector("span").textContent;
+    const qty = Number(div.querySelector("input").value || 0);
+    if (qty > 0) tools.push({ name, qty });
+  });
+  otherToolsContainer.querySelectorAll(".tool-item").forEach(div => {
+    const name = (div.querySelector("input[type='text']").value || "").trim();
+    const qty = Number(div.querySelector("input[type='number']").value || 0);
+    if (name && qty > 0) tools.push({ name, qty });
+  });
+
+  return {
+    id: crypto?.randomUUID ? crypto.randomUUID() : String(Date.now()),
+    createdAt: new Date().toISOString(),
+    type: "joyou",
+    date: document.getElementById("date").value || "",
+    customer: document.getElementById("customer").value.trim(),
+    site: document.getElementById("site").value.trim(),
+    workDesc: document.getElementById("workDesc").value.trim(),
+    note: document.getElementById("note").value.trim(),
+    workers, tools
+  };
+}
+
+// 確認画面
+let draft = null;
+
+function goConfirm() {
+  const d = collectData();
+  if (!d.date || !d.customer || !d.site) { alert("日付・お客様名・現場名は必須です。"); return; }
+  draft = d;
+
+  document.getElementById("c-date").textContent = d.date.replace(/-/g,"/");
+  document.getElementById("c-customer").textContent = d.customer + " 様";
+  document.getElementById("c-site").textContent = d.site;
+  document.getElementById("c-workDesc").textContent = d.workDesc || "（なし）";
+
+  const wEl = document.getElementById("c-workersList");
+  wEl.innerHTML = d.workers.length
+    ? `<div class="tbl-wrap"><table><thead><tr><th>氏名</th><th>開始</th><th>終了</th><th>時間[h]</th></tr></thead><tbody>
+        ${d.workers.map(w=>`<tr><td>${w.name}</td><td>${w.start}</td><td>${w.end}</td><td>${w.hours.toFixed(2)}</td></tr>`).join("")}
+      </tbody></table></div>`
+    : "<p style='color:var(--text2);font-size:13px;'>（なし）</p>";
+
+  const tEl = document.getElementById("c-toolsList");
+  const tCard = document.getElementById("c-toolsCard");
+  if (d.tools.length) {
+    tEl.innerHTML = `<div class="tbl-wrap"><table><thead><tr><th>工具名</th><th>数量</th></tr></thead><tbody>
+      ${d.tools.map(t=>`<tr><td style="text-align:left;">${t.name}</td><td>${t.qty}</td></tr>`).join("")}
+    </tbody></table></div>`;
+    tCard.classList.remove("hidden");
+  } else { tCard.classList.add("hidden"); }
+
+  const nCard = document.getElementById("c-noteCard");
+  if (d.note) { document.getElementById("c-note").textContent = d.note; nCard.classList.remove("hidden"); }
+  else { nCard.classList.add("hidden"); }
+
+  const existing = getRecords().some(r => r.date===d.date && r.site===d.site && r.customer===d.customer);
+  const banner = document.getElementById("statusBanner");
+  banner.className = existing ? "banner ok" : "banner ng";
+  banner.textContent = existing ? "✅ 保存済み" : "未保存";
+  document.getElementById("saveBtn").textContent = existing ? "✅ 上書き保存" : "✅ 保存（提出）";
+
+  switchNavDirect("confirm");
+  requestAnimationFrame(() => { resizeSign(); clearSign(); });
+}
+
+function switchNavDirect(tab) {
+  document.querySelectorAll(".panel").forEach(p => {
+    p.classList.remove("active");
+    p.classList.add("hidden");
+  });
+  const target = document.getElementById(`panel-${tab}`);
+  target.classList.remove("hidden");
+  target.classList.add("active");
+  document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+}
+
+function backToEdit() { switchNav("input"); }
+
+// 保存
+function saveAll() {
+  if (!draft) return;
+  const payload = { ...draft, signaturePng: document.getElementById("sign").toDataURL() };
+  const arr = getRecords();
+  const idx = arr.findIndex(r => r.date===payload.date && r.site===payload.site && r.customer===payload.customer);
+  if (idx >= 0) arr[idx] = payload; else arr.push(payload);
+  saveRecords(arr);
+  const banner = document.getElementById("statusBanner");
+  banner.className = "banner ok"; banner.textContent = "✅ 保存済み";
+  document.getElementById("saveBtn").textContent = "✅ 上書き保存";
+  showToast("✅ 保存しました！");
+}
+
+// サイン
+const signCanvas = document.getElementById("sign");
+const sCtx = signCanvas.getContext("2d");
+let signing = false, sLX = 0, sLY = 0;
+
+function resizeSign() {
+  const r = signCanvas.getBoundingClientRect();
+  if (r.width === 0) return;
+  const dpr = window.devicePixelRatio || 1;
+  // CSS表示サイズを保持しつつ内部解像度をdpr倍に
+  signCanvas.style.width = r.width + "px";
+  signCanvas.style.height = r.height + "px";
+  signCanvas.width = Math.round(r.width * dpr);
+  signCanvas.height = Math.round(r.height * dpr);
+  sCtx.setTransform(1, 0, 0, 1, 0, 0);
+  sCtx.scale(dpr, dpr);
+  sCtx.lineWidth = 2; sCtx.lineJoin = "round"; sCtx.lineCap = "round"; sCtx.strokeStyle = "#222";
+}
+function clearSign() { sCtx.clearRect(0, 0, signCanvas.width, signCanvas.height); }
+function getSignPos(e) {
+  const r = signCanvas.getBoundingClientRect();
+  // getBoundingClientRectはCSS座標なのでそのまま使用（dpr補正不要）
+  if (e.touches) return { x: e.touches[0].clientX - r.left, y: e.touches[0].clientY - r.top };
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+signCanvas.addEventListener("mousedown", e => { signing = true; const p = getSignPos(e); sLX=p.x; sLY=p.y; });
+signCanvas.addEventListener("mousemove", e => { if(!signing) return; const p=getSignPos(e); sCtx.beginPath(); sCtx.moveTo(sLX,sLY); sCtx.lineTo(p.x,p.y); sCtx.stroke(); sLX=p.x; sLY=p.y; });
+signCanvas.addEventListener("mouseup", () => signing=false);
+signCanvas.addEventListener("mouseleave", () => signing=false);
+signCanvas.addEventListener("touchstart", e => { e.preventDefault(); signing=true; const p=getSignPos(e); sLX=p.x; sLY=p.y; }, {passive:false});
+signCanvas.addEventListener("touchmove", e => { if(!signing) return; e.preventDefault(); const p=getSignPos(e); sCtx.beginPath(); sCtx.moveTo(sLX,sLY); sCtx.lineTo(p.x,p.y); sCtx.stroke(); sLX=p.x; sLY=p.y; }, {passive:false});
+signCanvas.addEventListener("touchend", () => signing=false, {passive:false});
+
+// 履歴
+function renderHistory() {
+  const records = getRecords();
+  const sites = [...new Set(records.map(r => r.site))];
+  const months = [...new Set(records.map(r => r.date.slice(0,7)))].sort().reverse();
+  document.getElementById("export-site").innerHTML = '<option value="">全現場</option>' + sites.map(s=>`<option value="${s}">${s}</option>`).join("");
+  document.getElementById("export-month").innerHTML = '<option value="">全期間</option>' + months.map(m=>`<option value="${m}">${m.replace("-","年")}月</option>`).join("");
+
+  const el = document.getElementById("history-list");
+  if (!records.length) {
+    el.innerHTML = '<div class="empty"><div class="ei">📭</div><p>履歴がありません<br>日報を入力・保存してください</p></div>';
+    return;
+  }
+  el.innerHTML = [...records].reverse().map((r,i) => {
+    const realIdx = records.length - 1 - i;
+    const totalH = r.workers.reduce((s,w) => s+w.hours, 0);
+    return `<div class="hist-item">
+      <div class="hist-date">${r.date.replace(/-/g,"/")}</div>
+      <div class="hist-info">
+        <h4>${r.site} <span style="font-size:11px;color:var(--text2);">${r.customer}</span></h4>
+        <p>👷 ${r.workers.length}人 / ${totalH.toFixed(1)}h　${r.workDesc ? r.workDesc.slice(0,30) : ""}</p>
+      </div>
+      <div class="hist-actions">
+        <button class="btn btn-outline btn-sm" onclick="exportSingle(${realIdx})">📤 書出</button>
+        <button class="btn btn-sm" style="background:#fee2e2;color:var(--danger);" onclick="deleteRecord(${realIdx})">🗑️</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function deleteRecord(idx) {
+  if (!confirm("この日報を削除しますか？")) return;
+  const arr = getRecords(); arr.splice(idx, 1); saveRecords(arr);
+  renderHistory(); showToast("🗑️ 削除しました");
+}
+
+function dlBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
+}
+
+function exportSingle(idx) {
+  const r = getRecords()[idx]; if (!r) return;
+  const blob = new Blob([JSON.stringify({version:"1.0",exportedAt:new Date().toISOString(),records:[r]},null,2)], {type:"application/json"});
+  dlBlob(blob, `${r.workers[0]?.name||"常用"}_${r.date}.json`);
+  showToast("📤 書き出しました");
+}
+
+function exportData() {
+  const site = document.getElementById("export-site").value;
+  const month = document.getElementById("export-month").value;
+  let records = getRecords();
+  if (site) records = records.filter(r => r.site===site);
+  if (month) records = records.filter(r => r.date.startsWith(month));
+  if (!records.length) { showToast("⚠️ 該当データがありません"); return; }
+  const blob = new Blob([JSON.stringify({version:"1.0",exportedAt:new Date().toISOString(),records},null,2)], {type:"application/json"});
+  dlBlob(blob, `常用日報_${site||"全現場"}_${month||"全期間"}.json`);
+  showToast("📤 書き出しました");
+}
+
+// 集計表
+function populateExcelSites() {
+  const sites = [...new Set(getRecords().map(r => r.site))];
+  document.getElementById("sel-site").innerHTML = sites.length
+    ? sites.map(s=>`<option value="${s}">${s}</option>`).join("")
+    : '<option value="">（データなし）</option>';
+  updateExcelMonths();
+}
+
+function updateExcelMonths() {
+  const site = document.getElementById("sel-site").value;
+  const months = [...new Set(getRecords().filter(r=>r.site===site).map(r=>r.date.slice(0,7)))].sort().reverse();
+  document.getElementById("sel-month").innerHTML = months.map(m=>`<option value="${m}">${m.replace("-","年")}月</option>`).join("");
+}
+
+function renderMonthlyTable() {
+  const site = document.getElementById("sel-site").value;
+  const month = document.getElementById("sel-month").value;
+  const tableArea = document.getElementById("table-area");
+  const tableEmpty = document.getElementById("table-empty");
+  const dlBtn = document.getElementById("excel-dl-btn");
+
+  if (!site || !month) {
+    tableArea.classList.add("hidden"); tableEmpty.classList.remove("hidden"); dlBtn.classList.add("hidden"); return;
+  }
+  const records = getRecords().filter(r=>r.site===site && r.date.startsWith(month));
+  if (!records.length) {
+    tableArea.classList.add("hidden"); tableEmpty.classList.remove("hidden"); dlBtn.classList.add("hidden"); return;
+  }
+
+  tableArea.classList.remove("hidden"); tableEmpty.classList.add("hidden"); dlBtn.classList.remove("hidden");
+
+  const [year,mon] = month.split("-").map(Number);
+  const dim = new Date(year,mon,0).getDate();
+  const WD = ["日","月","火","水","木","金","土"];
+  document.getElementById("excel-client-label").textContent = `${records[0]?.customer||""} 様　${site}`;
+
+  // 作業員別
+  const wMap = {};
+  records.forEach(r => {
+    const day = parseInt(r.date.split("-")[2]);
+    r.workers.forEach(w => { if(!wMap[w.name]) wMap[w.name]={}; wMap[w.name][day]=(wMap[w.name][day]||0)+w.hours; });
+  });
+  const names = Object.keys(wMap).sort();
+
+  let wHtml = `<table class="monthly-tbl"><thead><tr><th class="row-hd">氏名</th>`;
+  for (let d=1;d<=dim;d++) { const w=new Date(year,mon-1,d).getDay(); wHtml+=`<th class="${w===0?"sun":w===6?"sat":""}">${d}<br><span style="font-weight:400;">${WD[w]}</span></th>`; }
+  wHtml += `<th class="total-col">合計</th></tr></thead><tbody>`;
+  names.forEach(name => {
+    let tot=0; wHtml+=`<tr><td class="row-hd">${name}</td>`;
+    for(let d=1;d<=dim;d++){const v=wMap[name][d]||null; if(v)tot+=v; wHtml+=`<td class="${v?"val":""}">${v?v.toFixed(1):""}</td>`;}
+    wHtml+=`<td class="total-col">${tot.toFixed(1)}</td></tr>`;
+  });
+  let grand=0; wHtml+=`<tr class="total-row"><td class="row-hd">小計</td>`;
+  for(let d=1;d<=dim;d++){const t=names.reduce((s,n)=>s+(wMap[n][d]||0),0); wHtml+=`<td>${t?t.toFixed(1):""}</td>`; grand+=t;}
+  wHtml+=`<td class="total-col">${grand.toFixed(1)}</td></tr></tbody></table>`;
+  document.getElementById("monthly-wrap-worker").innerHTML = wHtml;
+
+  // 日別
+  const dMap = {};
+  records.forEach(r => {
+    const day=parseInt(r.date.split("-")[2]);
+    r.workers.forEach(w => { if(!dMap[day]) dMap[day]=[]; dMap[day].push({name:w.name,start:w.start,end:w.end,hours:w.hours}); });
+  });
+  let dHtml=`<table class="monthly-tbl"><thead><tr><th>日付</th><th>曜</th><th style="text-align:left;padding-left:8px;">氏名</th><th>開始</th><th>終了</th><th>時間</th></tr></thead><tbody>`;
+  Object.keys(dMap).map(Number).sort((a,b)=>a-b).forEach(day => {
+    const w=new Date(year,mon-1,day).getDay(); const cls=w===0?"sun":w===6?"sat":"";
+    dMap[day].forEach((wk,i) => {
+      dHtml+=`<tr class="${cls}">
+        ${i===0?`<td rowspan="${dMap[day].length}">${mon}/${day}</td><td rowspan="${dMap[day].length}" class="${cls}">${WD[w]}</td>`:""}
+        <td style="text-align:left;padding-left:8px;">${wk.name}</td>
+        <td>${wk.start}</td><td>${wk.end}</td><td class="val">${wk.hours.toFixed(1)}</td></tr>`;
+    });
+  });
+  dHtml+=`</tbody></table>`;
+  document.getElementById("monthly-wrap-daily").innerHTML = dHtml;
+}
+
+// Excel出力
+function downloadExcel() {
+  const site = document.getElementById("sel-site").value;
+  const month = document.getElementById("sel-month").value;
+  if (!site || !month) return;
+  const [year,mon] = month.split("-").map(Number);
+  const dim = new Date(year,mon,0).getDate();
+  const WD = ["日","月","火","水","木","金","土"];
+  const records = getRecords().filter(r=>r.site===site && r.date.startsWith(month));
+  const client = (records[0]?.customer||"")+" 様";
+
+  const wMap = {};
+  records.forEach(r => {
+    const day=parseInt(r.date.split("-")[2]);
+    r.workers.forEach(w => { if(!wMap[w.name]) wMap[w.name]={}; wMap[w.name][day]=(wMap[w.name][day]||0)+w.hours; });
+  });
+  const names = Object.keys(wMap).sort();
+
+  const wb = XLSX.utils.book_new();
+
+  // シート1：作業員別集計
+  const aoa1 = [];
+  aoa1.push([`常用日報　月間集計表　${year}年${mon}月`, ...Array(dim+1).fill("")]);
+  aoa1.push([client, ...Array(Math.floor((dim+1)/2)).fill(""), site, ...Array(Math.ceil((dim+1)/2)).fill("")]);
+  aoa1.push(["氏名", ...Array.from({length:dim},(_,i)=>i+1), "合計"]);
+  aoa1.push(["", ...Array.from({length:dim},(_,i)=>{ const w=new Date(year,mon-1,i+1).getDay(); return WD[w]; }), ""]);
+  names.forEach(name => {
+    let tot=0; const row=[name];
+    for(let d=1;d<=dim;d++){const v=wMap[name][d]||null; row.push(v); if(v)tot+=v;}
+    row.push(tot); aoa1.push(row);
+  });
+  const totRow=["小計"];
+  let grand=0;
+  for(let d=1;d<=dim;d++){const t=names.reduce((s,n)=>s+(wMap[n][d]||0),0); totRow.push(t||null); grand+=t;}
+  totRow.push(grand); aoa1.push(totRow);
+  const ws1=XLSX.utils.aoa_to_sheet(aoa1);
+  ws1["!cols"]=[{wch:10},...Array(dim).fill({wch:4}),{wch:6}];
+  XLSX.utils.book_append_sheet(wb, ws1, `${mon}月_作業員別`);
+
+  // シート2：日別
+  const aoa2 = [];
+  aoa2.push([`常用日報　日別作業員一覧　${year}年${mon}月`]);
+  aoa2.push([client, site]);
+  aoa2.push(["日付","曜日","氏名","開始","終了","時間(h)"]);
+  records.sort((a,b)=>a.date.localeCompare(b.date)).forEach(r => {
+    const day=parseInt(r.date.split("-")[2]);
+    const w=new Date(year,mon-1,day).getDay();
+    r.workers.forEach(wk => { aoa2.push([`${mon}/${day}`,WD[w],wk.name,wk.start,wk.end,wk.hours]); });
+  });
+  const ws2=XLSX.utils.aoa_to_sheet(aoa2);
+  ws2["!cols"]=[{wch:7},{wch:4},{wch:10},{wch:7},{wch:7},{wch:8}];
+  XLSX.utils.book_append_sheet(wb, ws2, `${mon}月_日別`);
+
+  XLSX.writeFile(wb, `常用日報_${site}_${year}年${mon}月.xlsx`);
+  showToast("📥 Excelをダウンロードしました");
+}
+
+// 初期化
+window.addEventListener("load", () => {
+  addWorkerRow();
+  const today = new Date();
+  document.getElementById("date").value = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+  setTimeout(resizeSign, 100);
+});
+window.addEventListener("resize", resizeSign);
+</script>
+</body>
+</html>
