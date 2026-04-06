@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="常用日報 Jyoyou">
 <meta name="theme-color" content="#ff7e29">
+<link rel="manifest" id="pwa-manifest">
 <title>常用日報 Jyoyou</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
@@ -178,7 +179,7 @@ tr:hover td { background: var(--bg); }
     <div class="card-title">👷 作業員</div>
     <div id="workers"></div>
     <button class="btn btn-outline btn-block" type="button" onclick="addWorkerRow()">＋ 作業員を追加</button>
-    <div class="hint">※作業時間は30分刻み。12:00〜13:00は昼休憩として差し引きます。</div>
+    <div class="hint">※作業時間は1時間刻み。12:00〜13:00は昼休憩として差し引きます。</div>
     <div class="summary">
       <span id="totalWorkers">作業員数：0人</span>
       <span id="totalHours">合計時間：0.00h</span>
@@ -324,12 +325,12 @@ const TOOL_LIST = [
   "カッター5インチ","カッター6インチ","カッター7インチ",
   "切断砥石5インチ","切断砥石6インチ","集塵機","集塵機（大）",
   "送風機","フィルター","発電機（ポータブル）","発電機（3kVA）",
-  "セイバーソーブレード","カップリング","アセチレングス"
+  "セイバーソーブレード","カップリング","アセチレンガス"
 ];
 
 const TIME_OPTIONS = [];
 for (let h = 0; h < 24; h++)
-  for (let m = 0; m < 60; m += 30)
+  for (let m = 0; m < 60; m += 60)
     TIME_OPTIONS.push(`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`);
 
 // ストレージ
@@ -646,7 +647,8 @@ function dlBlob(blob, filename) {
 function exportSingle(idx) {
   const r = getRecords()[idx]; if (!r) return;
   const blob = new Blob([JSON.stringify({version:"1.0",exportedAt:new Date().toISOString(),records:[r]},null,2)], {type:"application/json"});
-  dlBlob(blob, `${r.workers[0]?.name||"常用"}_${r.date}.json`);
+  const workerStr = r.workers.slice(0,3).map(w=>w.name).join("_");
+  dlBlob(blob, `常用日報_${r.site||"現場"}_${r.customer||""}_${workerStr}_${r.date}.json`);
   showToast("📤 書き出しました");
 }
 
@@ -658,7 +660,7 @@ function exportData() {
   if (month) records = records.filter(r => r.date.startsWith(month));
   if (!records.length) { showToast("⚠️ 該当データがありません"); return; }
   const blob = new Blob([JSON.stringify({version:"1.0",exportedAt:new Date().toISOString(),records},null,2)], {type:"application/json"});
-  dlBlob(blob, `常用日報_${site||"全現場"}_${month||"全期間"}.json`);
+  dlBlob(blob, `常用日報_${site||"全現場"}_${records[0]?.customer||""}_${month||"全期間"}.json`);
   showToast("📤 書き出しました");
 }
 
@@ -805,6 +807,127 @@ window.addEventListener("load", () => {
   setTimeout(resizeSign, 100);
 });
 window.addEventListener("resize", resizeSign);
+
+// ===== PWA MANIFEST =====
+(function() {
+  const icon192 = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="24" fill="#ff7e29"/><text x="96" y="110" font-family="Georgia,serif" font-size="52" font-weight="900" font-style="italic" fill="#32b36b" text-anchor="middle">TW</text><text x="96" y="155" font-family="sans-serif" font-size="20" font-weight="700" fill="white" text-anchor="middle">常用日報</text></svg>');
+  const icon512 = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="64" fill="#ff7e29"/><text x="256" y="290" font-family="Georgia,serif" font-size="140" font-weight="900" font-style="italic" fill="#32b36b" text-anchor="middle">TW</text><text x="256" y="410" font-family="sans-serif" font-size="55" font-weight="700" fill="white" text-anchor="middle">常用日報</text></svg>');
+  const manifest = {
+    name: "常用日報",
+    short_name: "常用日報",
+    description: "常用工事の作業記録・日報管理システム",
+    start_url: "/tokuwa-apps/Jyouyo.html",
+    scope: "/tokuwa-apps/",
+    display: "standalone",
+    orientation: "portrait",
+    background_color: "#ff7e29",
+    theme_color: "#ff7e29",
+    icons: [
+      { src: icon192, sizes: "192x192", type: "image/svg+xml", purpose: "any maskable" },
+      { src: icon512, sizes: "512x512", type: "image/svg+xml", purpose: "any maskable" }
+    ]
+  };
+  const json = JSON.stringify(manifest);
+  const dataUrl = 'data:application/json;charset=utf-8,' + encodeURIComponent(json);
+  document.getElementById('pwa-manifest').href = dataUrl;
+})();
+
+// ===== SERVICE WORKER =====
+if ('serviceWorker' in navigator) {
+  const swCode = `
+const CACHE = 'joyou-nippou-v1';
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(['./'])));
+  self.skipWaiting();
+});
+self.addEventListener('activate', e => {
+  e.waitUntil(caches.keys().then(keys =>
+    Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+  ));
+  self.clients.claim();
+});
+self.addEventListener('fetch', e => {
+  e.respondWith(
+    caches.match(e.request).then(r => r || fetch(e.request).catch(() => caches.match('./')))
+  );
+});
+  `;
+  const swBlob = new Blob([swCode], {type: 'application/javascript'});
+  navigator.serviceWorker.register(URL.createObjectURL(swBlob))
+    .then(() => console.log('SW registered'))
+    .catch(e => console.log('SW error:', e));
+}
+
+// ===== インストール促進バナー =====
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  showInstallBanner();
+});
+
+function showInstallBanner() {
+  if (document.getElementById('install-banner')) return;
+  const banner = document.createElement('div');
+  banner.id = 'install-banner';
+  banner.style.cssText = `
+    position: fixed; bottom: 70px; left: 16px; right: 16px; z-index: 200;
+    background: #1a1a2e; color: white; border-radius: 14px;
+    padding: 14px 16px; display: flex; align-items: center; gap: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  `;
+  banner.innerHTML = `
+    <div style="font-size:28px;">📲</div>
+    <div style="flex:1;">
+      <div style="font-weight:800; font-size:14px;">ホーム画面に追加</div>
+      <div style="font-size:12px; opacity:0.8; margin-top:2px;">アプリとして使えます</div>
+    </div>
+    <button onclick="installApp()" style="background:#ff7e29; color:white; border:none; border-radius:8px; padding:8px 14px; font-weight:700; font-size:13px; cursor:pointer;">追加</button>
+    <button onclick="document.getElementById('install-banner').remove()" style="background:transparent; color:white; border:none; font-size:18px; cursor:pointer; padding:4px;">✕</button>
+  `;
+  document.body.appendChild(banner);
+}
+
+function installApp() {
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(() => {
+      deferredPrompt = null;
+      const b = document.getElementById('install-banner');
+      if (b) b.remove();
+    });
+  }
+}
+
+// Android Chrome向け手動インストール案内
+window.addEventListener('load', () => {
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  const isChrome = /Chrome/i.test(navigator.userAgent) && !/EdgA/i.test(navigator.userAgent);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+  if (isAndroid && isChrome && !isStandalone) {
+    setTimeout(() => {
+      if (!document.getElementById('install-banner') && !deferredPrompt) {
+        const tip = document.createElement('div');
+        tip.id = 'install-banner';
+        tip.style.cssText = `
+          position: fixed; bottom: 70px; left: 16px; right: 16px; z-index: 200;
+          background: #1a1a2e; color: white; border-radius: 14px;
+          padding: 14px 16px; display: flex; align-items: center; gap: 12px;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        `;
+        tip.innerHTML = `
+          <div style="font-size:28px;">📲</div>
+          <div style="flex:1;">
+            <div style="font-weight:800; font-size:14px;">ホーム画面に追加する方法</div>
+            <div style="font-size:12px; opacity:0.8; margin-top:2px;">Chrome右上 ︙ → 「ホーム画面に追加」</div>
+          </div>
+          <button onclick="document.getElementById('install-banner').remove()" style="background:transparent; color:white; border:none; font-size:18px; cursor:pointer; padding:4px;">✕</button>
+        `;
+        document.body.appendChild(tip);
+      }
+    }, 3000);
+  }
+});
 </script>
 </body>
 </html>
