@@ -1,10 +1,1240 @@
-/**
- * CSV形式アップロード - ネットワーク制限回避版
- * JSONの代わりにCSV形式でデータを送信
- */
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>コア日報</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+:root {
+  --orange: #ff7a00;
+  --orange-light: #fff4ea;
+  --green: #1aa65b;
+  --green-light: #eafaf1;
+  --bg: #f2f4f7;
+  --white: #ffffff;
+  --text: #1a1a2e;
+  --text2: #6b7280;
+  --border: #e5e7eb;
+  --shadow: 0 2px 10px rgba(0,0,0,0.07);
+  --radius: 14px;
+  --danger: #ef4444;
+  --blue: #3b82f6;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif; background: var(--bg); color: var(--text); font-size: 15px; overflow-x: hidden; }
+.app { max-width: 700px; margin: 0 auto; overflow-x: hidden; }
 
-// Google Apps Script URL (既存のまま)
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzY6CexizgJtJQaGQbIp_epGveGobN9dOMFHAk2xgKWenKFnJ6PI-l0uiR-kMcrvIgGJQ/exec";
+/* ===== HEADER ===== */
+.header {
+  background: var(--white);
+  padding: 0;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+  position: sticky; top: 0; z-index: 100;
+}
+.header-main {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px 10px;
+  justify-content: space-between;
+}
+.logo {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-size: 22px;
+  font-weight: 900;
+  color: #00cc00;
+  letter-spacing: 2px;
+  flex-shrink: 0;
+  text-shadow: 1px 1px 3px rgba(0,0,0,0.3);
+}
+.header-title { font-size: 20px; font-weight: 900; letter-spacing: 0.02em; }
+.header-sub { font-size: 11px; color: var(--text2); margin-top: 1px; }
+.header-stripe { height: 5px; background: linear-gradient(90deg, var(--orange) 50%, var(--green) 50%); }
+
+/* ===== BOTTOM NAV ===== */
+.bottom-nav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--white); border-top: 1px solid var(--border);
+  display: flex; z-index: 100;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.06);
+}
+.nav-btn {
+  flex: 1; padding: 8px 4px 12px; border: none; background: transparent;
+  font-family: inherit; font-size: 11px; font-weight: 700; color: var(--text2);
+  cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  transition: color 0.15s;
+}
+.nav-btn .ni { font-size: 22px; }
+.nav-btn.active { color: var(--orange); }
+
+/* ===== PANELS ===== */
+.panel { display: none; padding: 16px 16px 100px; max-width: 700px; margin: 0 auto; overflow-x: hidden; }
+.panel.active { display: block; }
+
+/* ===== CARDS ===== */
+.card {
+  background: var(--white); border-radius: var(--radius);
+  padding: 16px; margin-bottom: 14px;
+  box-shadow: var(--shadow);
+}
+.card-title {
+  font-size: 14px; font-weight: 800;
+  border-left: 4px solid var(--orange); padding-left: 9px;
+  margin-bottom: 14px; color: var(--text);
+}
+.card-title.green { border-color: var(--green); }
+
+/* ===== FORM ===== */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+@media(max-width:480px) { .grid3 { grid-template-columns: 1fr 1fr; } }
+.field label { display: block; font-size: 11px; font-weight: 700; color: var(--text2); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.05em; }
+.field input, .field select, .field textarea {
+  width: 100%; padding: 10px 10px;
+  border: 1.5px solid var(--border); border-radius: 10px;
+  font-family: inherit; font-size: 14px; color: var(--text);
+  background: var(--white); transition: border-color 0.2s;
+  -webkit-appearance: none; appearance: none;
+}
+.field input:focus, .field select:focus { outline: none; border-color: var(--orange); }
+.field textarea { min-height: 72px; resize: vertical; }
+.hint { font-size: 12px; color: var(--text2); margin-top: 6px; }
+
+/* ===== VALIDATION ERROR STYLES ===== */
+.field.error input, .field.error select, .field.error textarea {
+  border-color: var(--danger);
+  background-color: #fef2f2;
+}
+.field.error label {
+  color: var(--danger);
+}
+.workerCard.error {
+  border-color: var(--danger);
+  background-color: #fef2f2;
+}
+.coreRow.error {
+  border-color: var(--danger);
+  background-color: #fef2f2;
+}
+.pill.error {
+  border-color: var(--danger);
+  background-color: #fef2f2;
+  color: var(--danger);
+}
+.validation-message {
+  background: #fef2f2;
+  color: var(--danger);
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 14px;
+  text-align: center;
+  margin-bottom: 14px;
+  border: 1.5px solid var(--danger);
+}
+
+/* ===== PILLS ===== */
+.pillrow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.pill {
+  padding: 7px 14px; border-radius: 20px; cursor: pointer;
+  font-size: 13px; font-weight: 700; border: 1.5px solid var(--border);
+  background: var(--white); color: var(--text2); transition: all 0.15s;
+  user-select: none; display: inline-block;
+  -webkit-tap-highlight-color: rgba(0,0,0,0);
+  touch-action: manipulation;
+}
+.pill.orange.active { background: var(--orange); color: #fff; border-color: var(--orange); }
+.pill.green.active { background: var(--green); color: #fff; border-color: var(--green); }
+
+/* ===== BUTTONS ===== */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 12px 20px; border: none; border-radius: 10px;
+  font-family: inherit; font-size: 14px; font-weight: 800;
+  cursor: pointer; transition: all 0.15s;
+}
+.btn:active { transform: translateY(1px); }
+.btn-orange { background: var(--orange); color: #fff; }
+.btn-orange:hover { background: #e86e00; }
+.btn-green { background: var(--green); color: #fff; }
+.btn-green:hover { background: #158a4a; }
+.btn-gray { background: #9ca3af; color: #fff; }
+.btn-outline { background: var(--white); color: var(--text); border: 1.5px solid var(--border); }
+.btn-outline:hover { border-color: var(--orange); color: var(--orange); }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-blue { background: var(--blue); color: #fff; }
+.btn-block { width: 100%; margin-bottom: 10px; }
+.btn-sm { padding: 8px 14px; font-size: 13px; }
+.btn-row { display: flex; gap: 10px; }
+.btn-row .btn { flex: 1; }
+
+/* ===== WORKER CARD ===== */
+.workerCard {
+  background: var(--bg); border-radius: 12px;
+  padding: 14px; margin-bottom: 12px;
+  border: 1.5px solid var(--border);
+}
+.workerTop { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px; align-items: end; }
+@media(max-width:480px) { .workerTop { grid-template-columns: 1fr 1fr; } }
+.worker-hours {
+  font-size: 13px; color: var(--green); font-weight: 700;
+  margin: 8px 0 12px; padding: 6px 10px;
+  background: var(--green-light); border-radius: 8px; display: inline-block;
+}
+.core-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.core-header h3 { font-size: 14px; font-weight: 800; color: var(--text2); }
+
+/* ===== CORE ROW ===== */
+.coreRow {
+  background: var(--white); border-radius: 10px;
+  padding: 12px; margin-bottom: 10px;
+  border: 1px solid var(--border);
+}
+.coreGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.coreGrid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+.smallLabel { font-size: 11px; font-weight: 700; color: var(--text2); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+.core-del { display: flex; justify-content: flex-end; margin-top: 8px; }
+
+/* ===== CONFIRM PAGE ===== */
+.banner {
+  padding: 12px 16px; border-radius: 10px; font-weight: 800;
+  font-size: 14px; text-align: center; margin-bottom: 14px;
+}
+.banner.ok { background: var(--green-light); color: var(--green); border: 1.5px solid var(--green); }
+.banner.ng { background: #fef2f2; color: var(--danger); border: 1.5px solid var(--danger); }
+
+.info-grid { display: grid; gap: 8px; }
+.info-row { display: flex; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.info-row:last-child { border-bottom: none; }
+.info-row .lbl { color: var(--text2); font-weight: 700; min-width: 90px; flex-shrink: 0; }
+.info-row .val { font-weight: 500; }
+
+/* ===== TABLE ===== */
+.tbl-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { background: var(--orange-light); padding: 9px 10px; font-weight: 800; color: var(--orange); white-space: nowrap; text-align: center; }
+td { padding: 9px 10px; border-top: 1px solid var(--border); text-align: center; }
+tr:hover td { background: var(--bg); }
+.nowrap { white-space: nowrap; }
+
+/* ===== SIGN ===== */
+.sign-wrap {
+  background: var(--bg); border-radius: 12px; padding: 14px;
+  border: 1.5px dashed var(--border); text-align: center; margin-bottom: 14px;
+}
+.sign-label { font-size: 13px; font-weight: 700; color: var(--text2); margin-bottom: 10px; }
+#sign {
+  width: 100%; height: 180px;
+  background: var(--white); border-radius: 10px;
+  border: 1.5px solid var(--border); touch-action: none; display: block;
+}
+.sign-btns { display: flex; gap: 10px; margin-top: 10px; justify-content: center; }
+
+/* ===== HISTORY ===== */
+.hist-item {
+  background: var(--white); border-radius: 12px;
+  padding: 14px 16px; margin-bottom: 10px;
+  box-shadow: var(--shadow); cursor: pointer;
+  border: 1.5px solid transparent; transition: all 0.15s;
+  display: flex; align-items: center; gap: 12px;
+}
+.hist-item:hover { border-color: var(--orange); }
+.hist-checkbox {
+  width: 18px; height: 18px; cursor: pointer; flex-shrink: 0;
+  accent-color: var(--orange);
+}
+.hist-date { font-size: 13px; font-weight: 800; color: var(--orange); white-space: nowrap; }
+.hist-info { flex: 1; min-width: 0; }
+.hist-info h4 { font-size: 14px; font-weight: 800; }
+.hist-info p { font-size: 12px; color: var(--text2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hist-qty { font-size: 20px; font-weight: 900; color: var(--orange); flex-shrink: 0; }
+.hist-del { padding: 6px 10px; background: #fee2e2; color: var(--danger); border: none; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
+
+/* ===== MISC ===== */
+.empty { text-align: center; padding: 48px 20px; color: var(--text2); }
+.empty .ei { font-size: 52px; margin-bottom: 12px; }
+.empty p { font-size: 14px; }
+.section-title { font-size: 16px; font-weight: 800; margin-bottom: 14px; }
+.toast {
+  position: fixed; bottom: 80px; left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--text); color: #fff;
+  padding: 12px 22px; border-radius: 30px;
+  font-size: 14px; font-weight: 700; opacity: 0;
+  transition: all 0.3s; z-index: 200; white-space: nowrap; pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 800; }
+.badge-orange { background: var(--orange-light); color: var(--orange); }
+.badge-green { background: var(--green-light); color: var(--green); }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-main">
+    <div>
+      <div class="header-title">コア日報</div>
+      <div class="header-sub">穿孔工事 作業記録システム</div>
+    </div>
+    <span class="logo">TOKUWA</span>
+  </div>
+  <div class="header-stripe"></div>
+</div>
+
+<!-- ===== 入力パネル ===== -->
+<div class="panel active" id="panel-input">
+
+  <div class="card">
+    <div class="card-title">📋 基本情報</div>
+    <div class="grid3">
+      <div class="field">
+        <label>日付</label>
+        <input id="date" type="date">
+      </div>
+      <div class="field">
+        <label>お客様名</label>
+        <input id="client" type="text" placeholder="">
+      </div>
+      <div class="field">
+        <label>現場名</label>
+        <input id="site" type="text" placeholder="">
+      </div>
+    </div>
+    <div class="field" style="margin-top:12px;">
+      <label>廃棄処分（全体）</label>
+      <div class="pillrow">
+        <button type="button" class="pill orange" id="wasteNo" onclick="setWaste(false)">無</button>
+        <button type="button" class="pill orange" id="wasteYes" onclick="setWaste(true)">有</button>
+      </div>
+    </div>
+    <div class="field" style="margin-top:12px;">
+      <label>その他・特記事項（任意）</label>
+      <input id="otherNote" type="text" placeholder="例：電源確保必要、特記事項など">
+    </div>
+    <div class="hint">※お客様名は確認書で「様」を自動付与します。</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">👷 作業員</div>
+    <div id="workers"></div>
+    <button class="btn btn-outline btn-block" type="button" onclick="addWorker()">＋ 作業員を追加</button>
+    <div class="hint">※作業時間は30分刻み。12:00〜13:00は昼休憩として差し引きます。</div>
+  </div>
+
+  <button class="btn btn-orange btn-block" type="button" onclick="goConfirm()">作業確認へ →</button>
+</div>
+
+<!-- ===== 確認パネル ===== -->
+<div class="panel hidden" id="panel-confirm">
+  <div id="statusBanner" class="banner ng">未保存</div>
+
+  <div class="card">
+    <div class="card-title">📋 基本情報</div>
+    <div class="info-grid">
+      <div class="info-row"><span class="lbl">作業日</span><span class="val" id="c-date"></span></div>
+      <div class="info-row"><span class="lbl">お客様名</span><span class="val"><span id="c-client"></span> 様</span></div>
+      <div class="info-row"><span class="lbl">現場名</span><span class="val" id="c-site"></span></div>
+      <div class="info-row"><span class="lbl">廃棄処分</span><span class="val" id="c-waste"></span></div>
+      <div class="info-row"><span class="lbl">その他</span><span class="val" id="c-other" style="color:var(--text2)"></span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title green">👷 作業員（時間）</div>
+    <div id="c-workersList"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔩 コア明細（合算）</div>
+    <div class="hint" style="margin-bottom:10px;">合算条件：穿孔径・穿孔長・素材・天井裏・高車・真空パッド</div>
+    <div id="c-coreNone" class="hidden" style="color:var(--text2); padding:10px 0;">（コア入力なし）</div>
+    <div id="c-coreTableWrap" class="tbl-wrap hidden">
+      <table>
+        <thead>
+          <tr>
+            <th class="nowrap">穿孔径</th>
+            <th class="nowrap">穿孔長</th>
+            <th class="nowrap">素材</th>
+            <th class="nowrap">部位</th>
+            <th class="nowrap">適用</th>
+            <th class="nowrap">真空パッド</th>
+            <th class="nowrap">合計本数</th>
+          </tr>
+        </thead>
+        <tbody id="c-coreTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <button class="btn btn-green btn-block" id="saveBtn" onclick="saveAll()">✅ 保存（提出）</button>
+    <div class="hint">※データは端末内（localStorage）に保存されます。</div>
+  </div>
+
+  <button class="btn btn-outline btn-block" onclick="backToEdit()">← 入力に戻る</button>
+</div>
+
+<!-- ===== 履歴パネル ===== -->
+<div class="panel hidden" id="panel-history">
+  <div class="section-title">📋 日報履歴</div>
+  <div class="card">
+    <div class="card-title">📤 データ書き出し</div>
+    <p style="font-size:13px; color:var(--text2); margin-bottom:14px;">保存済みの日報データをファイルに書き出します。事務所の集計アプリに読み込んでください。</p>
+    <div class="grid2">
+      <div class="field">
+        <label>現場で絞り込む（任意）</label>
+        <select id="export-site">
+          <option value="">全現場</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>月で絞り込む（任意）</label>
+        <select id="export-month">
+          <option value="">全期間</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn btn-orange btn-block" onclick="exportData()" style="margin-top:4px;">📤 データファイルを書き出す</button>
+    <div class="hint">※書き出したファイルをメールで事務所に送ってください</div>
+  </div>
+  <div id="history-list"></div>
+  
+  <!-- 個別選択アップロード -->
+  <div style="margin-top:16px; padding:16px; background:#f8f9fa; border-radius:12px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <span id="selection-status">選択中: 0件</span>
+      <button class="btn btn-sm" onclick="selectAll()">全選択</button>
+    </div>
+    <button class="btn btn-green btn-block" id="upload-btn" onclick="uploadSelected()" disabled style="opacity:0.4;">
+      📤 選択データをドライブにアップロード
+    </button>
+    <div class="hint">※Google Driveに自動アップロードされます</div>
+  </div>
+</div>
+
+<!-- ===== PNG出力用カード（非表示） ===== -->
+<div id="png-card" style="
+  position:fixed; left:-9999px; top:0;
+  width:750px; background:#fff; padding:32px;
+  font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif;
+  color:#1a1a2e; font-size:15px; line-height:1.6;
+">
+  <!-- ヘッダー -->
+  <div style="border-bottom:6px solid #ff7a00; padding-bottom:16px; margin-bottom:20px;">
+    <div style="display:flex; align-items:center; gap:14px;">
+      <div style="width:52px;height:52px;background:linear-gradient(135deg,#ff7a00,#ff4500);border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;color:#fff;">CORE</div>
+      <div>
+        <div style="font-size:22px;font-weight:900;letter-spacing:0.03em;">コア作業確認書</div>
+        <div style="font-size:12px;color:#6b7280;margin-top:2px;">穿孔工事 作業記録</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 基本情報 -->
+  <div style="background:#fff4ea;border-radius:12px;padding:16px;margin-bottom:18px;">
+    <div style="font-size:13px;font-weight:800;color:#ff7a00;border-left:4px solid #ff7a00;padding-left:8px;margin-bottom:12px;">基本情報</div>
+    <table style="width:100%;border-collapse:collapse;font-size:14px;">
+      <tr><td style="padding:6px 0;color:#6b7280;font-weight:700;width:110px;">作業日</td><td id="p-date" style="font-weight:600;"></td></tr>
+      <tr><td style="padding:6px 0;color:#6b7280;font-weight:700;">お客様名</td><td id="p-client" style="font-weight:600;"></td></tr>
+      <tr><td style="padding:6px 0;color:#6b7280;font-weight:700;">現場名</td><td id="p-site" style="font-weight:600;"></td></tr>
+      <tr><td style="padding:6px 0;color:#6b7280;font-weight:700;">廃棄処分</td><td id="p-waste" style="font-weight:600;"></td></tr>
+      <tr id="p-other-row"><td style="padding:6px 0;color:#6b7280;font-weight:700;">その他</td><td id="p-other" style="font-weight:600;"></td></tr>
+    </table>
+  </div>
+
+  <!-- 作業員 -->
+  <div style="background:#eafaf1;border-radius:12px;padding:16px;margin-bottom:18px;">
+    <div style="font-size:13px;font-weight:800;color:#1aa65b;border-left:4px solid #1aa65b;padding-left:8px;margin-bottom:12px;">作業員・作業時間</div>
+    <div id="p-workers" style="font-size:14px;"></div>
+  </div>
+
+  <!-- コア明細 -->
+  <div style="border:1.5px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:18px;">
+    <div style="font-size:13px;font-weight:800;color:#ff7a00;border-left:4px solid #ff7a00;padding-left:8px;margin-bottom:12px;">コア明細（合算）</div>
+    <table id="p-core-table" style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="background:#fff4ea;">
+          <th style="padding:8px;text-align:center;font-weight:800;color:#ff7a00;border:1px solid #e5e7eb;">穿孔径</th>
+          <th style="padding:8px;text-align:center;font-weight:800;color:#ff7a00;border:1px solid #e5e7eb;">穿孔長</th>
+          <th style="padding:8px;text-align:center;font-weight:800;color:#ff7a00;border:1px solid #e5e7eb;">素材</th>
+          <th style="padding:8px;text-align:center;font-weight:800;color:#ff7a00;border:1px solid #e5e7eb;">部位</th>
+          <th style="padding:8px;text-align:center;font-weight:800;color:#ff7a00;border:1px solid #e5e7eb;">適用</th>
+          <th style="padding:8px;text-align:center;font-weight:800;color:#ff7a00;border:1px solid #e5e7eb;">真空パッド</th>
+          <th style="padding:8px;text-align:center;font-weight:800;color:#ff7a00;border:1px solid #e5e7eb;">本数</th>
+        </tr>
+      </thead>
+      <tbody id="p-core-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- 署名 -->
+  <div style="border:1.5px solid #e5e7eb;border-radius:12px;padding:16px;">
+    <div style="font-size:13px;font-weight:800;color:#6b7280;margin-bottom:10px;">お客様サイン</div>
+    <img id="p-sign-img" style="width:100%;max-height:160px;object-fit:contain;background:#f9fafb;border-radius:8px;display:block;">
+    <div style="margin-top:16px;font-size:12px;color:#6b7280;text-align:right;">以上の作業内容を確認しました。</div>
+  </div>
+</div>
+
+<!-- Bottom Nav -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" id="nav-input" onclick="switchNav('input')">
+    <span class="ni">📝</span>入力
+  </button>
+  <button class="nav-btn" id="nav-history" onclick="switchNav('history')">
+    <span class="ni">📋</span>履歴
+  </button>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== DB =====
+const DB_KEY = "TOKUWA_CORE_RECORDS_V1";
+function getRecords() { return JSON.parse(localStorage.getItem(DB_KEY) || "[]"); }
+function saveRecords(arr) { localStorage.setItem(DB_KEY, JSON.stringify(arr)); }
+
+// ===== MASTER =====
+const WORKER_NAMES = ["渡部","佐藤","松沢","茂原","石井","その他"];
+const FLOORS = ["外部","1F","2F","3F","その他"];
+const DIAMS = ["φ25","φ30","φ32","φ35","φ40","φ50","φ65","φ75","φ80","φ90","φ100","φ110","φ125","φ150","φ160","φ180","φ200","その他"];
+const MATERIALS = ["RC","CB","ALC","アスロック","デッキ"];
+let wasteFlag = false;
+
+// ===== NAV =====
+function switchNav(tab) {
+  ["input","history"].forEach(t => {
+    document.getElementById("panel-"+t).classList.add("hidden");
+    document.getElementById("panel-"+t).classList.remove("active");
+    document.getElementById("nav-"+t).classList.remove("active");
+  });
+  // confirm panel
+  document.getElementById("panel-confirm").classList.add("hidden");
+
+  const p = document.getElementById("panel-"+tab);
+  p.classList.remove("hidden"); p.classList.add("active");
+  document.getElementById("nav-"+tab).classList.add("active");
+
+  if (tab === "history") { renderHistory(); populateExportFilters(); }
+}
+
+// ===== TIME =====
+function timeOptions() {
+  let o = '<option value=""></option>';
+  for (let i = 0; i < 48; i++) {
+    const h = String(Math.floor(i/2)).padStart(2,'0');
+    const m = i%2 ? '30' : '00';
+    o += `<option value="${i*0.5}">${h}:${m}</option>`;
+  }
+  return o;
+}
+function subtractLunch(s,e) { return Math.max(0, Math.min(e,13) - Math.max(s,12)); }
+function fmtTime(v) {
+  if (v==="" || v===null || v===undefined) return "";
+  const n = Number(v); if (isNaN(n)) return "";
+  const h = String(Math.floor(n)).padStart(2,"0");
+  const m = (n%1===0.5) ? "30" : "00";
+  return `${h}:${m}`;
+}
+
+// ===== WASTE =====
+function setWaste(v) {
+  wasteFlag = v;
+  document.getElementById("wasteNo").classList.toggle("active", v===false);
+  document.getElementById("wasteYes").classList.toggle("active", v===true);
+}
+
+// ===== WORKER =====
+function addWorker() {
+  const wrap = document.createElement("div");
+  wrap.className = "workerCard";
+  wrap.innerHTML = `
+    <div class="workerTop">
+      <div class="field">
+        <label>氏名</label>
+        <select class="w-name" onchange="onWorkerNameChange(this)">${WORKER_NAMES.map(n=>`<option>${n}</option>`).join("")}</select>
+        <input class="w-name-other hidden" type="text" placeholder="氏名を入力" style="margin-top:6px; width:100%;">
+      </div>
+      <div class="field">
+        <label>開始</label>
+        <select class="w-start" onchange="calcWorker(this)">${timeOptions()}</select>
+      </div>
+      <div class="field">
+        <label>終了</label>
+        <select class="w-end" onchange="calcWorker(this)">${timeOptions()}</select>
+      </div>
+      <div class="field" style="display:flex;align-items:flex-end;">
+        <button class="btn btn-gray btn-sm" type="button" onclick="this.closest('.workerCard').remove()">削除</button>
+      </div>
+    </div>
+    <div class="worker-hours">実働：<span class="w-hours">0.0</span> h</div>
+    <div class="core-header">
+      <h3>🔩 コア明細</h3>
+    </div>
+    <div class="coreRows"></div>
+    <button class="btn btn-outline btn-sm" type="button" style="width:100%;margin-top:8px;" onclick="addCoreRow(this)">＋ 明細追加</button>
+  `;
+  document.getElementById("workers").appendChild(wrap);
+  addCoreRow(wrap.querySelector(".btn-outline"));
+}
+
+function calcWorker(el) {
+  const card = el.closest(".workerCard");
+  const s = parseFloat(card.querySelector(".w-start").value);
+  const e = parseFloat(card.querySelector(".w-end").value);
+  let h = 0;
+  if (!isNaN(s) && !isNaN(e) && e > s) h = Math.max(0, (e-s) - subtractLunch(s,e));
+  card.querySelector(".w-hours").textContent = h.toFixed(1);
+}
+
+function removeWorker(btn) { btn.closest(".workerCard").remove(); }
+
+// ===== CORE ROW =====
+function addCoreRow(btn) {
+  const card = btn.closest(".workerCard");
+  const rows = card.querySelector(".coreRows");
+  const row = document.createElement("div");
+  row.className = "coreRow";
+  row.innerHTML = `
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+      <div>
+        <div class="smallLabel">素材</div>
+        <select class="c-mat" onchange="onMatChange(this)">${MATERIALS.map(x=>`<option>${x}</option>`).join("")}</select>
+      </div>
+      <div>
+        <div class="smallLabel">作業階</div>
+        <select class="c-floor" onchange="onFloorChange(this)">${FLOORS.map(x=>`<option>${x}</option>`).join("")}</select>
+        <input class="c-floor-other hidden" type="text" placeholder="任意入力" style="margin-top:6px; width:100%;">
+      </div>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+      <div>
+        <div class="smallLabel">穿孔径</div>
+        <select class="c-diam" onchange="toggleOtherDiam(this)">${DIAMS.map(x=>`<option>${x}</option>`).join("")}</select>
+        <input class="c-diam-other hidden" type="text" placeholder="例：φ73" style="margin-top:6px; width:100%;">
+      </div>
+      <div>
+        <div class="smallLabel">数量（本）</div>
+        <input class="c-qty" type="number" min="0" step="1" inputmode="numeric" placeholder="例：3" style="width:100%;">
+      </div>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
+      <div>
+        <div class="smallLabel">穿孔長 L（㎜）</div>
+        <select class="c-len" style="width:100%;" onchange="onLenChange(this)">
+          <option value="1" disabled>（デッキ：1㎜固定）</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+          <option value="30">30</option>
+          <option value="40">40</option>
+          <option value="50">50</option>
+          <option value="60">60</option>
+          <option value="70">70</option>
+          <option value="80">80</option>
+          <option value="90">90</option>
+          <option value="100">100</option>
+          <option value="110">110</option>
+          <option value="120">120</option>
+          <option value="130">130</option>
+          <option value="140">140</option>
+          <option value="150">150</option>
+          <option value="160">160</option>
+          <option value="170">170</option>
+          <option value="180">180</option>
+          <option value="190">190</option>
+          <option value="200">200</option>
+          <option value="210">210</option>
+          <option value="220">220</option>
+          <option value="230">230</option>
+          <option value="240">240</option>
+          <option value="250">250</option>
+          <option value="260">260</option>
+          <option value="270">270</option>
+          <option value="280">280</option>
+          <option value="290">290</option>
+          <option value="300">300</option>
+          <option value="310">310</option>
+          <option value="320">320</option>
+          <option value="330">330</option>
+          <option value="340">340</option>
+          <option value="350">350</option>
+          <option value="360">360</option>
+          <option value="370">370</option>
+          <option value="380">380</option>
+          <option value="390">390</option>
+          <option value="400">400</option>
+          <option value="410">410</option>
+          <option value="420">420</option>
+          <option value="430">430</option>
+          <option value="440">440</option>
+          <option value="450">450</option>
+          <option value="460">460</option>
+          <option value="470">470</option>
+          <option value="480">480</option>
+          <option value="490">490</option>
+          <option value="500">500</option>
+          <option value="other">その他</option>
+        </select>
+        <input class="c-len-other hidden" type="number" min="1" step="1" inputmode="numeric" placeholder="㎜を入力" style="margin-top:6px; width:100%;">
+      </div>
+      <div style="display:flex; align-items:flex-end; padding-bottom:4px;">
+        <span style="font-size:13px; color:var(--text2);">※デッキ選択時は1㎜自動固定</span>
+      </div>
+    </div>
+    <div class="coreGrid2">
+      <div>
+        <div class="smallLabel">部位</div>
+        <div class="pillrow" style="margin-top:4px;">
+          <button type="button" class="pill orange c-part" data-value="壁" onclick="toggleOneOfTwo(this)">壁</button>
+          <button type="button" class="pill orange c-part" data-value="床" onclick="toggleOneOfTwo(this)">床</button>
+        </div>
+      </div>
+      <div>
+        <div class="smallLabel">適用</div>
+        <div class="pillrow" style="margin-top:4px;">
+          <button type="button" class="pill orange c-tenjo" onclick="togglePill(this)">天井裏</button>
+          <button type="button" class="pill orange c-kosha" onclick="togglePill(this)">高車</button>
+        </div>
+      </div>
+      <div>
+        <div class="smallLabel">真空パッド</div>
+        <div class="pillrow" style="margin-top:4px;">
+          <button type="button" class="pill orange c-vac" onclick="togglePill(this)">使用</button>
+        </div>
+      </div>
+    </div>
+    <div class="core-del">
+      <button class="btn btn-danger btn-sm" type="button" onclick="this.closest('.coreRow').remove()">明細削除</button>
+    </div>
+  `;
+  rows.appendChild(row);
+}
+
+function onLenChange(sel) {
+  const row = sel.closest('.coreRow');
+  const other = row.querySelector('.c-len-other');
+  if (sel.value === 'other') {
+    other.classList.remove('hidden');
+    other.focus();
+  } else {
+    other.classList.add('hidden');
+    other.value = '';
+  }
+}
+
+function onMatChange(sel) {
+  const row = sel.closest('.coreRow');
+  const lenSel = row.querySelector('.c-len');
+  if (sel.value === 'デッキ') {
+    // デッキ選択時は穿孔長を1mmに固定・無効化
+    lenSel.selectedIndex = 0;
+    lenSel.disabled = true;
+    lenSel.style.opacity = '0.5';
+    const lenOther = row.querySelector('.c-len-other');
+    lenOther.classList.add('hidden');
+    lenOther.value = '';
+  } else {
+    lenSel.disabled = false;
+    lenSel.style.opacity = '1';
+    if (lenSel.selectedIndex === 0) {
+      for (let i=0; i<lenSel.options.length; i++) {
+        if (lenSel.options[i].value === '150') { lenSel.selectedIndex = i; break; }
+      }
+    }
+  }
+}
+
+function onWorkerNameChange(sel) {
+  const card = sel.closest('.workerCard');
+  const other = card.querySelector('.w-name-other');
+  if (sel.value === 'その他') {
+    other.classList.remove('hidden');
+  } else {
+    other.classList.add('hidden');
+    other.value = '';
+  }
+}
+
+function onFloorChange(sel) {
+  const row = sel.closest('.coreRow');
+  const other = row.querySelector('.c-floor-other');
+  if (sel.value === 'その他') {
+    other.classList.remove('hidden');
+  } else {
+    other.classList.add('hidden');
+    other.value = '';
+  }
+}
+
+function togglePill(el) { el.classList.toggle("active"); }
+function toggleOneOfTwo(el) {
+  const siblings = el.closest(".pillrow").querySelectorAll(".pill");
+  siblings.forEach(p => p.classList.remove("active"));
+  el.classList.add("active");
+}
+function toggleOtherDiam(sel) {
+  const other = sel.nextElementSibling;
+  other.classList.toggle("hidden", sel.value !== "その他");
+}
+
+// ===== COLLECT DATA =====
+function collectData() {
+  const date = document.getElementById("date").value || "";
+  const client = document.getElementById("client").value.trim();
+  const site = document.getElementById("site").value.trim();
+  const otherNote = document.getElementById("otherNote").value.trim();
+  const workers = [];
+  document.querySelectorAll("#workers .workerCard").forEach(card => {
+    const nameSel = card.querySelector(".w-name");
+    const nameOther = card.querySelector(".w-name-other").value.trim();
+    const name = nameSel.value === "その他" ? (nameOther || "その他") : nameSel.value;
+    const s = card.querySelector(".w-start").value;
+    const e = card.querySelector(".w-end").value;
+    const sNum = s==="" ? null : Number(s);
+    const eNum = e==="" ? null : Number(e);
+    let hours = 0;
+    if (sNum!==null && eNum!==null && eNum>sNum) hours = Math.max(0,(eNum-sNum)-subtractLunch(sNum,eNum));
+    const cores = [];
+    card.querySelectorAll(".coreRow").forEach(r => {
+      let diam = r.querySelector(".c-diam").value;
+      const diamOther = r.querySelector(".c-diam-other").value.trim();
+      if (diam==="その他") diam = diamOther || "その他";
+      let floorVal = r.querySelector(".c-floor").value;
+      const floorOther = r.querySelector(".c-floor-other").value.trim();
+      if (floorVal === "その他") floorVal = floorOther || "その他";
+      const lenSel = r.querySelector(".c-len");
+      const lenOtherVal = r.querySelector(".c-len-other").value.trim();
+      const len = lenSel.value === "other" ? parseInt(lenOtherVal, 10) : parseInt(lenSel.value, 10);
+      const qty = parseInt(r.querySelector(".c-qty").value, 10);
+      const mat = r.querySelector(".c-mat").value;
+      const floor = r.querySelector(".c-floor").value;
+      const partEl = r.querySelector(".c-part.active");
+      const part = partEl ? partEl.dataset.value : "";
+      const tenjo = r.querySelector(".c-tenjo").classList.contains("active");
+      const kosha = r.querySelector(".c-kosha").classList.contains("active");
+      const vac = r.querySelector(".c-vac").classList.contains("active");
+      // デッキは穿孔長1mm固定
+      const lenOk = mat === "デッキ" ? true : (!isNaN(len) && len > 0);
+      const lenVal = mat === "デッキ" ? 1 : len;
+      if (!isNaN(qty) && qty > 0 && lenOk && diam) {
+        cores.push({ floor: floorVal, diam, len: lenVal, qty, mat, part, tenjo, kosha, vac });
+      }
+    });
+    workers.push({ name, start:s, end:e, hours: Number(hours.toFixed(1)), cores });
+  });
+  return {
+    id: crypto?.randomUUID ? crypto.randomUUID() : String(Date.now()),
+    createdAt: new Date().toISOString(),
+    date, client, site, waste: wasteFlag, otherNote, workers
+  };
+}
+
+// ===== AGGREGATE =====
+function aggregateCores(data) {
+  const map = new Map();
+  data.workers.forEach(w => {
+    w.cores.forEach(c => {
+      const key = [c.diam, c.len, c.mat, c.tenjo, c.kosha, c.vac, c.part].join("|");
+      if (map.has(key)) map.get(key).qty += c.qty;
+      else map.set(key, { ...c, qty: c.qty });
+    });
+  });
+  return [...map.values()];
+}
+
+// ===== VALIDATION =====
+function validateForm() {
+  let hasError = false;
+  const errors = [];
+  
+  // Clear previous error styles
+  document.querySelectorAll('.error').forEach(el => el.classList.remove('error'));
+  
+  // Remove previous validation message
+  const prevMessage = document.querySelector('.validation-message');
+  if (prevMessage) prevMessage.remove();
+
+  // Validate basic info
+  const client = document.getElementById("client");
+  const site = document.getElementById("site");
+  const date = document.getElementById("date");
+  
+  if (!client.value.trim()) {
+    client.closest('.field').classList.add('error');
+    errors.push('お客様');
+    hasError = true;
+  }
+  
+  if (!site.value.trim()) {
+    site.closest('.field').classList.add('error');
+    errors.push('現場名');
+    hasError = true;
+  }
+  
+  if (!date.value.trim()) {
+    date.closest('.field').classList.add('error');
+    errors.push('日付');
+    hasError = true;
+  }
+
+  // Validate workers
+  const workerCards = document.querySelectorAll('.workerCard');
+  let hasValidWorker = false;
+  
+  workerCards.forEach(card => {
+    const nameSelect = card.querySelector('.w-name');
+    const startTime = card.querySelector('.w-start');
+    const endTime = card.querySelector('.w-end');
+    
+    let workerHasError = false;
+    let workerHasData = false;
+    
+    // Check if this worker has any data entered
+    if (nameSelect.value !== '選択してください' || startTime.value.trim() || endTime.value.trim()) {
+      workerHasData = true;
+    }
+    
+    // If has data, validate all fields
+    if (workerHasData) {
+      if (!nameSelect.value || nameSelect.value === '選択してください') {
+        nameSelect.closest('.field').classList.add('error');
+        workerHasError = true;
+      }
+      
+      if (!startTime.value.trim()) {
+        startTime.closest('.field').classList.add('error');
+        workerHasError = true;
+      }
+      
+      if (!endTime.value.trim()) {
+        endTime.closest('.field').classList.add('error');
+        workerHasError = true;
+      }
+      
+      if (workerHasError) {
+        card.classList.add('error');
+        hasError = true;
+      } else {
+        hasValidWorker = true;
+      }
+    }
+  });
+  
+  if (!hasValidWorker) {
+    errors.push('作業者情報（氏名・開始時間・終了時間）');
+  }
+
+  // Validate cores
+  const coreRows = document.querySelectorAll('.coreRow');
+  let hasValidCore = false;
+  
+  coreRows.forEach(row => {
+    const material = row.querySelector('.c-mat');
+    const diam = row.querySelector('.c-diam');
+    const len = row.querySelector('.c-len');
+    const qty = row.querySelector('.c-qty');
+    const floor = row.querySelector('.c-floor');
+    
+    let coreHasError = false;
+    let coreHasData = false;
+    
+    // Check if this core has any data entered
+    if (material.value !== 'RC' || diam.value !== 'φ27' || qty.value.trim() || floor.value !== '外部') {
+      coreHasData = true;
+    }
+    
+    // If has data, validate all required fields
+    if (coreHasData) {
+      if (!diam.value || diam.value === 'φ27') {
+        diam.closest('div').classList.add('error');
+        coreHasError = true;
+      }
+      
+      if (!qty.value.trim()) {
+        qty.closest('div').classList.add('error');
+        coreHasError = true;
+      }
+      
+      if (!floor.value || floor.value === '選択してください') {
+        floor.closest('div').classList.add('error');
+        coreHasError = true;
+      }
+      
+      // Check part selection (壁/床 pills)
+      const partPills = row.querySelectorAll('.c-part.active');
+      if (partPills.length === 0) {
+        row.querySelectorAll('.c-part').forEach(pill => pill.classList.add('error'));
+        coreHasError = true;
+      }
+      
+      if (coreHasError) {
+        row.classList.add('error');
+        hasError = true;
+      } else {
+        hasValidCore = true;
+      }
+    }
+  });
+  
+  if (!hasValidCore) {
+    errors.push('コア作業詳細（素材・穿孔径・穿孔長・数量・部位）');
+  }
+
+  // Show validation message if there are errors
+  if (hasError) {
+    const message = document.createElement('div');
+    message.className = 'validation-message';
+    message.innerHTML = `⚠️ 未入力あり<br>以下の項目を確認してください：<br>${errors.join('、')}`;
+    
+    const inputPanel = document.getElementById('input-panel');
+    inputPanel.insertBefore(message, inputPanel.firstChild);
+    
+    // Scroll to top to show the message
+    inputPanel.scrollTop = 0;
+    
+    return false;
+  }
+  
+  return true;
+}
+
+// ===== CONFIRM =====
+function goConfirm() {
+  // Validate form before proceeding
+  if (!validateForm()) {
+    return;
+  }
+  
+  const data = collectData();
+  window.__DRAFT__ = data;
+  document.getElementById("c-date").textContent = data.date || "（未入力）";
+  document.getElementById("c-client").textContent = data.client || "（未入力）";
+  document.getElementById("c-site").textContent = data.site || "（未入力）";
+  document.getElementById("c-waste").textContent = data.waste===true ? "有" : data.waste===false ? "無" : "（未選択）";
+  document.getElementById("c-other").textContent = data.otherNote || "なし";
+
+  // Workers
+  const wEl = document.getElementById("c-workersList");
+  if (data.workers.length===0) { wEl.textContent="（なし）"; }
+  else {
+    wEl.innerHTML = data.workers.map(w =>
+      `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+        <span style="font-weight:700;">${w.name}</span>
+        <span style="color:var(--text2);">${fmtTime(w.start)} 〜 ${fmtTime(w.end)}&nbsp;&nbsp;<span style="color:var(--green);font-weight:700;">${w.hours}h</span></span>
+      </div>`
+    ).join("");
+  }
+
+  // Cores
+  const agg = aggregateCores(data);
+  if (agg.length===0) {
+    document.getElementById("c-coreNone").classList.remove("hidden");
+    document.getElementById("c-coreTableWrap").classList.add("hidden");
+  } else {
+    document.getElementById("c-coreNone").classList.add("hidden");
+    document.getElementById("c-coreTableWrap").classList.remove("hidden");
+    const tbody = document.getElementById("c-coreTbody");
+    tbody.innerHTML = agg.map(c => {
+      const opts = [c.tenjo?"天井裏":"", c.kosha?"高車":""].filter(Boolean).join("・") || "－";
+      return `<tr>
+        <td>${c.diam}</td><td>${c.mat === "デッキ" || c.len === 0 ? "デッキ" : "L=" + c.len}</td><td>${c.mat}</td>
+        <td>${c.part||"－"}</td><td>${opts}</td>
+        <td>${c.vac?"使用":"－"}</td>
+        <td style="font-weight:800;color:var(--orange);">${c.qty}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  setSaved(false);
+  ["panel-input","panel-history"].forEach(id => {
+    document.getElementById(id).classList.add("hidden");
+    document.getElementById(id).classList.remove("active");
+  });
+  const cp = document.getElementById("panel-confirm");
+  cp.classList.remove("hidden"); cp.classList.add("active");
+  document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+  window.scrollTo(0,0);
+}
+
+function backToEdit() {
+  document.getElementById("panel-confirm").classList.add("hidden");
+  document.getElementById("panel-confirm").classList.remove("active");
+  document.getElementById("panel-input").classList.remove("hidden");
+  document.getElementById("panel-input").classList.add("active");
+  document.getElementById("nav-input").classList.add("active");
+  const pngBtn = document.getElementById("pngBtn");
+  pngBtn.disabled = true;
+  pngBtn.style.opacity = "0.4";
+  window.scrollTo(0,0);
+}
+
+// ===== SIGN =====
+// ===== SAVE =====
+function setSaved(v) {
+  const b = document.getElementById("statusBanner");
+  const sb = document.getElementById("saveBtn");
+  b.className = "banner " + (v ? "ok" : "ng");
+  b.textContent = v ? "✅ 保存済み" : "未保存";
+  sb.disabled = v;
+  sb.textContent = v ? "保存済み" : "✅ 保存（提出）";
+}
+
+function saveAll() {
+  const draft = window.__DRAFT__ || collectData();
+  const payload = { ...draft };
+  const arr = getRecords();
+  arr.push(payload);
+  saveRecords(arr);
+  setSaved(true);
+  
+  // Clear validation errors after successful save
+  document.querySelectorAll('.error').forEach(el => el.classList.remove('error'));
+  const validationMsg = document.querySelector('.validation-message');
+  if (validationMsg) validationMsg.remove();
+  
+  showToast("✅ 保存しました");
+}
+
+async function savePNG() {
+  const draft = window.__DRAFT__;
+  if (!draft) { showToast("先に保存してください"); return; }
+
+  // PNG用カードにデータを流し込む
+  document.getElementById("p-date").textContent = draft.date || "";
+  document.getElementById("p-client").textContent = (draft.client || "") + " 様";
+  document.getElementById("p-site").textContent = draft.site || "";
+  document.getElementById("p-waste").textContent = draft.waste===true ? "有" : draft.waste===false ? "無" : "－";
+  if (draft.otherNote) {
+    document.getElementById("p-other").textContent = draft.otherNote;
+    document.getElementById("p-other-row").style.display = "";
+  } else {
+    document.getElementById("p-other-row").style.display = "none";
+  }
+
+  const wEl = document.getElementById("p-workers");
+  wEl.innerHTML = draft.workers.map(w =>
+    `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e5e7eb;font-size:14px;">
+      <span style="font-weight:700;">${w.name}</span>
+      <span style="color:#6b7280;">${fmtTime(w.start)} 〜 ${fmtTime(w.end)}　<span style="color:#1aa65b;font-weight:700;">${w.hours}h</span></span>
+    </div>`
+  ).join("");
+
+  const agg = aggregateCores(draft);
+  const tbody = document.getElementById("p-core-tbody");
+  tbody.innerHTML = agg.map((c, i) => {
+    const opts = [c.tenjo?"天井裏":"", c.kosha?"高車":""].filter(Boolean).join("・") || "－";
+    const bg = i%2===0 ? "#fff" : "#fafafa";
+    return `<tr style="background:${bg};">
+      <td style="padding:7px;text-align:center;border:1px solid #e5e7eb;">${c.diam}</td>
+      <td style="padding:7px;text-align:center;border:1px solid #e5e7eb;">${c.mat === "デッキ" || c.len === 0 ? "デッキ" : "L=" + c.len}</td>
+      <td style="padding:7px;text-align:center;border:1px solid #e5e7eb;">${c.mat}</td>
+      <td style="padding:7px;text-align:center;border:1px solid #e5e7eb;">${c.part||"－"}</td>
+      <td style="padding:7px;text-align:center;border:1px solid #e5e7eb;">${opts}</td>
+      <td style="padding:7px;text-align:center;border:1px solid #e5e7eb;">${c.vac?"使用":"－"}</td>
+      <td style="padding:7px;text-align:center;border:1px solid #e5e7eb;font-weight:800;color:#ff7a00;">${c.qty}</td>
+    </tr>`;
+  }).join("");
+
+  document.getElementById("p-sign-img").src = canvas.toDataURL("image/png");
+
+  // html2canvasで画像生成してモーダル表示
+  const card = document.getElementById("png-card");
+  card.style.left = "0";
+  card.style.top = "0";
+  card.style.position = "absolute";
+  card.style.zIndex = "-1";
+
+  showToast("📸 画像を生成中...");
+
+  try {
+    const cvs = await html2canvas(card, {
+      scale: 2, useCORS: true, backgroundColor: "#ffffff",
+      width: 750, windowWidth: 750
+    });
+    const imgDataUrl = cvs.toDataURL("image/png");
+
+    // モーダルで表示
+    const modal = document.getElementById("png-modal");
+    document.getElementById("png-modal-img").src = imgDataUrl;
+    modal.style.display = "flex";
+  } catch(e) {
+    showToast("エラー: " + e.message);
+    console.error(e);
+  } finally {
+    card.style.left = "-9999px";
+    card.style.position = "fixed";
+    card.style.zIndex = "";
+  }
+}
+
+function closePngModal() {
+  document.getElementById("png-modal").style.display = "none";
+}
+
+// ===== HISTORY =====
+function renderHistory() {
+  const records = getRecords();
+  const el = document.getElementById("history-list");
+  if (records.length===0) {
+    el.innerHTML = '<div class="empty"><div class="ei">📭</div><p>履歴がありません<br>日報を入力・保存してください</p></div>';
+    return;
+  }
+  el.innerHTML = [...records].reverse().map((r, i) => {
+    const realIdx = records.length - 1 - i;
+    const total = r.workers.reduce((s,w) => s + w.cores.reduce((ss,c) => ss+c.qty, 0), 0);
+    const agg = aggregateCores(r);
+    const summary = agg.slice(0,3).map(c=>`${c.diam} L${c.len}×${c.qty}`).join("、") + (agg.length>3?"…":"");
+    return `<div class="hist-item">
+      <input type="checkbox" class="hist-checkbox" data-index="${realIdx}" onchange="updateSelection()">
+      <div class="hist-date">${r.date}</div>
+      <div class="hist-info">
+        <h4>${r.site} <span style="font-size:11px;color:var(--text2);">${r.client}</span></h4>
+        <p>${summary}</p>
+      </div>
+      <div class="hist-qty">${total}</div>
+      <button class="hist-del" onclick="deleteRecord(${realIdx}, event)">削除</button>
+    </div>`;
+  }).join("");
+}
+
+function deleteRecord(idx, e) {
+  e.stopPropagation();
+  if (!confirm("この日報を削除しますか？")) return;
+  const arr = getRecords();
+  arr.splice(idx, 1);
+  saveRecords(arr);
+  renderHistory();
+  showToast("🗑️ 削除しました");
+}
+
+// ===== SELECTION & UPLOAD =====
+function updateSelection() {
+  const checkboxes = document.querySelectorAll('.hist-checkbox');
+  const selected = Array.from(checkboxes).filter(cb => cb.checked);
+  const count = selected.length;
+  
+  document.getElementById('selection-status').textContent = `選択中: ${count}件`;
+  const uploadBtn = document.getElementById('upload-btn');
+  
+  if (count > 0) {
+    uploadBtn.disabled = false;
+    uploadBtn.style.opacity = "1";
+  } else {
+    uploadBtn.disabled = true;
+    uploadBtn.style.opacity = "0.4";
+  }
+}
+
+function selectAll() {
+  const checkboxes = document.querySelectorAll('.hist-checkbox');
+  const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+  
+  checkboxes.forEach(cb => cb.checked = !allChecked);
+  updateSelection();
+}
 
 // JSONデータをCSV形式に変換
 function convertToCSV(data) {
@@ -15,22 +1245,26 @@ function convertToCSV(data) {
   
   // 基本情報
   lines.push(`日付,${data.date}`);
-  lines.push(`お客様,${data.customer}`);
+  lines.push(`お客様,${data.client}`);
   lines.push(`現場名,${data.site}`);
   
   // 作業員情報
   data.workers.forEach((worker, index) => {
     lines.push(`作業員${index + 1}_氏名,${worker.name}`);
     lines.push(`作業員${index + 1}_時間,${worker.hours}`);
-  });
-  
-  // コア情報
-  data.cores.forEach((core, index) => {
-    lines.push(`コア${index + 1}_材質,${core.material}`);
-    lines.push(`コア${index + 1}_直径,${core.diameter}`);
-    lines.push(`コア${index + 1}_長さ,${core.length}`);
-    lines.push(`コア${index + 1}_数量,${core.count}`);
-    lines.push(`コア${index + 1}_階,${core.floor}`);
+    lines.push(`作業員${index + 1}_移動,${worker.move || 0}`);
+    
+    // コア情報（作業員ごと）
+    worker.cores.forEach((core, coreIndex) => {
+      lines.push(`作業員${index + 1}_コア${coreIndex + 1}_材質,${core.mat}`);
+      lines.push(`作業員${index + 1}_コア${coreIndex + 1}_直径,${core.diam}`);
+      lines.push(`作業員${index + 1}_コア${coreIndex + 1}_長さ,${core.len}`);
+      lines.push(`作業員${index + 1}_コア${coreIndex + 1}_数量,${core.qty}`);
+      lines.push(`作業員${index + 1}_コア${coreIndex + 1}_部位,${core.part || ''}`);
+      lines.push(`作業員${index + 1}_コア${coreIndex + 1}_天井裏,${core.tenjo ? 'あり' : 'なし'}`);
+      lines.push(`作業員${index + 1}_コア${coreIndex + 1}_高車,${core.kosha ? 'あり' : 'なし'}`);
+      lines.push(`作業員${index + 1}_コア${coreIndex + 1}_集塵,${core.vac ? 'あり' : 'なし'}`);
+    });
   });
   
   // 備考
@@ -41,107 +1275,23 @@ function convertToCSV(data) {
   return lines.join('\n');
 }
 
-// CSV形式でのアップロード関数
-async function uploadCSVSelected() {
-  const checkboxes = document.querySelectorAll('.record-checkbox:checked');
-  const selectedData = [];
-  
-  checkboxes.forEach(cb => {
-    const index = parseInt(cb.dataset.index);
-    selectedData.push(getRecords()[index]);
-  });
-  
-  if (selectedData.length === 0) {
-    showToast("⚠️ データが選択されていません");
+async function uploadSelected() {
+  const checkboxes = document.querySelectorAll('.hist-checkbox:checked');
+  if (checkboxes.length === 0) {
+    showToast("❌ データが選択されていません");
     return;
   }
   
-  try {
-    showToast("🔄 CSV形式でアップロード中...");
-    
-    for (let i = 0; i < selectedData.length; i++) {
-      const data = selectedData[i];
-      const fileName = `コア日報_${data.date}_${data.site}.csv`;
-      const csvContent = convertToCSV(data);
-      
-      console.log('CSV upload attempt:', fileName);
-      console.log('CSV content preview:', csvContent.substring(0, 200));
-      
-      // FormDataでCSVファイルを送信
-      const formData = new FormData();
-      formData.append('fileName', fileName);
-      formData.append('data', csvContent);
-      formData.append('fileType', 'csv');
-      formData.append('timestamp', new Date().toISOString());
-      
-      const response = await fetch(SCRIPT_URL, {
-        method: 'POST',
-        body: formData
-      });
-      
-      console.log('Response status:', response.status);
-      console.log('Response ok:', response.ok);
-      
-      if (!response.ok) {
-        throw new Error(`CSV Upload failed: ${response.status} ${response.statusText}`);
-      }
-      
-      // レスポンスの解析
-      const result = await response.text();
-      console.log('Response text:', result);
-      
-      let parsedResult;
-      try {
-        parsedResult = JSON.parse(result);
-      } catch (e) {
-        console.warn('Response is not JSON:', result);
-        parsedResult = { success: true, message: 'CSV形式でアップロード完了' };
-      }
-      
-      if (!parsedResult.success) {
-        throw new Error(parsedResult.message || 'サーバーエラー');
-      }
-    }
-    
-    // 選択解除
-    checkboxes.forEach(cb => cb.checked = false);
-    updateSelection();
-    
-    showToast(`✅ ${selectedData.length}件をCSVアップロードしました`);
-    
-  } catch (error) {
-    console.error('CSV Upload error:', error);
-    showToast(`❌ CSVアップロードに失敗しました`);
-    
-    // 詳細エラー情報をアラート表示
-    alert(`CSV形式エラー詳細:
-エラー: ${error.message}
-URL: ${SCRIPT_URL}
-形式: CSV (text/csv)
-時刻: ${new Date().toLocaleString()}`);
-  }
-}
-
-// 複数形式の段階的フォールバック（CSV優先）
-async function uploadWithCSVFallback() {
-  const checkboxes = document.querySelectorAll('.record-checkbox:checked');
-  const selectedData = [];
-  
-  checkboxes.forEach(cb => {
+  const records = getRecords();
+  const selectedData = Array.from(checkboxes).map(cb => {
     const index = parseInt(cb.dataset.index);
-    selectedData.push(getRecords()[index]);
+    return records[index];
   });
   
-  if (selectedData.length === 0) {
-    showToast("⚠️ データが選択されていません");
-    return;
-  }
-  
-  // 複数の送信方式を順次試行（CSV優先）
+  // 複数の方法を試行（CSV優先、JSON後方互換）
   const methods = [
     { name: 'CSV', func: uploadViaCSV },
-    { name: 'プレーンテキスト', func: uploadViaText },
-    { name: 'Base64', func: uploadViaBase64 }
+    { name: 'JSON', func: uploadViaJSON }
   ];
   
   for (const method of methods) {
@@ -156,95 +1306,148 @@ async function uploadWithCSVFallback() {
       return;
       
     } catch (error) {
-      console.log(`${method.name} failed:`, error.message);
+      console.log(`${method.name} upload failed:`, error.message);
       continue;
     }
   }
   
   // 全て失敗
-  showToast(`❌ 全ての送信形式が失敗しました`);
-  alert(`全送信形式エラー:
-CSV、プレーンテキスト、Base64のすべてが失敗しました。
-ネットワーク管理者にご相談ください。`);
+  showToast(`❌ アップロードに失敗しました`);
+  alert(`アップロードエラー:
+CSVとJSON両方の形式で失敗しました。
+ネットワーク接続を確認するか、管理者にお問い合わせください。`);
 }
 
 // CSV方式（推奨）
 async function uploadViaCSV(selectedData) {
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwTilfGk6ar-y8hmy9BCqaJ57UzlD_RPbbXLDjPB20-1FaIqlgStzyXvJsJu8z_rq9Sig/exec";
+  
   for (const data of selectedData) {
     const fileName = `コア日報_${data.date}_${data.site}.csv`;
     const csvContent = convertToCSV(data);
+    
+    console.log('CSV upload attempt:', fileName);
+    console.log('CSV content preview:', csvContent.substring(0, 200));
     
     const formData = new FormData();
     formData.append('fileName', fileName);
     formData.append('data', csvContent);
     formData.append('fileType', 'csv');
+    formData.append('timestamp', new Date().toISOString());
     
     const response = await fetch(SCRIPT_URL, {
       method: 'POST',
       body: formData
     });
+    
+    console.log('CSV Response status:', response.status);
     
     if (!response.ok) {
       throw new Error(`CSV upload failed: ${response.status}`);
     }
-  }
-}
-
-// プレーンテキスト方式（代替案1）
-async function uploadViaText(selectedData) {
-  for (const data of selectedData) {
-    const fileName = `コア日報_${data.date}_${data.site}.txt`;
-    const textContent = `
-日報データ
-====================
-日付: ${data.date}
-お客様: ${data.customer}
-現場名: ${data.site}
-
-【作業員情報】
-${data.workers.map((w, i) => `${i+1}. ${w.name} (${w.hours}時間)`).join('\n')}
-
-【コア作業詳細】
-${data.cores.map((c, i) => `${i+1}. φ${c.diameter} L=${c.length} ×${c.count}本 (${c.material}, ${c.floor})`).join('\n')}
-
-備考: ${data.notes || 'なし'}
-`;
     
-    const formData = new FormData();
-    formData.append('fileName', fileName);
-    formData.append('data', textContent);
-    formData.append('fileType', 'text');
+    const result = await response.text();
+    console.log('CSV Response:', result);
     
-    const response = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      body: formData
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Text upload failed: ${response.status}`);
+    // CSVレスポンスの確認
+    try {
+      const parsed = JSON.parse(result);
+      if (!parsed.success) {
+        throw new Error(parsed.message || 'CSV upload server error');
+      }
+    } catch (e) {
+      // JSONでなくても成功とみなす場合
+      if (!result.includes('error') && !result.includes('Error')) {
+        console.log('CSV upload appears successful (non-JSON response)');
+      } else {
+        throw new Error('CSV upload failed - server error');
+      }
     }
   }
 }
 
-// Base64方式（代替案2）
-async function uploadViaBase64(selectedData) {
+// JSON方式（後方互換）
+async function uploadViaJSON(selectedData) {
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwTilfGk6ar-y8hmy9BCqaJ57UzlD_RPbbXLDjPB20-1FaIqlgStzyXvJsJu8z_rq9Sig/exec";
+  
   for (const data of selectedData) {
-    const fileName = `コア日報_${data.date}_${data.site}.dat`;
-    const jsonString = JSON.stringify(data, null, 2);
-    const base64Data = btoa(unescape(encodeURIComponent(jsonString)));
+    const fileName = `コア日報_${data.date}_${data.site}.json`;
     
-    const formData = new FormData();
-    formData.append('fileName', fileName);
-    formData.append('data', base64Data);
-    formData.append('fileType', 'base64');
+    console.log('JSON upload attempt:', fileName);
     
     const response = await fetch(SCRIPT_URL, {
       method: 'POST',
-      body: formData
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fileName: fileName,
+        data: JSON.stringify(data, null, 2)
+      })
     });
     
+    console.log('JSON Response status:', response.status);
+    
     if (!response.ok) {
-      throw new Error(`Base64 upload failed: ${response.status}`);
+      throw new Error(`JSON upload failed: ${response.status}`);
     }
+    
+    const result = await response.text();
+    console.log('JSON Response:', result);
   }
 }
+
+// ===== EXPORT =====
+function populateExportFilters() {
+  const records = getRecords();
+  const sites = [...new Set(records.map(r => r.site).filter(Boolean))];
+  const months = [...new Set(records.map(r => r.date?.slice(0,7)).filter(Boolean))].sort();
+
+  const siteSel = document.getElementById("export-site");
+  const monthSel = document.getElementById("export-month");
+  if (!siteSel || !monthSel) return;
+
+  siteSel.innerHTML = '<option value="">全現場</option>' + sites.map(s => `<option value="${s}">${s}</option>`).join("");
+  monthSel.innerHTML = '<option value="">全期間</option>' + months.map(m => `<option value="${m}">${m.replace("-","年")}月</option>`).join("");
+}
+
+function exportData() {
+  const site = document.getElementById("export-site").value;
+  const month = document.getElementById("export-month").value;
+  let records = getRecords();
+
+  if (site) records = records.filter(r => r.site === site);
+  if (month) records = records.filter(r => r.date?.startsWith(month));
+
+  if (records.length === 0) { showToast("⚠️ 該当するデータがありません"); return; }
+
+  // 署名画像は除外してファイルサイズを小さくする
+  const exportData = records;
+
+  const json = JSON.stringify({ version: "1.0", exportedAt: new Date().toISOString(), records: exportData }, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const siteLabel = site || "全現場";
+  const monthLabel = month ? month.replace("-","年") + "月" : "全期間";
+  a.download = `コア日報_${siteLabel}_${monthLabel}.json`;
+  a.href = url;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast(`📤 ${records.length}件のデータを書き出しました`);
+}
+
+
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2500);
+}
+
+// ===== INIT =====
+document.addEventListener("DOMContentLoaded", function() {
+  setWaste(false);
+  addWorker();
+  document.getElementById("date").value = new Date().toISOString().slice(0,10);
+});
+</script>
+</body>
+</html>
