@@ -2,14 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="コア日報">
-<meta name="application-name" content="コア日報">
-<meta name="theme-color" content="#ff7a00">
-<link rel="manifest" id="pwa-manifest">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>コア日報</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -107,6 +100,39 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
 .field input:focus, .field select:focus { outline: none; border-color: var(--orange); }
 .field textarea { min-height: 72px; resize: vertical; }
 .hint { font-size: 12px; color: var(--text2); margin-top: 6px; }
+
+/* ===== VALIDATION ERROR STYLES ===== */
+.field.error input, .field.error select, .field.error textarea {
+  border-color: var(--danger);
+  background-color: #fef2f2;
+}
+.field.error label {
+  color: var(--danger);
+}
+.workerCard.error {
+  border-color: var(--danger);
+  background-color: #fef2f2;
+}
+.coreRow.error {
+  border-color: var(--danger);
+  background-color: #fef2f2;
+}
+.pill.error {
+  border-color: var(--danger);
+  background-color: #fef2f2;
+  color: var(--danger);
+}
+.validation-message {
+  background: #fef2f2;
+  color: var(--danger);
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 14px;
+  text-align: center;
+  margin-bottom: 14px;
+  border: 1.5px solid var(--danger);
+}
 
 /* ===== PILLS ===== */
 .pillrow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
@@ -215,34 +241,16 @@ tr:hover td { background: var(--bg); }
   display: flex; align-items: center; gap: 12px;
 }
 .hist-item:hover { border-color: var(--orange); }
+.hist-checkbox {
+  width: 18px; height: 18px; cursor: pointer; flex-shrink: 0;
+  accent-color: var(--orange);
+}
 .hist-date { font-size: 13px; font-weight: 800; color: var(--orange); white-space: nowrap; }
 .hist-info { flex: 1; min-width: 0; }
 .hist-info h4 { font-size: 14px; font-weight: 800; }
 .hist-info p { font-size: 12px; color: var(--text2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hist-qty { font-size: 20px; font-weight: 900; color: var(--orange); flex-shrink: 0; }
 .hist-del { padding: 6px 10px; background: #fee2e2; color: var(--danger); border: none; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
-
-/* ===== EXCEL PANEL ===== */
-.month-sel { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
-.month-sel label { font-size: 13px; font-weight: 700; color: var(--text2); }
-.month-sel select {
-  padding: 9px 14px; border: 1.5px solid var(--border); border-radius: 10px;
-  font-family: inherit; font-size: 14px; background: var(--white);
-  -webkit-appearance: none; appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px;
-}
-
-.monthly-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 14px; }
-.monthly-tbl { border-collapse: collapse; font-size: 11px; min-width: 500px; width: 100%; }
-.monthly-tbl th, .monthly-tbl td { border: 1px solid var(--border); padding: 5px 3px; text-align: center; white-space: nowrap; }
-.monthly-tbl th { background: var(--orange-light); color: var(--orange); font-weight: 800; font-size: 10px; }
-.monthly-tbl .sat { background: #dbeafe; }
-.monthly-tbl .sun { background: #fee2e2; }
-.monthly-tbl .total-col { background: #d1fae5; font-weight: 800; color: var(--green); }
-.monthly-tbl .total-row td { background: #d1fae5; font-weight: 800; }
-.monthly-tbl .val { color: var(--orange); font-weight: 800; }
-.monthly-tbl .row-hd { text-align: left; padding-left: 6px; font-weight: 800; min-width: 46px; }
 
 /* ===== MISC ===== */
 .empty { text-align: center; padding: 48px 20px; color: var(--text2); }
@@ -363,16 +371,7 @@ tr:hover td { background: var(--bg); }
   </div>
 
   <div class="card">
-    <div class="card-title">✍️ お客様サイン</div>
-    <div class="sign-wrap">
-      <div class="sign-label">本日の作業内容をご確認の上、ご署名をお願いいたします。</div>
-      <canvas id="sign"></canvas>
-      <div class="sign-btns">
-        <button class="btn btn-gray btn-sm" onclick="clearSign()">署名クリア</button>
-      </div>
-    </div>
     <button class="btn btn-green btn-block" id="saveBtn" onclick="saveAll()">✅ 保存（提出）</button>
-    <button class="btn btn-orange btn-block" id="pngBtn" disabled style="opacity:0.4;" onclick="savePNG()">🖼️ PNG画像として保存</button>
     <div class="hint">※データは端末内（localStorage）に保存されます。</div>
   </div>
 
@@ -403,49 +402,17 @@ tr:hover td { background: var(--bg); }
     <div class="hint">※書き出したファイルをメールで事務所に送ってください</div>
   </div>
   <div id="history-list"></div>
-</div>
-
-<!-- ===== 集計表パネル ===== -->
-<div class="panel hidden" id="panel-excel">
-  <div class="card">
-    <div class="card-title">📊 月間集計表</div>
-    <div class="month-sel">
-      <label>現場：</label>
-      <select id="sel-site" onchange="updateMonths(); renderMonthlyTable();"></select>
-      <label>月：</label>
-      <select id="sel-month" onchange="renderMonthlyTable();"></select>
+  
+  <!-- 個別選択アップロード -->
+  <div style="margin-top:16px; padding:16px; background:#f8f9fa; border-radius:12px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <span id="selection-status">選択中: 0件</span>
+      <button class="btn btn-sm" onclick="selectAll()">全選択</button>
     </div>
-    <div id="site-client-label" style="font-size:12px; color:var(--text2); margin-bottom:12px;"></div>
-  </div>
-
-  <div id="table-area" class="card hidden">
-    <div class="card-title">穿孔データ一覧</div>
-    <div class="monthly-wrap">
-      <div id="monthly-wrap"></div>
-    </div>
-  </div>
-
-  <div id="table-empty" class="empty hidden">
-    <div class="ei">📭</div>
-    <p>この現場・月のデータがありません</p>
-  </div>
-
-  <button class="btn btn-blue btn-block hidden" id="excel-dl-btn" onclick="downloadExcel()">
-    ⬇️ Excelファイルをダウンロード
-  </button>
-</div>
-
-<!-- ===== PNG プレビューモーダル ===== -->
-<div id="png-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:500; flex-direction:column; align-items:center; justify-content:center; padding:16px;">
-  <div style="width:100%; max-width:680px; display:flex; flex-direction:column; align-items:center; gap:12px; max-height:100vh;">
-    <div style="background:#fff; border-radius:12px; padding:12px 16px; text-align:center; width:100%;">
-      <div style="font-size:14px; font-weight:800; color:#ff7a00;">📸 画像を長押し → 写真に保存</div>
-      <div style="font-size:11px; color:#6b7280; margin-top:3px;">「写真に追加」を選択してください</div>
-    </div>
-    <div style="flex:1; overflow-y:auto; width:100%; -webkit-overflow-scrolling:touch; border-radius:12px;">
-      <img id="png-modal-img" style="width:100%; display:block; border-radius:12px; box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-    </div>
-    <button onclick="closePngModal()" style="width:100%; padding:14px; background:#fff; border:none; border-radius:12px; font-size:15px; font-weight:800; cursor:pointer; flex-shrink:0;">✕ 閉じる</button>
+    <button class="btn btn-green btn-block" id="upload-btn" onclick="uploadSelected()" disabled style="opacity:0.4;">
+      📤 選択データをドライブにアップロード
+    </button>
+    <div class="hint">※Google Driveに自動アップロードされます</div>
   </div>
 </div>
 
@@ -520,9 +487,6 @@ tr:hover td { background: var(--bg); }
   <button class="nav-btn" id="nav-history" onclick="switchNav('history')">
     <span class="ni">📋</span>履歴
   </button>
-  <button class="nav-btn" id="nav-excel" onclick="switchNav('excel')">
-    <span class="ni">📊</span>集計表
-  </button>
 </nav>
 
 <div class="toast" id="toast"></div>
@@ -542,7 +506,7 @@ let wasteFlag = false;
 
 // ===== NAV =====
 function switchNav(tab) {
-  ["input","history","excel"].forEach(t => {
+  ["input","history"].forEach(t => {
     document.getElementById("panel-"+t).classList.add("hidden");
     document.getElementById("panel-"+t).classList.remove("active");
     document.getElementById("nav-"+t).classList.remove("active");
@@ -555,7 +519,6 @@ function switchNav(tab) {
   document.getElementById("nav-"+tab).classList.add("active");
 
   if (tab === "history") { renderHistory(); populateExportFilters(); }
-  if (tab === "excel") { populateSites(); renderMonthlyTable(); }
 }
 
 // ===== TIME =====
@@ -882,8 +845,169 @@ function aggregateCores(data) {
   return [...map.values()];
 }
 
+// ===== VALIDATION =====
+function validateForm() {
+  let hasError = false;
+  const errors = [];
+  
+  // Clear previous error styles
+  document.querySelectorAll('.error').forEach(el => el.classList.remove('error'));
+  
+  // Remove previous validation message
+  const prevMessage = document.querySelector('.validation-message');
+  if (prevMessage) prevMessage.remove();
+
+  // Validate basic info
+  const client = document.getElementById("client");
+  const site = document.getElementById("site");
+  const date = document.getElementById("date");
+  
+  if (!client.value.trim()) {
+    client.closest('.field').classList.add('error');
+    errors.push('お客様');
+    hasError = true;
+  }
+  
+  if (!site.value.trim()) {
+    site.closest('.field').classList.add('error');
+    errors.push('現場名');
+    hasError = true;
+  }
+  
+  if (!date.value.trim()) {
+    date.closest('.field').classList.add('error');
+    errors.push('日付');
+    hasError = true;
+  }
+
+  // Validate workers
+  const workerCards = document.querySelectorAll('.workerCard');
+  let hasValidWorker = false;
+  
+  workerCards.forEach(card => {
+    const nameSelect = card.querySelector('.w-name');
+    const startTime = card.querySelector('.w-start');
+    const endTime = card.querySelector('.w-end');
+    
+    let workerHasError = false;
+    let workerHasData = false;
+    
+    // Check if this worker has any data entered
+    if (nameSelect.value !== '選択してください' || startTime.value.trim() || endTime.value.trim()) {
+      workerHasData = true;
+    }
+    
+    // If has data, validate all fields
+    if (workerHasData) {
+      if (!nameSelect.value || nameSelect.value === '選択してください') {
+        nameSelect.closest('.field').classList.add('error');
+        workerHasError = true;
+      }
+      
+      if (!startTime.value.trim()) {
+        startTime.closest('.field').classList.add('error');
+        workerHasError = true;
+      }
+      
+      if (!endTime.value.trim()) {
+        endTime.closest('.field').classList.add('error');
+        workerHasError = true;
+      }
+      
+      if (workerHasError) {
+        card.classList.add('error');
+        hasError = true;
+      } else {
+        hasValidWorker = true;
+      }
+    }
+  });
+  
+  if (!hasValidWorker) {
+    errors.push('作業者情報（氏名・開始時間・終了時間）');
+  }
+
+  // Validate cores
+  const coreRows = document.querySelectorAll('.coreRow');
+  let hasValidCore = false;
+  
+  coreRows.forEach(row => {
+    const material = row.querySelector('.c-mat');
+    const diam = row.querySelector('.c-diam');
+    const len = row.querySelector('.c-len');
+    const qty = row.querySelector('.c-qty');
+    const floor = row.querySelector('.c-floor');
+    
+    let coreHasError = false;
+    let coreHasData = false;
+    
+    // Check if this core has any data entered
+    if (material.value !== 'RC' || diam.value !== 'φ27' || qty.value.trim() || floor.value !== '外部') {
+      coreHasData = true;
+    }
+    
+    // If has data, validate all required fields
+    if (coreHasData) {
+      if (!diam.value || diam.value === 'φ27') {
+        diam.closest('div').classList.add('error');
+        coreHasError = true;
+      }
+      
+      if (!qty.value.trim()) {
+        qty.closest('div').classList.add('error');
+        coreHasError = true;
+      }
+      
+      if (!floor.value || floor.value === '選択してください') {
+        floor.closest('div').classList.add('error');
+        coreHasError = true;
+      }
+      
+      // Check part selection (壁/床 pills)
+      const partPills = row.querySelectorAll('.c-part.active');
+      if (partPills.length === 0) {
+        row.querySelectorAll('.c-part').forEach(pill => pill.classList.add('error'));
+        coreHasError = true;
+      }
+      
+      if (coreHasError) {
+        row.classList.add('error');
+        hasError = true;
+      } else {
+        hasValidCore = true;
+      }
+    }
+  });
+  
+  if (!hasValidCore) {
+    errors.push('コア作業詳細（素材・穿孔径・穿孔長・数量・部位）');
+  }
+
+  // Show validation message if there are errors
+  if (hasError) {
+    const message = document.createElement('div');
+    message.className = 'validation-message';
+    message.innerHTML = `⚠️ 未入力あり<br>以下の項目を確認してください：<br>${errors.join('、')}`;
+    
+    const inputPanel = document.getElementById('input-panel');
+    inputPanel.insertBefore(message, inputPanel.firstChild);
+    
+    // Scroll to top to show the message
+    inputPanel.scrollTop = 0;
+    
+    return false;
+  }
+  
+  return true;
+}
+
 // ===== CONFIRM =====
 function goConfirm() {
+  // Validate form before proceeding
+  if (!validateForm()) {
+    return;
+  }
+  
   const data = collectData();
   window.__DRAFT__ = data;
   document.getElementById("c-date").textContent = data.date || "（未入力）";
@@ -925,14 +1049,13 @@ function goConfirm() {
   }
 
   setSaved(false);
-  ["panel-input","panel-history","panel-excel"].forEach(id => {
+  ["panel-input","panel-history"].forEach(id => {
     document.getElementById(id).classList.add("hidden");
     document.getElementById(id).classList.remove("active");
   });
   const cp = document.getElementById("panel-confirm");
   cp.classList.remove("hidden"); cp.classList.add("active");
   document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
-  initSign();
   window.scrollTo(0,0);
 }
 
@@ -949,27 +1072,6 @@ function backToEdit() {
 }
 
 // ===== SIGN =====
-let canvas, ctx, drawing = false;
-function initSign() {
-  canvas = document.getElementById("sign");
-  ctx = canvas.getContext("2d");
-  canvas.width = canvas.offsetWidth;
-  canvas.height = 180;
-  ctx.fillStyle = "#fff"; ctx.fillRect(0,0,canvas.width,canvas.height);
-  ctx.strokeStyle = "#1a1a2e"; ctx.lineWidth = 2.5; ctx.lineCap = "round";
-  canvas.addEventListener("mousedown", e => { drawing=true; ctx.beginPath(); ctx.moveTo(...pos(e)); });
-  canvas.addEventListener("mousemove", e => { if(!drawing) return; ctx.lineTo(...pos(e)); ctx.stroke(); });
-  canvas.addEventListener("mouseup", () => drawing=false);
-  canvas.addEventListener("touchstart", e => { e.preventDefault(); drawing=true; ctx.beginPath(); ctx.moveTo(...pos(e.touches[0])); }, {passive:false});
-  canvas.addEventListener("touchmove", e => { e.preventDefault(); if(!drawing) return; ctx.lineTo(...pos(e.touches[0])); ctx.stroke(); }, {passive:false});
-  canvas.addEventListener("touchend", () => drawing=false);
-}
-function pos(e) {
-  const r = canvas.getBoundingClientRect();
-  return [e.clientX - r.left, e.clientY - r.top];
-}
-function clearSign() { ctx.fillStyle="#fff"; ctx.fillRect(0,0,canvas.width,canvas.height); }
-
 // ===== SAVE =====
 function setSaved(v) {
   const b = document.getElementById("statusBanner");
@@ -982,17 +1084,18 @@ function setSaved(v) {
 
 function saveAll() {
   const draft = window.__DRAFT__ || collectData();
-  const signaturePng = canvas.toDataURL("image/png");
-  const payload = { ...draft, signaturePng };
+  const payload = { ...draft };
   const arr = getRecords();
   arr.push(payload);
   saveRecords(arr);
   setSaved(true);
-  // PNG保存ボタンを有効化
-  const pngBtn = document.getElementById("pngBtn");
-  pngBtn.disabled = false;
-  pngBtn.style.opacity = "1";
-  showToast("✅ 保存しました！PNG保存もできます");
+  
+  // Clear validation errors after successful save
+  document.querySelectorAll('.error').forEach(el => el.classList.remove('error'));
+  const validationMsg = document.querySelector('.validation-message');
+  if (validationMsg) validationMsg.remove();
+  
+  showToast("✅ 保存しました");
 }
 
 async function savePNG() {
@@ -1085,38 +1188,16 @@ function renderHistory() {
     const agg = aggregateCores(r);
     const summary = agg.slice(0,3).map(c=>`${c.diam} L${c.len}×${c.qty}`).join("、") + (agg.length>3?"…":"");
     return `<div class="hist-item">
+      <input type="checkbox" class="hist-checkbox" data-index="${realIdx}" onchange="updateSelection()">
       <div class="hist-date">${r.date}</div>
       <div class="hist-info">
         <h4>${r.site} <span style="font-size:11px;color:var(--text2);">${r.client}</span></h4>
         <p>${summary}</p>
       </div>
       <div class="hist-qty">${total}</div>
-      <div style="display:flex; flex-direction:column; gap:4px;">
-        <button class="hist-del" style="background:#3b82f6; color:white; border:none; border-radius:6px; padding:5px 8px; font-size:11px; font-weight:700; cursor:pointer;" onclick="exportSingleRecord(${realIdx}, event)">📤 提出</button>
-        <button class="hist-del" onclick="deleteRecord(${realIdx}, event)">削除</button>
-      </div>
+      <button class="hist-del" onclick="deleteRecord(${realIdx}, event)">削除</button>
     </div>`;
   }).join("");
-}
-
-function exportSingleRecord(idx, e) {
-  e.stopPropagation();
-  const records = getRecords();
-  const r = records[idx];
-  if (!r) return;
-  const workerName = r.workers.length > 0 ? r.workers[0].name : '不明';
-  const dateStr = r.date.replace(/-/g, '');
-  const filename = `${workerName}_${dateStr}.json`;
-  const data = { version: "1.0", exportedAt: new Date().toISOString(), records: [r] };
-  const json = JSON.stringify(data, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast(`📤 ${filename} を書き出しました`);
 }
 
 function deleteRecord(idx, e) {
@@ -1129,162 +1210,77 @@ function deleteRecord(idx, e) {
   showToast("🗑️ 削除しました");
 }
 
-// ===== EXCEL =====
-function populateSites() {
+// ===== SELECTION & UPLOAD =====
+function updateSelection() {
+  const checkboxes = document.querySelectorAll('.hist-checkbox');
+  const selected = Array.from(checkboxes).filter(cb => cb.checked);
+  const count = selected.length;
+  
+  document.getElementById('selection-status').textContent = `選択中: ${count}件`;
+  const uploadBtn = document.getElementById('upload-btn');
+  
+  if (count > 0) {
+    uploadBtn.disabled = false;
+    uploadBtn.style.opacity = "1";
+  } else {
+    uploadBtn.disabled = true;
+    uploadBtn.style.opacity = "0.4";
+  }
+}
+
+function selectAll() {
+  const checkboxes = document.querySelectorAll('.hist-checkbox');
+  const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+  
+  checkboxes.forEach(cb => cb.checked = !allChecked);
+  updateSelection();
+}
+
+async function uploadSelected() {
+  const checkboxes = document.querySelectorAll('.hist-checkbox:checked');
+  if (checkboxes.length === 0) {
+    showToast("❌ データが選択されていません");
+    return;
+  }
+  
   const records = getRecords();
-  const sites = [...new Set(records.map(r => r.site))];
-  const sel = document.getElementById("sel-site");
-  const prev = sel.value;
-  sel.innerHTML = sites.length ? sites.map(s=>`<option value="${s}">${s}</option>`).join("") : '<option value="">（データなし）</option>';
-  if (prev && sites.includes(prev)) sel.value = prev;
-  updateMonths();
-}
-
-function updateMonths() {
-  const site = document.getElementById("sel-site").value;
-  const records = getRecords().filter(r => r.site === site);
-  const months = [...new Set(records.map(r => r.date.slice(0,7)))].sort();
-  const sel = document.getElementById("sel-month");
-  const prev = sel.value;
-  sel.innerHTML = months.length ? months.map(m=>`<option value="${m}">${m.replace("-","年")}月</option>`).join("") : '<option value="">（なし）</option>';
-  if (prev && months.includes(prev)) sel.value = prev;
-  else if (months.length) sel.value = months[months.length-1];
-}
-
-function renderMonthlyTable() {
-  const site = document.getElementById("sel-site").value;
-  const month = document.getElementById("sel-month").value;
-  const tableArea = document.getElementById("table-area");
-  const tableEmpty = document.getElementById("table-empty");
-  const dlBtn = document.getElementById("excel-dl-btn");
-
-  if (!site || !month) { tableArea.classList.add("hidden"); tableEmpty.classList.remove("hidden"); dlBtn.classList.add("hidden"); return; }
-
-  const records = getRecords().filter(r => r.site===site && r.date.startsWith(month));
-  const client = records[0]?.client || "";
-  document.getElementById("site-client-label").textContent = client ? `お客様：${client}` : "";
-
-  if (records.length===0) { tableArea.classList.add("hidden"); tableEmpty.classList.remove("hidden"); dlBtn.classList.add("hidden"); return; }
-
-  const [year, mon] = month.split("-").map(Number);
-  const dim = new Date(year, mon, 0).getDate();
-  const wd = ["日","月","火","水","木","金","土"];
-
-  // Build grid keyed by phi+L only (for monthly summary)
-  const rowSet = new Set(); const rowKeys = [];
-  records.forEach(r => aggregateCores(r).forEach(c => {
-    const phi = c.diam.replace("φ","");
-    const L = (c.mat === "デッキ" || c.len === 0) ? "デッキ" : (c.len <= 150 ? 150 : c.len);
-    const key = `${phi}_${L}`;
-    if (!rowSet.has(key)) { rowSet.add(key); rowKeys.push({phi:parseInt(phi)||0, L, key}); }
-  }));
-  rowKeys.sort((a,b) => a.phi!==b.phi ? a.phi-b.phi : a.L-b.L);
-
-  const grid = {};
-  rowKeys.forEach(r => grid[r.key] = {});
-  records.forEach(r => {
-    const day = parseInt(r.date.split("-")[2]);
-    aggregateCores(r).forEach(c => {
-      const phi = c.diam.replace("φ","");
-      const L = (c.mat === "デッキ" || c.len === 0) ? "デッキ" : (c.len <= 150 ? 150 : c.len);
-      const key = `${phi}_${L}`;
-      grid[key][day] = (grid[key][day]||0) + c.qty;
-    });
+  const selectedData = Array.from(checkboxes).map(cb => {
+    const index = parseInt(cb.dataset.index);
+    return records[index];
   });
-
-  let html = '<table class="monthly-tbl">';
-  html += `<tr><th colspan="2">${year}年${mon}月</th>`;
-  for (let d=1;d<=dim;d++) html += `<th>${d}</th>`;
-  html += '<th class="total-col">小計</th></tr>';
-  html += '<tr><th>穿孔径</th><th>穿孔長</th>';
-  for (let d=1;d<=dim;d++) { const w=new Date(year,mon-1,d).getDay(); html += `<th class="${w===6?'sat':w===0?'sun':''}">${wd[w]}</th>`; }
-  html += '<th class="total-col"></th></tr>';
-  rowKeys.forEach(r => {
-    const rt = Object.values(grid[r.key]).reduce((s,v)=>s+v,0);
-    html += `<tr><td class="row-hd">φ${r.phi}</td><td>L=${r.L}</td>`;
-    for (let d=1;d<=dim;d++) { const w=new Date(year,mon-1,d).getDay(); const v=grid[r.key][d]; html += `<td class="${w===6?'sat':w===0?'sun':''}">${v?`<span class="val">${v}</span>`:""}</td>`; }
-    html += `<td class="total-col">${rt}</td></tr>`;
-  });
-  // Total row
-  html += '<tr class="total-row"><td colspan="2">小計</td>';
-  let grand=0;
-  for (let d=1;d<=dim;d++) { const t=rowKeys.reduce((s,r)=>s+(grid[r.key][d]||0),0); grand+=t; html += `<td>${t||""}</td>`; }
-  html += `<td class="total-col">${grand}</td></tr>`;
-  html += '</table>';
-
-  document.getElementById("monthly-wrap").innerHTML = html;
-  tableArea.classList.remove("hidden");
-  tableEmpty.classList.add("hidden");
-  dlBtn.classList.remove("hidden");
-}
-
-function downloadExcel() {
-  const site = document.getElementById("sel-site").value;
-  const month = document.getElementById("sel-month").value;
-  if (!site || !month) return;
-
-  const [year, mon] = month.split("-").map(Number);
-  const dim = new Date(year, mon, 0).getDate();
-  const records = getRecords().filter(r => r.site===site && r.date.startsWith(month));
-  const client = (records[0]?.client || "") + "様";
-  const wd = ["日","月","火","水","木","金","土"];
-
-  const rowSet = new Set(); const rowKeys = [];
-  records.forEach(r => aggregateCores(r).forEach(c => {
-    const phi = c.diam.replace("φ","");
-    const L = (c.mat === "デッキ" || c.len === 0) ? "デッキ" : (c.len <= 150 ? 150 : c.len);
-    const key = `${phi}_${L}`;
-    if (!rowSet.has(key)) { rowSet.add(key); rowKeys.push({phi:parseInt(phi)||0, L, key}); }
-  }));
-  rowKeys.sort((a,b) => a.phi!==b.phi ? a.phi-b.phi : a.L-b.L);
-
-  const grid = {};
-  rowKeys.forEach(r => grid[r.key] = {});
-  records.forEach(r => {
-    const day = parseInt(r.date.split("-")[2]);
-    aggregateCores(r).forEach(c => {
-      const phi = c.diam.replace("φ","");
-      const L = (c.mat === "デッキ" || c.len === 0) ? "デッキ" : (c.len <= 150 ? 150 : c.len);
-      const key = `${phi}_${L}`;
-      grid[key][day] = (grid[key][day]||0) + c.qty;
-    });
-  });
-
-  const wb = XLSX.utils.book_new();
-  const aoa = [];
-  const lastCol = dim + 3;
-
-  aoa.push(["集　　計　　表", ...Array(dim+2).fill("")]);
-  const r2 = Array(lastCol).fill("");
-  r2[0] = client; r2[Math.floor(lastCol/2)] = site;
-  aoa.push(r2);
-  aoa.push([`${year}.${mon}`, "", ...Array.from({length:dim},(_,i)=>i+1), "小計"]);
-  aoa.push(["穿孔径","穿孔長",...Array.from({length:dim},(_,i)=>{ const w=new Date(year,mon-1,i+1).getDay(); return wd[w]; }),"小計"]);
-
-  rowKeys.forEach(r => {
-    let rt=0; const row=[`φ${r.phi}`,`L=${r.L}`];
-    for(let d=1;d<=dim;d++){const v=grid[r.key][d]||null; row.push(v); if(v) rt+=v;}
-    row.push(rt); aoa.push(row);
-  });
-  for(let i=rowKeys.length;i<15;i++) aoa.push(Array(lastCol).fill(null));
-  const tot=["小計",""];
-  let grand=0;
-  for(let d=1;d<=dim;d++){const t=rowKeys.reduce((s,r)=>s+(grid[r.key][d]||0),0); tot.push(t||null); grand+=t;}
-  tot.push(grand); aoa.push(tot);
-
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  const mid = Math.floor(lastCol/2);
-  ws["!merges"] = [
-    {s:{r:0,c:0},e:{r:0,c:lastCol-1}},
-    {s:{r:1,c:0},e:{r:1,c:mid-1}},
-    {s:{r:1,c:mid},e:{r:1,c:lastCol-1}},
-    {s:{r:2,c:0},e:{r:2,c:1}},
-    {s:{r:aoa.length-1,c:0},e:{r:aoa.length-1,c:1}},
-  ];
-  ws["!cols"] = [{wch:7},{wch:7},...Array(dim).fill({wch:3.5}),{wch:6}];
-  XLSX.utils.book_append_sheet(wb, ws, `${mon}月`);
-  XLSX.writeFile(wb, `${site}_${year}年${mon}月_集計表.xlsx`);
-  showToast("📥 Excelをダウンロードしました");
+  
+  try {
+    showToast("📤 アップロード中...");
+    
+    // Google Apps Script URL
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzY6CexizgJtJQaGQbIp_epGveGobN9dOMFHAk2xgKWenKFnJ6PI-l0uiR-kMcrvIgGJQ/exec";
+    
+    for (let i = 0; i < selectedData.length; i++) {
+      const data = selectedData[i];
+      const fileName = `コア日報_${data.date}_${data.site}.json`;
+      
+      const response = await fetch(SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: fileName,
+          data: JSON.stringify(data, null, 2)
+        })
+      });
+      
+      if (!response.ok) throw new Error(`Upload failed: ${response.status}`);
+    }
+    
+    // 選択解除
+    checkboxes.forEach(cb => cb.checked = false);
+    updateSelection();
+    
+    showToast(`✅ ${selectedData.length}件をアップロードしました`);
+  } catch (error) {
+    console.error('Upload error:', error);
+    showToast(`❌ エラー詳細: ${error.message}`);
+    alert(`デバッグ情報:\nエラー: ${error.message}\nURL: ${SCRIPT_URL}`);
+  }
 }
 
 // ===== EXPORT =====
@@ -1312,10 +1308,7 @@ function exportData() {
   if (records.length === 0) { showToast("⚠️ 該当するデータがありません"); return; }
 
   // 署名画像は除外してファイルサイズを小さくする
-  const exportData = records.map(r => {
-    const { signaturePng, ...rest } = r;
-    return rest;
-  });
+  const exportData = records;
 
   const json = JSON.stringify({ version: "1.0", exportedAt: new Date().toISOString(), records: exportData }, null, 2);
   const blob = new Blob([json], { type: "application/json" });
@@ -1342,140 +1335,6 @@ document.addEventListener("DOMContentLoaded", function() {
   setWaste(false);
   addWorker();
   document.getElementById("date").value = new Date().toISOString().slice(0,10);
-});
-</script>
-
-<script>
-// ===== PWA MANIFEST =====
-(function() {
-  const manifest = {
-    name: "コア日報 - 穿孔工事作業記録",
-    short_name: "コア日報",
-    description: "穿孔工事の作業記録・日報管理システム",
-    start_url: "./",
-    display: "standalone",
-    orientation: "portrait",
-    background_color: "#f2f4f7",
-    theme_color: "#ff7a00",
-    icons: [
-      {
-        src: "data:image/svg+xml," + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='24' fill='#ff7a00'/><text x='96' y='110' font-family='Georgia,serif' font-size='52' font-weight='900' font-style='italic' fill='#00cc00' text-anchor='middle'>TW</text><text x='96' y='155' font-family='sans-serif' font-size='22' font-weight='700' fill='white' text-anchor='middle'>コア日報</text></svg>`),
-        sizes: "192x192",
-        type: "image/svg+xml",
-        purpose: "any maskable"
-      },
-      {
-        src: "data:image/svg+xml," + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='64' fill='#ff7a00'/><text x='256' y='290' font-family='Georgia,serif' font-size='140' font-weight='900' font-style='italic' fill='#00cc00' text-anchor='middle'>TW</text><text x='256' y='410' font-family='sans-serif' font-size='60' font-weight='700' fill='white' text-anchor='middle'>コア日報</text></svg>`),
-        sizes: "512x512",
-        type: "image/svg+xml",
-        purpose: "any maskable"
-      }
-    ]
-  };
-
-  const blob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
-  const url = URL.createObjectURL(blob);
-  document.getElementById('pwa-manifest').href = url;
-})();
-
-// ===== SERVICE WORKER =====
-if ('serviceWorker' in navigator) {
-  const swCode = `
-const CACHE = 'core-nippou-v1';
-self.addEventListener('install', e => {
-  e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(['./']))
-  );
-  self.skipWaiting();
-});
-self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(keys =>
-    Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-  ));
-  self.clients.claim();
-});
-self.addEventListener('fetch', e => {
-  e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request).catch(() => caches.match('./')))
-  );
-});
-  `;
-  const swBlob = new Blob([swCode], {type: 'application/javascript'});
-  const swUrl = URL.createObjectURL(swBlob);
-  navigator.serviceWorker.register(swUrl).then(() => {
-    console.log('SW registered');
-  }).catch(e => console.log('SW error:', e));
-}
-
-// ===== インストール促進バナー =====
-let deferredPrompt;
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();
-  deferredPrompt = e;
-  showInstallBanner();
-});
-
-function showInstallBanner() {
-  if (document.getElementById('install-banner')) return;
-  const banner = document.createElement('div');
-  banner.id = 'install-banner';
-  banner.style.cssText = `
-    position: fixed; bottom: 70px; left: 16px; right: 16px; z-index: 200;
-    background: #1a1a2e; color: white; border-radius: 14px;
-    padding: 14px 16px; display: flex; align-items: center; gap: 12px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-  `;
-  banner.innerHTML = `
-    <div style="font-size:28px;">📲</div>
-    <div style="flex:1;">
-      <div style="font-weight:800; font-size:14px;">ホーム画面に追加</div>
-      <div style="font-size:12px; opacity:0.8; margin-top:2px;">アプリとして使えます</div>
-    </div>
-    <button onclick="installApp()" style="background:#ff7a00; color:white; border:none; border-radius:8px; padding:8px 14px; font-weight:700; font-size:13px; cursor:pointer;">追加</button>
-    <button onclick="document.getElementById('install-banner').remove()" style="background:transparent; color:white; border:none; font-size:18px; cursor:pointer; padding:4px;">✕</button>
-  `;
-  document.body.appendChild(banner);
-}
-
-function installApp() {
-  if (deferredPrompt) {
-    deferredPrompt.prompt();
-    deferredPrompt.userChoice.then(() => {
-      deferredPrompt = null;
-      const b = document.getElementById('install-banner');
-      if (b) b.remove();
-    });
-  }
-}
-
-// Android Chrome向け手動インストール案内
-window.addEventListener('load', () => {
-  const isAndroid = /Android/i.test(navigator.userAgent);
-  const isChrome = /Chrome/i.test(navigator.userAgent);
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-  if (isAndroid && isChrome && !isStandalone && !deferredPrompt) {
-    setTimeout(() => {
-      if (!document.getElementById('install-banner') && !deferredPrompt) {
-        const tip = document.createElement('div');
-        tip.id = 'install-banner';
-        tip.style.cssText = `
-          position: fixed; bottom: 70px; left: 16px; right: 16px; z-index: 200;
-          background: #1a1a2e; color: white; border-radius: 14px;
-          padding: 14px 16px; display: flex; align-items: center; gap: 12px;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-        `;
-        tip.innerHTML = `
-          <div style="font-size:28px;">📲</div>
-          <div style="flex:1;">
-            <div style="font-weight:800; font-size:14px;">ホーム画面に追加する方法</div>
-            <div style="font-size:12px; opacity:0.8; margin-top:2px;">Chrome右上 ︙ → 「ホーム画面に追加」</div>
-          </div>
-          <button onclick="document.getElementById('install-banner').remove()" style="background:transparent; color:white; border:none; font-size:18px; cursor:pointer; padding:4px;">✕</button>
-        `;
-        document.body.appendChild(tip);
-      }
-    }, 3000);
-  }
 });
 </script>
 </body>
