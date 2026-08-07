@@ -4,6 +4,12 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>コア・探査日報 → 作業確認 → サイン → 保存</title>
+  <link rel="manifest" href="./manifest-core-v2.json">
+  <meta name="theme-color" content="#009933">
+  <link rel="apple-touch-icon" href="./icon-core-192-v2.png">
+  <meta name="apple-mobile-web-app-title" content="コア日報">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
 <script>/* html2canvas v1.4.1 (埋め込み・オフラインでも動作) */
 /*!
  * html2canvas 1.4.1 <https://html2canvas.hertzen.com>
@@ -225,8 +231,9 @@
     <div id="unsentBar" class="noshot" style="display:none;background:#fdecea;border:1px solid #e57373;border-radius:10px;padding:12px;margin:0 0 14px;">
       <div style="font-weight:700;color:#b71c1c;font-size:15px;margin-bottom:6px;">未送信の日報が <span id="unsentCount">0</span> 件あります</div>
       <div style="font-size:13px;color:#7f2f2a;line-height:1.6;margin-bottom:8px;">保存しただけでは会社に届きません。電波の入る場所で送信してください。</div>
-      <div id="unsentList" style="font-size:13px;color:#7f2f2a;line-height:1.7;margin-bottom:10px;"></div>
+      <div id="unsentList" style="margin-bottom:10px;"></div>
       <button type="button" onclick="sendUnsent()" style="width:100%;padding:12px;font-size:15px;font-weight:700;color:#fff;background:#c62828;border:0;border-radius:8px;">未送信をまとめて送信</button>
+      <button type="button" onclick="clearUnsent()" style="width:100%;padding:10px;margin-top:8px;font-size:13px;color:#7f2f2a;background:transparent;border:1px solid #e57373;border-radius:8px;">未送信をすべて削除（テスト用）</button>
     </div>
 
       <div class="section">
@@ -1263,13 +1270,40 @@ function renderUnsentBar(){
   const list = unsentRecords();
   if(!list.length){ bar.style.display = "none"; return; }
   document.getElementById("unsentCount").textContent = list.length;
-  document.getElementById("unsentList").innerHTML = list.slice(-5).map(function(r){
+  document.getElementById("unsentList").innerHTML = list.map(function(r){
     const d = r.date || "日付なし";
     const s = r.site || r.siteName || "現場名なし";
-    return "・" + escapeHtmlLite(d) + "　" + escapeHtmlLite(s);
-  }).join("<br>");
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid #f3c9c5;">'
+         +   '<div style="flex:1;font-size:13px;color:#7f2f2a;">'
+         +     escapeHtmlLite(d) + "　" + escapeHtmlLite(s)
+         +   '</div>'
+         +   '<button type="button" onclick="deleteRecord(\'' + r.recordId + '\')" '
+         +     'style="flex:none;padding:4px 10px;font-size:12px;color:#7f2f2a;background:#fff;border:1px solid #e57373;border-radius:6px;">削除</button>'
+         + '</div>';
+  }).join("");
   bar.style.display = "block";
 }
+
+function deleteRecord(recordId){
+  if(!recordId) return;
+  const arr = loadRecords();
+  const target = arr.filter(function(r){ return r && r.recordId === recordId; })[0];
+  const label = target ? ((target.date || "") + " " + (target.site || "")) : "";
+  if(!confirm("この日報を削除します。元に戻せません。\n\n" + label)) return;
+  saveRecords(arr.filter(function(r){ return !(r && r.recordId === recordId); }));
+  showToast("削除しました。");
+  renderUnsentBar();
+}
+
+function clearUnsent(){
+  const n = unsentRecords().length;
+  if(!n){ showToast("未送信の日報はありません。"); return; }
+  if(!confirm("未送信の日報 " + n + "件をすべて削除します。\n元に戻せません。よろしいですか？")) return;
+  saveRecords(loadRecords().filter(function(r){ return r && r.sent; }));
+  showToast(n + "件を削除しました。");
+  renderUnsentBar();
+}
+
 
 function recordToFile(r){
   return new File([JSON.stringify(r, null, 2)], baseFileName(r) + ".json", { type:"application/json" });
