@@ -953,9 +953,24 @@ async function sendUnsent(){
 window.addEventListener("load", renderUnsentBar);
 
 function baseFileName(p){
+  // ファイル名だけで「いつ・どこ・誰」が分かるようにする
+  const clean = function(s, max){
+    const t = String(s == null ? "" : s)
+      .replace(/[\\\/:*?"<>|\r\n\t]/g, "")
+      .replace(/\s+/g, "")
+      .slice(0, max);
+    return t || "なし";
+  };
   const d = p.date || "nodate";
-  const t = (p.createdAt || "").slice(11,16).replace(":","");
-  return `joyou-nippo_${d}_${t || "0000"}`;
+  const t = ((p.createdAt || "").slice(11,16).replace(":","")) || "0000";
+  const kyaku = clean(p.client || p.customer, 12);
+  const genba = clean(p.site, 16);
+  const names = (p.workers || [])
+    .map(function(w){ return w && w.name ? String(w.name).trim() : ""; })
+    .filter(Boolean);
+  let worker = names.length ? clean(names[0], 8) : "なし";
+  if(names.length > 1) worker += "他" + (names.length - 1) + "名";
+  return `${d}_${kyaku}_${genba}_${worker}_常用_${t}`;
 }
 
 async function shareFile(file, title){
