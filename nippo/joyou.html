@@ -50,6 +50,9 @@
   .header-top{display:flex;align-items:center;gap:12px}
   .logo{width:48px;height:48px;object-fit:contain;display:block}
   .title{font-size:26px;font-weight:900;letter-spacing:.02em;text-decoration:underline; text-underline-offset:6px;}
+  .ver{margin-left:auto;text-align:right;font-size:11px;line-height:1.4;color:#777;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .ver b{display:block;font-size:13px;color:#333;font-weight:800}
+  .ver span{display:block}
   .line-orange{height:12px;background:var(--orange);margin-top:10px}
   .line-green{height:12px;background:var(--green)}
   .main{max-width:980px;margin:0 auto;padding:14px}
@@ -170,9 +173,16 @@
     <div class="header-top">
       <img class="logo" src="data:image/gif;base64,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" alt="徳和工業" />
       <div class="title" id="headerTitle">常用日報</div>
+      <div class="ver" id="verBadge"></div>
     </div>
     <div class="line-orange"></div>
     <div class="line-green"></div>
+  </div>
+
+  <div id="updateBar" class="noshot" style="display:none;background:#fff3e0;border-bottom:3px solid #ef6c00;padding:14px 16px;">
+    <div style="font-weight:800;color:#e65100;font-size:16px;">🔔 新しいバージョン <span id="updateVer"></span> があります</div>
+    <div id="updateNote" style="font-size:13px;color:#555;margin-top:4px;line-height:1.5"></div>
+    <button id="btnUpdate" style="margin-top:10px;padding:12px 18px;font-size:16px;font-weight:800;border:0;border-radius:10px;background:#ef6c00;color:#fff;">最新版に更新する</button>
   </div>
 
   <div id="envNote">
@@ -315,6 +325,58 @@
   <div id="toast"></div>
 
 <script>
+/* =============================
+  アプリのバージョン
+  ★ 更新したら この3行 と version.json を書き換える
+============================= */
+const APP_KEY       = "joyou";
+const APP_VERSION   = "1.0.0";
+const APP_BUILD     = "2026-08-12";
+
+(function(){
+  const b = document.getElementById("verBadge");
+  if(b) b.innerHTML = `<b>v${APP_VERSION}</b>${APP_BUILD}`;
+  checkLatestVersion();
+})();
+
+/* サーバー上の version.json と見比べて、更新の有無を知らせる
+   version.json は「同じフォルダ」でも「1つ上のフォルダ」でも読めるようにしてある */
+async function fetchVersionJson(){
+  for(const path of ["version.json", "../version.json"]){
+    try{
+      const res = await fetch(path + "?_=" + Date.now(), { cache:"no-store" });
+      if(res.ok) return await res.json();
+    }catch(e){ /* 次を試す */ }
+  }
+  return null;
+}
+
+async function checkLatestVersion(){
+  const badge = document.getElementById("verBadge");
+  if(!navigator.onLine) return;
+  const all = await fetchVersionJson();
+  if(!all) return;
+  const info = all[APP_KEY];
+  if(!info || !info.version) return;
+
+  if(info.version === APP_VERSION){
+    if(badge) badge.innerHTML =
+      `<b>v${APP_VERSION}</b><span style="color:#2e7d32;font-weight:700">✓ 最新です</span>`;
+  }else{
+    if(badge) badge.innerHTML =
+      `<b style="color:#c62828">v${APP_VERSION}</b><span style="color:#c62828;font-weight:700">更新あり</span>`;
+    const bar = document.getElementById("updateBar");
+    if(!bar) return;
+    document.getElementById("updateVer").textContent  = "v" + info.version;
+    document.getElementById("updateNote").textContent = info.note || "";
+    bar.style.display = "block";
+    document.getElementById("btnUpdate").onclick = () => {
+      if(!confirm("最新版に更新します。\n入力途中の内容は消える場合があります。\n（保存済みの日報は消えません）\n\nよろしいですか？")) return;
+      location.replace(location.pathname + "?v=" + encodeURIComponent(info.version));
+    };
+  }
+}
+
 /* =============================
   30分刻み・昼休憩
 ============================= */
@@ -805,7 +867,7 @@ function saveAll(){
   let signaturePng = "";
   try{ signaturePng = canvas.toDataURL("image/png"); }catch(e){}
 
-  const payload = { app:"joyou-nippo", type:"joyou", version:2, recordId: newRecordId(), sent:false, ...draft, signaturePng };
+  const payload = { app:"joyou-nippo", type:"joyou", version:2, appVersion: APP_VERSION, appBuild: APP_BUILD, recordId: newRecordId(), sent:false, ...draft, signaturePng };
 
   let storedOk = false;
   if(storageAvailable()){
