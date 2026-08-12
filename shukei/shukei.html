@@ -86,6 +86,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
 .header h1 { font-size: 18px; font-weight: 800; }
 .header p { font-size: 11px; opacity: 0.8; margin-top: 2px; }
 .header-stripe { height: 5px; background: linear-gradient(90deg, var(--orange) 50%, var(--green) 50%); }
+.ver{margin-left:auto;text-align:right;font-size:11px;line-height:1.4;color:#777;white-space:nowrap;font-variant-numeric:tabular-nums}
+.ver b{display:block;font-size:13px;color:#333;font-weight:800}
+.ver span{display:block}
 
 .main { max-width: 900px; margin: 0 auto; padding: 20px 16px 40px; }
 
@@ -232,6 +235,46 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
 .diary-nocores { color: var(--text2); font-size: 12px; }
 .diary-note { margin-top: 6px; padding: 5px 10px; background: #fff3cd; border-radius: 6px; font-size: 12px; font-weight: 700; color: #7c4a00; border-left: 3px solid #f59e0b; }
 @media print { .site-diary { display: none !important; } }
+
+/* ===== 日報ビューア（日付タップ→その日の日報を表示） ===== */
+.monthly-tbl th.dv-clickable { cursor: pointer; }
+.monthly-tbl th.dv-clickable::after { content:"📄"; display:block; font-size:8px; line-height:1; margin-top:1px; opacity:.7; }
+.monthly-tbl th.dv-clickable:hover { background: var(--primary); color:#fff; }
+.diary-day.dv-clickable { cursor: pointer; }
+.diary-day.dv-clickable:hover .diary-content { border-color: var(--primary); background: var(--primary-light); }
+
+.dv-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.55); z-index: 300; padding: 16px 10px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.dv-overlay.hidden { display: none !important; }
+.dv-box { background:#fff; border-radius:14px; max-width:700px; margin:0 auto; box-shadow:0 12px 40px rgba(0,0,0,.35); overflow:hidden; }
+.dv-head { background:var(--primary); color:#fff; padding:12px 16px; display:flex; align-items:center; gap:10px; }
+.dv-head .dv-date { font-size:17px; font-weight:900; }
+.dv-head .dv-sub { font-size:11px; opacity:.85; margin-top:2px; }
+.dv-x { margin-left:auto; background:rgba(255,255,255,.2); border:none; color:#fff; width:32px; height:32px; border-radius:8px; font-size:18px; font-weight:800; cursor:pointer; flex-shrink:0; }
+.dv-nav { display:flex; gap:8px; padding:8px 16px; background:var(--primary-light); border-bottom:1px solid var(--border); }
+.dv-nav button { flex:1; padding:8px; border:1px solid #c7d7f5; background:#fff; color:var(--primary); border-radius:8px; font-family:inherit; font-size:13px; font-weight:800; cursor:pointer; }
+.dv-nav button:disabled { opacity:.35; cursor:default; }
+.dv-body { padding:14px 16px 18px; max-height:calc(100vh - 210px); overflow-y:auto; }
+.dv-rec { border:1px solid var(--border); border-radius:12px; padding:12px 14px; margin-bottom:12px; }
+.dv-rec:last-child { margin-bottom:0; }
+.dv-rec-hd { font-size:14px; font-weight:800; border-left:4px solid var(--orange); padding-left:8px; margin-bottom:4px; }
+.dv-rec-hd span { display:block; font-size:11px; font-weight:700; color:var(--text2); margin-top:3px; }
+.dv-sec { margin-top:12px; }
+.dv-sec-t { font-size:12px; font-weight:800; color:var(--text2); margin-bottom:5px; }
+.dv-tbl { width:100%; border-collapse:collapse; font-size:12px; }
+.dv-tbl th, .dv-tbl td { border:1px solid var(--border); padding:4px 6px; text-align:center; white-space:nowrap; }
+.dv-tbl th { background:var(--bg); font-weight:800; color:var(--text2); font-size:11px; }
+.dv-tbl td.l { text-align:left; }
+.dv-tbl td.n { text-align:right; font-weight:800; color:var(--orange); }
+.dv-tbl tr.sum td { background:var(--green-light); font-weight:800; color:var(--green); }
+.dv-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.dv-chip { display:inline-block; background:var(--bg); border:1px solid var(--border); border-radius:999px; padding:3px 10px; font-size:12px; font-weight:700; margin:0 6px 6px 0; }
+.dv-note { padding:7px 10px; background:#fff3cd; border-left:3px solid #f59e0b; border-radius:6px; font-size:12.5px; font-weight:700; color:#7c4a00; white-space:pre-wrap; }
+.dv-note.blue { background:#e8f0fe; border-left-color:var(--primary); color:#1a3f8f; }
+.dv-note.plain { background:var(--bg); border-left-color:var(--text2); color:var(--text); font-weight:400; }
+.dv-empty { font-size:13px; color:var(--text2); padding:14px 0; text-align:center; }
+.dv-foot { display:flex; gap:8px; padding:10px 16px; border-top:1px solid var(--border); background:var(--bg); }
+.dv-foot button { flex:1; padding:10px; border-radius:9px; border:none; font-family:inherit; font-size:13px; font-weight:800; cursor:pointer; }
+@media print { .dv-overlay { display:none !important; } }
 </style>
 </head>
 <body>
@@ -243,8 +286,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
       <h1>集計表システム</h1>
       <p>TOKUWA 日報データ → 月間集計表 Excel出力</p>
     </div>
+    <div class="ver" id="verBadge"></div>
   </div>
   <div class="header-stripe"></div>
+</div>
+
+<div id="updateBar" style="display:none;background:#fff3e0;border-bottom:3px solid #ef6c00;padding:14px 16px;">
+  <div style="font-weight:800;color:#e65100;font-size:16px;">🔔 新しいバージョン <span id="updateVer"></span> があります</div>
+  <div id="updateNote" style="font-size:13px;color:#555;margin-top:4px;line-height:1.5"></div>
+  <button id="btnUpdate" style="margin-top:10px;padding:12px 18px;font-size:16px;font-weight:800;border:0;border-radius:10px;background:#ef6c00;color:#fff;">最新版に更新する</button>
 </div>
 
 <div class="main">
@@ -369,10 +419,80 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
 
 </div>
 
+<div class="dv-overlay hidden" id="dv-overlay" onclick="dvOverlayClick(event)">
+  <div class="dv-box">
+    <div class="dv-head">
+      <div id="dv-title"></div>
+      <button class="dv-x" onclick="dvClose()" title="閉じる">&times;</button>
+    </div>
+    <div class="dv-nav">
+      <button id="dv-prev" onclick="dvStep(-1)">← 前の作業日</button>
+      <button id="dv-next" onclick="dvStep(1)">次の作業日 →</button>
+    </div>
+    <div class="dv-body" id="dv-body"></div>
+    <div class="dv-foot">
+      <button style="background:#fff;border:1.5px solid var(--border);color:var(--text);" onclick="dvPrint()">🖨 この日を印刷</button>
+      <button style="background:var(--primary);color:#fff;" onclick="dvClose()">閉じる</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 <div id="cf-print"></div>
 
 <script>
+/* =============================
+  アプリのバージョン
+  ★ 更新したら この3行 と version.json を書き換える
+============================= */
+const APP_KEY       = "shukei";
+const APP_VERSION   = "1.0.0";
+const APP_BUILD     = "2026-08-12";
+
+(function(){
+  const b = document.getElementById("verBadge");
+  if(b) b.innerHTML = `<b>v${APP_VERSION}</b>${APP_BUILD}`;
+  checkLatestVersion();
+})();
+
+/* サーバー上の version.json と見比べて、更新の有無を知らせる
+   version.json は「同じフォルダ」でも「1つ上のフォルダ」でも読めるようにしてある */
+async function fetchVersionJson(){
+  for(const path of ["version.json", "../version.json"]){
+    try{
+      const res = await fetch(path + "?_=" + Date.now(), { cache:"no-store" });
+      if(res.ok) return await res.json();
+    }catch(e){ /* 次を試す */ }
+  }
+  return null;
+}
+
+async function checkLatestVersion(){
+  const badge = document.getElementById("verBadge");
+  if(!navigator.onLine) return;
+  const all = await fetchVersionJson();
+  if(!all) return;
+  const info = all[APP_KEY];
+  if(!info || !info.version) return;
+
+  if(info.version === APP_VERSION){
+    if(badge) badge.innerHTML =
+      `<b>v${APP_VERSION}</b><span style="color:#2e7d32;font-weight:700">✓ 最新です</span>`;
+  }else{
+    if(badge) badge.innerHTML =
+      `<b style="color:#c62828">v${APP_VERSION}</b><span style="color:#c62828;font-weight:700">更新あり</span>`;
+    const bar = document.getElementById("updateBar");
+    if(!bar) return;
+    document.getElementById("updateVer").textContent  = "v" + info.version;
+    document.getElementById("updateNote").textContent = info.note || "";
+    bar.style.display = "block";
+    document.getElementById("btnUpdate").onclick = () => {
+      if(!confirm("最新版に更新します。\n作業中の内容は消える場合があります。\n\nよろしいですか？")) return;
+      location.replace(location.pathname + "?v=" + encodeURIComponent(info.version));
+    };
+  }
+}
+
 const TOOL_ORDER = ["電動ハンマー","電動ハンマー大","ハンマードリル","コンプレッサー","カッター5インチ","カッター6インチ","カッター7インチ","切断砥石5インチ","切断砥石6インチ","集塵機","集塵機（大）","送風機","フィルター","発電機（ポータブル）","発電機（3kVA）","セイバーソーブレード","カップリング","アセチレンガス"];
 function sortTools(names){ return [...names].sort((a,b)=>{ const ai=TOOL_ORDER.indexOf(a),bi=TOOL_ORDER.indexOf(b); if(ai>=0&&bi>=0)return ai-bi; if(ai>=0)return -1; if(bi>=0)return 1; return a.localeCompare(b,'ja'); }); }
 
@@ -838,6 +958,7 @@ function renderTable() {
   }
 
   const records = getRecordsInPeriod(site, month);
+  dvIndex(records);
   const cutoff = parseInt(document.getElementById("sel-cutoff").value);
   const range = getPeriodRange(month, cutoff);
   document.getElementById("client-label").textContent =
@@ -1000,7 +1121,7 @@ function renderCoreTable(records, site, month, range, statsGrid, tableArea) {
   }
   html+=`<th class="total-col">小計</th></tr>`;
   html+=`<tr><th>穿孔径</th><th>穿孔長</th><th>備考</th>`;
-  cols.forEach(dt=>{html+=`<th class="${dCls(dt)}">${dt.d}<br><span style="font-weight:400;font-size:9px;">${WD[dt.wd]}</span></th>`;});
+  cols.forEach(dt=>{const hasR=dvHas(dt.key);html+=`<th class="${dCls(dt)}${hasR?' dv-clickable':''}"${hasR?` onclick="dvOpen('${dt.key}')" title="この日の日報を表示"`:''}>${dt.d}<br><span style="font-weight:400;font-size:9px;">${WD[dt.wd]}</span></th>`;});
   html+=`<th class="total-col"></th></tr>`;
   rowKeys.forEach(k=>{
     const lbl=getRowLabel(k);
@@ -1019,6 +1140,7 @@ function renderCoreTable(records, site, month, range, statsGrid, tableArea) {
   let grand=0;
   cols.forEach(dt=>{const t=rowKeys.reduce((s,k)=>s+(gridByDate[k][dt.key]||0),0);grand+=t;html+=`<td>${t||""}</td>`;});
   html+=`<td class="total-col">${grand}</td></tr></table></div>`;
+  html+=`<div class="hint">※ 日付（📄マーク）をタップすると、その日の日報がそのまま表示されます</div>`;
   html += buildDiaryHTML(records, range);
   tableArea.innerHTML=html;
 }
@@ -1099,7 +1221,7 @@ function renderJoyouTable(records, site, month, range, statsGrid, tableArea) {
 
   // ヘッダー行2：日付
   html+=`<tr><th class="row-hd" colspan="2">項目</th>`;
-  dates.forEach(dt=>{ html+=`<th class="${dCls(dt)}">${dt.d}</th>`; });
+  dates.forEach(dt=>{ const hasR=dvHas(dt.key); html+=`<th class="${dCls(dt)}${hasR?' dv-clickable':''}"${hasR?` onclick="dvOpen('${dt.key}')" title="この日の日報を表示"`:''}>${dt.d}</th>`; });
   html+=`<th class="total-col"></th></tr>`;
 
   // ヘッダー行3：曜日
@@ -1127,6 +1249,7 @@ function renderJoyouTable(records, site, month, range, statsGrid, tableArea) {
     html+=`<td class="total-col">${toolTotals[name]}</td></tr>`;
   });
   html+=`</table></div>`;
+  html+=`<div class="hint">※ 日付（📄マーク）をタップすると、その日の日報がそのまま表示されます</div>`;
   html += buildDiaryHTML(records, range);
   tableArea.innerHTML=html;
 }
@@ -1151,7 +1274,7 @@ function buildDiaryHTML(records, range) {
   if (!sortedDates.length) return '';
 
   let html = `<div class="site-diary">
-    <div class="tbl-section-title" style="margin-top:20px;">📋 現場日誌</div>`;
+    <div class="tbl-section-title" style="margin-top:20px;">📋 現場日誌（タップで日報を表示）</div>`;
 
   sortedDates.forEach(dateKey => {
     const dt = new Date(dateKey + "T00:00:00");
@@ -1193,7 +1316,7 @@ function buildDiaryHTML(records, range) {
       (r.tools||[]).forEach(t => { dayToolMap[t.name] = (dayToolMap[t.name]||0) + t.qty; });
     });
 
-    html += `<div class="diary-day">
+    html += `<div class="diary-day dv-clickable" onclick="dvOpen('${dateKey}')" title="この日の日報を表示">
       <div class="diary-badge ${bdgCls}">${m}/${d}<br><span class="diary-wd">${WD[wd]}</span></div>
       <div class="diary-content">`;
 
@@ -2703,6 +2826,216 @@ cfLoadCompany();
 const cfOrigRenderFileList = renderFileList;
 renderFileList = function(){ cfOrigRenderFileList.apply(this, arguments); renderConfirmCard(); };
 renderConfirmCard();
+
+
+/* =========================================================
+   日報ビューア：集計表の日付をタップ → その日の日報を全項目表示
+   ========================================================= */
+const DV_WD = ["日","月","火","水","木","金","土"];
+let dvMap = {};    // "YYYY-MM-DD" → レコード配列
+let dvDates = [];  // 日報がある日付（昇順）
+
+function dvIndex(records){
+  dvMap = {}; dvDates = [];
+  (records || []).forEach(r => {
+    if(!r || !r.date) return;
+    (dvMap[r.date] = dvMap[r.date] || []).push(r);
+  });
+  dvDates = Object.keys(dvMap).sort();
+}
+function dvHas(dateKey){ return !!(dvMap[dateKey] && dvMap[dateKey].length); }
+
+function dvOpen(dateKey){
+  if(!dvHas(dateKey)) return;
+  const ov = document.getElementById("dv-overlay");
+  const d  = new Date(dateKey + "T00:00:00");
+  document.getElementById("dv-title").innerHTML =
+    `<div><div class="dv-date">${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${DV_WD[d.getDay()]}）</div>` +
+    `<div class="dv-sub">日報 ${dvMap[dateKey].length}件</div></div>`;
+  document.getElementById("dv-body").innerHTML = dvBuildBody(dateKey);
+  document.getElementById("dv-body").scrollTop = 0;
+  ov.dataset.date = dateKey;
+  ov.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+  const i = dvDates.indexOf(dateKey);
+  document.getElementById("dv-prev").disabled = (i <= 0);
+  document.getElementById("dv-next").disabled = (i < 0 || i >= dvDates.length - 1);
+}
+function dvClose(){
+  document.getElementById("dv-overlay").classList.add("hidden");
+  document.body.style.overflow = "";
+}
+function dvStep(delta){
+  const cur = document.getElementById("dv-overlay").dataset.date;
+  const nx  = dvDates[dvDates.indexOf(cur) + delta];
+  if(nx) dvOpen(nx);
+}
+function dvOverlayClick(e){ if(e.target.id === "dv-overlay") dvClose(); }
+document.addEventListener("keydown", e => {
+  const ov = document.getElementById("dv-overlay");
+  if(!ov || ov.classList.contains("hidden")) return;
+  if(e.key === "Escape")     dvClose();
+  if(e.key === "ArrowLeft")  dvStep(-1);
+  if(e.key === "ArrowRight") dvStep(1);
+});
+function dvPrint(){
+  const ov = document.getElementById("dv-overlay");
+  const p  = document.getElementById("cf-print");
+  const d  = new Date((ov.dataset.date || "") + "T00:00:00");
+  p.innerHTML = `<div style="font-size:17px;font-weight:800;margin-bottom:12px;">作業日報　` +
+    `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${DV_WD[d.getDay()]}）</div>` +
+    document.getElementById("dv-body").innerHTML;
+  window.print();
+  setTimeout(() => { p.innerHTML = ""; }, 1000);
+}
+
+/* ---- 本体の組み立て ---- */
+// 明示的に表示済みのキー（これ以外は「その他の記入項目」に自動で出す）
+const DV_KNOWN = new Set(["id","date","app","type","client","customer","site",
+  "workers","tools","survey","otherNote","waste","workDesc","needConfirm"]);
+
+function dvBuildBody(dateKey){
+  const recs = dvMap[dateKey] || [];
+  if(!recs.length) return `<div class="dv-empty">この日の日報はありません</div>`;
+  return recs.map((r,i) => dvBuildRec(r, i, recs.length)).join("");
+}
+
+function dvSortCores(cores){
+  const mo = ["RC","CB","ALC","アスロック","デッキ"];
+  const fo = ["外部","1F","2F","3F","4F","5F","R F"];
+  const po = ["壁","床"];
+  const ix = (arr,v) => { const i = arr.indexOf(v); return i < 0 ? 999 : i; };
+  return [...cores].sort((a,b) =>
+    (ix(mo,a.mat)-ix(mo,b.mat)) || (ix(fo,a.floor)-ix(fo,b.floor)) ||
+    (ix(po,a.part)-ix(po,b.part)) || ((a.diamNum||0)-(b.diamNum||0)) ||
+    ((a.lenMm||0)-(b.lenMm||0))
+  );
+}
+
+function dvBuildRec(r, idx, total){
+  const type = detectType(r);
+  let h = `<div class="dv-rec">`;
+  h += `<div class="dv-rec-hd">${esc(r.site || "（現場名なし）")}` +
+       `<span>${esc(getClientName(r) || "（お客様名なし）")} 様　／　` +
+       `${esc(REPORT_TYPES[type] ? REPORT_TYPES[type].label : "日報")}` +
+       `${total > 1 ? `　（${idx+1} / ${total}件目）` : ""}</span></div>`;
+
+  /* 作業員・時間 */
+  const ws = r.workers || [];
+  if(ws.length){
+    h += `<div class="dv-sec"><div class="dv-sec-t">👷 作業員・時間</div><div class="dv-scroll">` +
+         `<table class="dv-tbl"><tr><th>作業員</th><th>時間</th><th>実働</th><th>残業</th></tr>`;
+    ws.forEach(w => {
+      const st = cfHalf(w.start), en = cfHalf(w.end);
+      const ot = (w.overtime || []).reduce((a,o) => a + (o.hours || 0), 0);
+      h += `<tr><td class="l">${esc(w.name || "—")}</td>` +
+           `<td>${(st && en) ? `${st}〜${en}` : "—"}</td>` +
+           `<td class="n">${w.hours || 0}h</td>` +
+           `<td>${ot ? ot + "h" : "—"}</td></tr>`;
+    });
+    h += `</table></div></div>`;
+  }
+
+  /* コア穿孔明細（材質・階・壁床・径・長さ・天井裏/高車/真空パッド） */
+  const cores = dvSortCores(aggregateCores(r));
+  if(cores.length){
+    const tot = cores.reduce((s,c) => s + (c.qty || 0), 0);
+    h += `<div class="dv-sec"><div class="dv-sec-t">🔩 コア穿孔明細</div><div class="dv-scroll">` +
+         `<table class="dv-tbl"><tr><th>材質</th><th>階</th><th>部位</th><th>穿孔径</th>` +
+         `<th>穿孔長</th><th>適用</th><th>本数</th></tr>`;
+    cores.forEach(c => {
+      const L = getL(c);
+      h += `<tr><td>${esc(c.mat || "—")}</td><td>${esc(c.floor || "—")}</td>` +
+           `<td>${esc(c.part || "—")}</td><td>φ${c.diamNum || 0}</td>` +
+           `<td>${L === "デッキ" ? "デッキ" : "L=" + L}</td>` +
+           `<td>${esc(getOptionLabel(c) || "—")}</td>` +
+           `<td class="n">${c.qty || 0}本</td></tr>`;
+    });
+    h += `<tr class="sum"><td colspan="6">合　計</td><td>${tot}本</td></tr></table></div></div>`;
+  }
+
+  /* 調査（レントゲン・鉄筋探査） */
+  const sv = r.survey;
+  if(sv){
+    const p = [];
+    if(sv.xray && sv.xrayCount) p.push(`レントゲン検査 ${sv.xrayCount}枚`);
+    if(sv.t300 && sv.t300Count) p.push(`鉄筋探査 □300 ${sv.t300Count}箇所`);
+    if(sv.t600 && sv.t600Count) p.push(`鉄筋探査 □600 ${sv.t600Count}箇所`);
+    if(p.length || sv.note){
+      h += `<div class="dv-sec"><div class="dv-sec-t">🔍 調査（レントゲン・鉄筋探査）</div>`;
+      if(p.length) h += p.map(x => `<span class="dv-chip">${esc(x)}</span>`).join("");
+      if(sv.note)  h += `<div class="dv-note blue">メモ：${esc(sv.note)}</div>`;
+      h += `</div>`;
+    }
+  }
+
+  /* 使用工具 */
+  const tools = r.tools || [];
+  if(tools.length){
+    h += `<div class="dv-sec"><div class="dv-sec-t">🔧 使用工具</div>` +
+         sortTools(tools.map(t => t.name)).map(n => {
+           const t = tools.find(x => x.name === n);
+           return `<span class="dv-chip">${esc(n)} × ${t ? t.qty : 0}</span>`;
+         }).join("") + `</div>`;
+  }
+
+  /* 作業内容 */
+  if(r.workDesc){
+    h += `<div class="dv-sec"><div class="dv-sec-t">📝 作業内容</div>` +
+         `<div class="dv-note plain">${esc(r.workDesc)}</div></div>`;
+  }
+
+  /* 残材処分 */
+  if(typeof r.waste === "boolean"){
+    h += `<div class="dv-sec"><div class="dv-sec-t">🗑 残材処分</div>` +
+         `<span class="dv-chip">${r.waste ? "有り" : "無し"}</span></div>`;
+  }
+
+  /* 備考 */
+  if(r.otherNote){
+    h += `<div class="dv-sec"><div class="dv-sec-t">⚠️ 備考・特記事項</div>` +
+         `<div class="dv-note">${esc(r.otherNote)}</div></div>`;
+  }
+
+  /* その他の記入項目（将来アプリ側に項目が増えても自動で表示される） */
+  const extra = [];
+  Object.keys(r).forEach(k => {
+    if(DV_KNOWN.has(k) || String(k).indexOf("__") === 0) return;
+    const v = r[k];
+    if(v === null || v === undefined || v === "") return;
+    if(Array.isArray(v) && v.length === 0) return;
+    extra.push([k, v]);
+  });
+  if(extra.length){
+    h += `<div class="dv-sec"><div class="dv-sec-t">📎 その他の記入項目</div>`;
+    extra.forEach(([k,v]) => {
+      if(typeof v === "string" && v.indexOf("data:image/") === 0){
+        h += `<div style="margin-bottom:8px;"><div style="font-size:11px;font-weight:800;color:var(--text2);margin-bottom:3px;">${esc(k)}</div>` +
+             `<img src="${esc(v)}" alt="${esc(k)}" style="max-width:100%;border:1px solid var(--border);border-radius:6px;"></div>`;
+        return;
+      }
+      let txt;
+      if(typeof v === "boolean")      txt = v ? "有り" : "無し";
+      else if(typeof v === "object")  txt = JSON.stringify(v);
+      else                            txt = String(v);
+      if(txt.length > 60){
+        h += `<div style="margin-bottom:6px;"><div style="font-size:11px;font-weight:800;color:var(--text2);margin-bottom:3px;">${esc(k)}</div>` +
+             `<div class="dv-note plain">${esc(txt)}</div></div>`;
+      }else{
+        h += `<span class="dv-chip">${esc(k)}：${esc(txt)}</span>`;
+      }
+    });
+    h += `</div>`;
+  }
+
+  /* 何も無い場合 */
+  if(!ws.length && !cores.length && !tools.length && !r.workDesc && !r.otherNote){
+    h += `<div class="dv-empty">記入内容がありません</div>`;
+  }
+
+  h += `</div>`;
+  return h;
+}
 
 </script>
 </body>
