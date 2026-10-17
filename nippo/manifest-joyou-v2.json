@@ -1,8 +1,9 @@
 {
+  "id": "./joyou.html",
   "name": "常用日報",
   "short_name": "常用日報",
   "start_url": "./joyou.html",
-  "scope": "./",
+  "scope": "./joyou.html",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#ffffff",

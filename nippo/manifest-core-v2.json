@@ -1,8 +1,9 @@
 {
+  "id": "./core.html",
   "name": "コア・探査日報",
   "short_name": "コア日報",
   "start_url": "./core.html",
-  "scope": "./",
+  "scope": "./core.html",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#ffffff",
