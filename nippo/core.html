@@ -447,8 +447,8 @@
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "core";
-const APP_VERSION   = "1.3.0";
-const APP_BUILD     = "2026-10-17";
+const APP_VERSION   = "1.3.1";
+const APP_BUILD     = "2026-10-22";
 
 (function(){
   const tv = document.getElementById("titleVer");
@@ -1562,8 +1562,8 @@ async function sendUnsent(){
   if(!list.length){ showToast("未送信の日報はありません。"); return; }
 
   // まとめて送れる端末はまとめて送る
-  const files = list.map(recordToFile);
-  if(navigator.canShare && navigator.canShare({ files: files })){
+  const files = list.map(recordToFile).map(toShareableFile);
+  if(files.every(Boolean) && navigator.canShare({ files: files })){
     try{
       await navigator.share({ files: files, title: "未送信の日報" });
       list.forEach(function(r){ markSent(r.recordId); });
@@ -1578,7 +1578,7 @@ async function sendUnsent(){
   let sent = 0;
   for(const r of list){
     const ok = await shareFile(recordToFile(r), "日報データ");
-    if(!ok) break;
+    if(ok !== "shared") break;
     markSent(r.recordId);
     sent++;
   }
@@ -1608,12 +1608,27 @@ function baseFileName(p){
   return `${d}_${kyaku}_${genba}_${worker}_コア_${t}`;
 }
 
+/* Android（Chrome）は .json ファイルの共有を受け付けないため、
+   そのままでは共有できない端末では、同じ中身を .txt に包み直して共有する */
+function toShareableFile(file){
+  if(!navigator.canShare) return null;
+  try{
+    if(navigator.canShare({ files:[file] })) return file;
+    const base = file.name.replace(/\.[^.]+$/, "");
+    const txt = new File([file], base + ".json.txt", { type:"text/plain" });
+    if(navigator.canShare({ files:[txt] })) return txt;
+  }catch(e){}
+  return null;
+}
+
+/* 戻り値： "shared"＝共有画面から送った / "downloaded"＝ダウンロードしただけ / false＝失敗・キャンセル */
 async function shareFile(file, title){
   // スマホ：共有シート（LINE・ドライブ・メールなどを選択）
-  if(navigator.canShare && navigator.canShare({ files:[file] })){
+  const f = toShareableFile(file);
+  if(f){
     try{
-      await navigator.share({ files:[file], title: title });
-      return true;
+      await navigator.share({ files:[f], title: title });
+      return "shared";
     }catch(e){
       if(e && e.name === "AbortError") return false; // ユーザーがキャンセル
       // 失敗時はダウンロードにフォールバック
@@ -1628,8 +1643,8 @@ async function shareFile(file, title){
     a.click();
     a.remove();
     setTimeout(()=>URL.revokeObjectURL(a.href), 3000);
-    showToast("共有メニューが使えない端末のため、ファイルをダウンロードしました。\n手動でLINEやGoogleドライブへ送ってください。\n（反応がない場合はSafariかChromeで開き直してください）");
-    return true;
+    showToast("共有メニューが使えない端末のため、ファイルをダウンロードしました。\n手動でLINEやGoogleドライブへ送ってください。\n（未送信のまま残ります。送ったあとに確認してください）");
+    return "downloaded";
   }catch(e){
     showToast("この開き方では送信できません。SafariかChromeで開き直してください。", true);
     return false;
@@ -1642,7 +1657,7 @@ async function shareData(){
   const json = JSON.stringify(p, null, 2);
   const file = new File([json], baseFileName(p) + ".json", { type:"application/json" });
   const ok = await shareFile(file, "コア日報データ");
-  if(ok){
+  if(ok === "shared"){
     markSent(p.recordId);
     showToast("送信しました。");
   }
