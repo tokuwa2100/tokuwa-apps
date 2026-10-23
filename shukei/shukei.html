@@ -3348,7 +3348,14 @@ function dvBuildRec(r, idx, total){
    1件の日報は「原本（現場から届いた内容）」「現在（修正後）」「修正履歴」を持つ
    ========================================================= */
 // ★ Firebaseの設定が決まったら、ここに貼り付ける（全PCで設定不要になる）
-const FIREBASE_CONFIG_BUILTIN = null;
+const FIREBASE_CONFIG_BUILTIN = {
+  apiKey: "AIzaSyB5r7pjt6kHVzQ7NKiQ1wBQxp74j_I4wt0",
+  authDomain: "tokuwa-apps.firebaseapp.com",
+  projectId: "tokuwa-apps",
+  storageBucket: "tokuwa-apps.firebasestorage.app",
+  messagingSenderId: "839555718133",
+  appId: "1:839555718133:web:678fb31e9b6a036fc59ebc"
+};
 
 const TK_LOCAL_KEY  = "TOKUWA_SHUKEI_REPORTS_V1";   // このPC内保存（圧縮）
 const TK_CFG_KEY    = "TOKUWA_SHUKEI_FIREBASE_V1";  // 貼り付けた設定
