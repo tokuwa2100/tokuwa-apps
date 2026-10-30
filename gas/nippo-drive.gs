@@ -20,7 +20,10 @@ const HEADERS = ["recordId", "種別", "作業日", "取引先", "現場", "作�
                  "受信日時", "更新日時", "更新者", "削除", "画像ID", "データID", "原本ID", "データ"];
 const COL = {};
 HEADERS.forEach(function (h, i) { COL[h] = i + 1; });
-const CELL_MAX = 45000;   // スプレッドシートの1セルに入る文字数の目安（超えたら .json から読む）
+const CELL_MAX = 45000;
+// お試し版のアプリから届いたものは、本番とは別のフォルダ・台帳に入れる
+let TEST_MODE = false;
+function sfx_() { return TEST_MODE ? "_TEST" : ""; }   // スプレッドシートの1セルに入る文字数の目安（超えたら .json から読む）
 
 /* ---------------- 入口 ---------------- */
 function doGet() {
@@ -31,6 +34,7 @@ function doPost(e) {
   let req;
   try { req = JSON.parse(e.postData.contents); }
   catch (err) { return out_({ ok: false, error: "bad_request" }); }
+  TEST_MODE = req.test === true;
 
   const props = PropertiesService.getScriptProperties();
   const workerKey = props.getProperty("WORKER_KEY");
@@ -221,11 +225,11 @@ function withMeta_(rec, req, now, by) {
 /* ---------------- 台帳（スプレッドシート） ---------------- */
 function sheet_() {
   const props = PropertiesService.getScriptProperties();
-  let id = props.getProperty("SHEET_ID");
+  let id = props.getProperty("SHEET_ID" + sfx_());
   if (id) {
     try { return SpreadsheetApp.openById(id).getSheets()[0]; } catch (e) { id = null; }
   }
-  const ss = SpreadsheetApp.create(SHEET_NAME);
+  const ss = SpreadsheetApp.create(SHEET_NAME + (TEST_MODE ? "（お試し）" : ""));
   DriveApp.getFileById(ss.getId()).moveTo(root_());
   const sh = ss.getSheets()[0];
   sh.setName("台帳");
@@ -233,7 +237,7 @@ function sheet_() {
   sh.getRange(1, 1, 1000, HEADERS.length).setNumberFormat("@");   // 日付などを勝手に変換させない
   sh.setFrozenRows(1);
   sh.setColumnWidth(COL["データ"], 120);
-  props.setProperty("SHEET_ID", ss.getId());
+  props.setProperty("SHEET_ID" + sfx_(), ss.getId());
   return sh;
 }
 
@@ -275,11 +279,12 @@ function writeRow_(sh, row, id, rec, extra) {
 /* ---------------- フォルダ・ファイル ---------------- */
 function root_() {
   const props = PropertiesService.getScriptProperties();
-  const id = props.getProperty("ROOT_ID");
+  const id = props.getProperty("ROOT_ID" + sfx_());
   if (id) { try { return DriveApp.getFolderById(id); } catch (e) {} }
-  const it = DriveApp.getRootFolder().getFoldersByName(ROOT_NAME);
-  const f = it.hasNext() ? it.next() : DriveApp.getRootFolder().createFolder(ROOT_NAME);
-  props.setProperty("ROOT_ID", f.getId());
+  const name = ROOT_NAME + (TEST_MODE ? "（お試し）" : "");
+  const it = DriveApp.getRootFolder().getFoldersByName(name);
+  const f = it.hasNext() ? it.next() : DriveApp.getRootFolder().createFolder(name);
+  props.setProperty("ROOT_ID" + sfx_(), f.getId());
   return f;
 }
 
