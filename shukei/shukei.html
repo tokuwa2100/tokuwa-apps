@@ -495,6 +495,21 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
     </details>
   </div>
 
+  <!-- Googleドライブの日報 -->
+  <div class="card" id="dr-card">
+    <div class="card-title blue" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">☁ Googleドライブの日報 <span id="dr-status" class="tk-badge"></span></div>
+    <p class="tk-p" id="dr-info">日報アプリから会社のGoogleドライブに届いた日報を、ここに自動で取り込みます（開いている間は5分ごと）。</p>
+    <button class="btn btn-primary" id="dr-pull-btn" onclick="drPull(true)">ドライブから今すぐ取り込む</button>
+    <details id="dr-details" style="margin-top:10px;">
+      <summary>ドライブ連携の設定</summary>
+      <label class="tk-lb">事務所用の合言葉（OFFICE_KEY・このPCごとに1回）</label>
+      <input id="dr-key" class="tk-in" type="password" autocomplete="off" placeholder="事務所用の合言葉">
+      <label class="tk-lb" style="font-weight:400"><input type="checkbox" onchange="document.getElementById('dr-key').type=this.checked?'text':'password'"> 合言葉を表示する</label>
+      <button class="btn btn-primary" onclick="drSaveKey()">保存</button>
+      <p class="tk-p" id="dr-msg"></p>
+    </details>
+  </div>
+
   <!-- STEP 1: ファイル読み込み -->
   <div class="card">
     <div class="card-title">📂 STEP 1　データファイルを読み込む</div>
@@ -677,8 +692,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "shukei";
-const APP_VERSION   = "1.2.0";
-const APP_BUILD     = "2026-10-23";
+const APP_VERSION   = "1.3.0";
+const APP_BUILD     = "2026-10-30";
 
 (function(){
   const b = document.getElementById("verBadge");
@@ -4574,6 +4589,216 @@ dvBuildRec = function(r){
 
 /* 起動 */
 tkBoot();
+</script>
+<script>
+/* =========================================================
+   Googleドライブの日報（会社の「日報受け口」）
+   ・日報アプリがドライブへ送った日報を一覧で受け取り、集計表に登録する（登録済みは飛ばす）
+   ・集計表での修正・削除・復元は、ドライブのデータ（.json）にも反映する
+     （現場で署名された画像は原本としてそのまま残る）
+   ========================================================= */
+const DR_URL       = "https://script.google.com/macros/s/AKfycby3MD8Lj1om5jopPcdJLktTCk4eZ_bI5aRrmbhj9qDv3Cn9GLVfFL9qLfvOvL5tCLT_1A/exec";
+const DR_KEY_LS    = "TOKUWA_SHUKEI_DRIVE_KEY_V1";
+const DR_SINCE_LS  = "TOKUWA_SHUKEI_DRIVE_SINCE_V1";
+const DR_PEND_LS   = "TOKUWA_SHUKEI_DRIVE_PENDING_V1";
+const DR_INTERVAL  = 5 * 60 * 1000;
+const DR = { busy: false, lastAt: "", lastAdded: 0, lastAddedAt: "", error: "" };
+
+function drLs(k, v){
+  try{
+    if(v === undefined) return localStorage.getItem(k) || "";
+    if(v === null) localStorage.removeItem(k); else localStorage.setItem(k, v);
+  }catch(e){}
+  return "";
+}
+function drKey(){ return drLs(DR_KEY_LS); }
+function drPending(){ try{ return JSON.parse(drLs(DR_PEND_LS) || "{}") || {}; }catch(e){ return {}; } }
+function drSetPending(p){ drLs(DR_PEND_LS, Object.keys(p).length ? JSON.stringify(p) : null); }
+
+async function drPost(body){
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 120000);
+  try{
+    const res = await fetch(DR_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(body),
+      signal: ctl.signal
+    });
+    return await res.json();
+  }finally{ clearTimeout(timer); }
+}
+
+function drErrText(e){
+  return e === "bad_key" ? "合言葉が違います（「ドライブ連携の設定」で入れ直してください）"
+       : e === "office_only" ? "作業員用の合言葉が入っています。事務所用の合言葉を入れてください"
+       : e === "network" ? "ドライブにつながりません（インターネット接続を確認してください）"
+       : e === "not_configured" ? "受け口の合言葉が登録されていません"
+       : "エラー：" + e;
+}
+
+/* ---------- 取り込み ---------- */
+async function drPull(manual){
+  if(DR.busy) return;
+  if(!drKey()){
+    if(manual){ showToast("⚠️ 先に「ドライブ連携の設定」で事務所用の合言葉を入れてください"); document.getElementById("dr-details").open = true; }
+    drRender(); return;
+  }
+  if(!TK.ready || TK.mode === "cloud-wait"){
+    if(manual) showToast("⚠️ 先に共有へログインしてください");
+    return;
+  }
+  if(!navigator.onLine){ if(manual) showToast("⚠️ インターネットにつながっていません"); return; }
+  DR.busy = true; DR.error = ""; drRender();
+  let added = 0, skipped = 0;
+  try{
+    let since = drLs(DR_SINCE_LS);
+    for(let guard = 0; guard < 100; guard++){
+      let res;
+      try{ res = await drPost({ action: "list", key: drKey(), since, limit: 200 }); }
+      catch(e){ throw Object.assign(new Error("network"), { code: "network" }); }
+      if(!res || !res.ok) throw Object.assign(new Error(res && res.error || "unknown"), { code: res && res.error || "unknown" });
+      const recs = [];
+      (res.items || []).forEach(it => {
+        if(!it || !it.record || it.deleted) return;
+        const id = String(it.id);
+        if(TK.reports.has(id)){ skipped++; return; }     // 登録済み（集計表での修正を上書きしない）
+        const r = it.record;
+        r.id = id;
+        normalizeRecord(r);
+        recs.push(r);
+      });
+      if(recs.length){
+        const out = await tkImport(recs, "Googleドライブ");
+        added += out.added.length;
+        skipped += out.skipped + out.deletedSkipped;
+      }
+      since = res.next || since;
+      drLs(DR_SINCE_LS, since);
+      if(!res.more) break;
+    }
+    DR.lastAt = new Date().toISOString();
+    if(added){ DR.lastAdded = added; DR.lastAddedAt = DR.lastAt; }
+    if(manual || added) showToast(added ? `✅ ドライブから ${added}件を登録しました` : "ℹ️ ドライブに新しい日報はありません");
+  }catch(e){
+    DR.error = e.code || e.message || "unknown";
+    if(manual || DR.error === "bad_key" || DR.error === "office_only") showToast("❌ ドライブ：" + drErrText(DR.error));
+  }finally{
+    DR.busy = false;
+  }
+  await drFlush();
+  drRender();
+}
+
+/* ---------- 修正・削除・復元をドライブへ反映 ---------- */
+function drQueue(id, reason){
+  if(!drKey()) return;
+  const p = drPending();
+  p[id] = { reason: reason || "", at: new Date().toISOString() };
+  drSetPending(p);
+  drFlush();
+}
+let drFlushing = false;
+async function drFlush(){
+  if(drFlushing || !drKey() || !navigator.onLine) return;
+  const p = drPending();
+  const ids = Object.keys(p);
+  if(!ids.length) return;
+  drFlushing = true;
+  let failed = "";
+  try{
+    for(const id of ids){
+      const w = TK.reports.get(id);
+      if(!w){ delete p[id]; continue; }
+      const rec = tkClone(w.current);
+      rec.id = id;
+      let res;
+      try{
+        res = await drPost({
+          action: "update", key: drKey(), recordId: id, record: rec, deleted: !!w.deleted,
+          by: tkEditor(), reason: p[id].reason || "",
+          edits: (w.edits || []).slice(-30)
+        });
+      }catch(e){ failed = "network"; break; }
+      if(res && res.ok){ delete p[id]; continue; }
+      failed = (res && res.error) || "unknown";
+      if(failed === "bad_request"){ delete p[id]; failed = ""; continue; }   // 送れない形の日報は諦める
+      break;
+    }
+  }finally{
+    drSetPending(p);
+    drFlushing = false;
+  }
+  if(failed && failed !== "network") showToast("⚠️ 修正をドライブへ反映できませんでした：" + drErrText(failed));
+  drRender();
+}
+
+const drOrigUpdate = tkUpdate;
+tkUpdate = async function(id, newCurrent, edits, reason, expectRev){
+  const r = await drOrigUpdate.apply(this, arguments);
+  drQueue(String(id), reason);
+  return r;
+};
+const drOrigSetDeleted = tkSetDeleted;
+tkSetDeleted = async function(id, del, reason, expectRev){
+  const r = await drOrigSetDeleted.apply(this, arguments);
+  drQueue(String(id), reason);
+  return r;
+};
+
+/* ---------- 表示・設定 ---------- */
+function drRender(){
+  const b = document.getElementById("dr-status");
+  const info = document.getElementById("dr-info");
+  if(!b || !info) return;
+  const pend = Object.keys(drPending()).length;
+  let badge, cls;
+  if(!drKey()){ badge = "未設定"; cls = "warn"; }
+  else if(DR.busy){ badge = "⏳ 確認中…"; cls = ""; }
+  else if(DR.error){ badge = "🔴 " + (DR.error === "network" ? "つながりません" : "エラー"); cls = "warn"; }
+  else if(DR.lastAt){ badge = "🟢 連携中"; cls = "ok"; }
+  else { badge = "待機中"; cls = ""; }
+  b.textContent = badge;
+  b.className = "tk-badge " + cls;
+  const hm = iso => iso ? new Date(iso).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }) : "";
+  const t = hm(DR.lastAt);
+  let html = drKey()
+    ? `日報アプリから会社のGoogleドライブに届いた日報を、ここに自動で取り込みます（開いている間は5分ごと）。`
+      + (t ? `<br>最後の確認：<b>${t}</b>` + (DR.lastAddedAt ? `　最後に登録：${hm(DR.lastAddedAt)}（${DR.lastAdded}件）` : "") : "")
+      + (DR.error ? `<br><span style="color:#c62828;font-weight:700">${esc(drErrText(DR.error))}</span>` : "")
+      + (pend ? `<br><span style="color:#a64a00;font-weight:700">ドライブへ未反映の修正 ${pend}件（つながったら自動で反映します）</span>` : "")
+    : `「ドライブ連携の設定」に事務所用の合言葉を入れると、日報アプリからドライブに届いた日報を自動で取り込みます。`;
+  info.innerHTML = html;
+  const k = document.getElementById("dr-key");
+  if(k && document.activeElement !== k) k.value = drKey();
+}
+async function drSaveKey(){
+  const v = (document.getElementById("dr-key").value || "").trim();
+  const msg = document.getElementById("dr-msg");
+  if(!v){ drLs(DR_KEY_LS, null); msg.textContent = "合言葉を消しました。"; drRender(); return; }
+  msg.textContent = "確認しています…";
+  let res = null;
+  try{ res = await drPost({ action: "ping", key: v }); }catch(e){ res = null; }
+  if(!res){ msg.textContent = "✕ ドライブにつながりませんでした。インターネット接続を確認してください。"; return; }
+  if(!res.ok){ msg.textContent = "✕ " + drErrText(res.error); return; }
+  if(res.role !== "office"){ msg.textContent = "✕ " + drErrText("office_only"); return; }
+  drLs(DR_KEY_LS, v);
+  msg.textContent = "✓ 保存しました。ドライブの日報を取り込みます。";
+  drRender();
+  drPull(true);
+}
+
+window.addEventListener("online", () => { drFlush(); });
+setInterval(() => { drPull(false); }, DR_INTERVAL);
+(function drStart(){
+  drRender();
+  // 共有のログイン・読み込みが終わってから最初の取り込みをする
+  let n = 0;
+  const t = setInterval(() => {
+    n++;
+    if((TK.ready && TK.mode !== "cloud-wait") || n > 120){ clearInterval(t); if(TK.ready && TK.mode !== "cloud-wait") drPull(false); }
+  }, 1000);
+})();
 </script>
 </body>
 </html>
