@@ -256,10 +256,11 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     <!-- ================= 入力ページ ================= -->
     <div id="page-input">
     <div id="unsentBar" class="noshot" style="display:none;background:#fdecea;border:1px solid #e57373;border-radius:10px;padding:12px;margin:0 0 14px;">
-      <div style="font-weight:700;color:#b71c1c;font-size:15px;margin-bottom:6px;">未送信の日報が <span id="unsentCount">0</span> 件あります</div>
-      <div style="font-size:13px;color:#7f2f2a;line-height:1.6;margin-bottom:8px;">保存しただけでは会社に届きません。電波の入る場所で送信してください。</div>
+      <div style="font-weight:700;color:#b71c1c;font-size:15px;margin-bottom:6px;"><span id="unsentTitle">未送信の日報が</span> <span id="unsentCount">0</span> 件あります</div>
+      <div id="unsentMsg" style="font-size:13px;color:#7f2f2a;line-height:1.6;margin-bottom:8px;">保存しただけでは会社に届きません。電波の入る場所で送信してください。</div>
       <div id="unsentList" style="margin-bottom:10px;"></div>
-      <button type="button" onclick="sendUnsent()" style="width:100%;padding:12px;font-size:15px;font-weight:700;color:#fff;background:#c62828;border:0;border-radius:8px;">未送信をまとめて送信</button>
+      <button type="button" id="driveSendBtn" onclick="driveSendAll(true)" style="display:none;width:100%;padding:12px;margin-bottom:8px;font-size:15px;font-weight:700;color:#fff;background:#c62828;border:0;border-radius:8px;">今すぐドライブへ送信</button>
+      <button type="button" id="lineSendBtn" onclick="sendUnsent()" style="width:100%;padding:12px;font-size:15px;font-weight:700;color:#fff;background:#c62828;border:0;border-radius:8px;">未送信をまとめて送信</button>
       <button type="button" onclick="clearUnsent()" style="width:100%;padding:10px;margin-top:8px;font-size:13px;color:#7f2f2a;background:transparent;border:1px solid #e57373;border-radius:8px;">未送信をすべて削除（テスト用）</button>
     </div>
 
@@ -360,6 +361,15 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       <div class="footer">
         <button class="btn" type="button" onclick="goConfirm()">作業確認</button>
       </div>
+
+      <details id="driveSettings" class="noshot" style="margin:18px 0 6px;padding:10px 12px;border:1px solid #ccd;border-radius:10px;background:#f7f8fb;">
+        <summary style="font-weight:700;font-size:14px;cursor:pointer;">⚙ ドライブ送信の設定 <span id="driveKeyState" style="font-weight:400;font-size:12px;"></span></summary>
+        <div style="font-size:13px;line-height:1.6;margin:8px 0;">会社から聞いた「合言葉」を入れて「保存」を押してください（このアプリで1回だけ）。保存（提出）した日報が自動で会社のGoogleドライブに届きます。</div>
+        <input id="driveKeyInput" type="password" autocomplete="off" placeholder="合言葉" style="width:100%;box-sizing:border-box;padding:10px;font-size:16px;border:1px solid #bbb;border-radius:8px;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:6px 0;"><input type="checkbox" style="width:auto;margin:0;" onchange="document.getElementById('driveKeyInput').type=this.checked?'text':'password'"> 合言葉を表示する</label>
+        <button class="btn btn-green" type="button" onclick="driveSaveKey()" style="width:100%;">保存</button>
+        <div id="driveTestMsg" style="font-size:13px;margin-top:8px;"></div>
+      </details>
     </div>
 
     <!-- ================= 確認ページ ================= -->
@@ -452,8 +462,8 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "core";
-const APP_VERSION   = "1.4.1";
-const APP_BUILD     = "2026-10-24";
+const APP_VERSION   = "1.5.0";
+const APP_BUILD     = "2026-10-30";
 
 (function(){
   const tv = document.getElementById("titleVer");
@@ -1444,7 +1454,7 @@ function saveAll(){
   let signaturePng = "";
   try{ signaturePng = canvas.toDataURL("image/png"); }catch(e){}
 
-  const payload = { app:"core-nippo", version:3, appVersion: APP_VERSION, appBuild: APP_BUILD, recordId: newRecordId(), sent:false, ...draft, signaturePng };
+  const payload = { app:"core-nippo", version:3, appVersion: APP_VERSION, appBuild: APP_BUILD, recordId: newRecordId(), sent:false, driveSent:false, ...draft, signaturePng };
 
   // 端末内保存（できない環境でも送信はできるようにする）
   let storedOk = false;
@@ -1464,8 +1474,11 @@ function saveAll(){
   setSavedState(true);
   beep();
 
-  if(storedOk){
-    showToast("保存しました。「日報を画像で送信」から送ってください。");
+  if(storedOk && driveKey()){
+    showToast("保存しました。会社のドライブへ送信しています…");
+    driveSendAll(false);
+  }else if(storedOk){
+    showToast("保存しました。「⚙ ドライブ送信の設定」で合言葉を入れると、会社のドライブへ自動で届きます。\n（LINEで送る場合は「日報を画像で送信」）");
   }else{
     showToast("この端末では端末内保存が使えないため、データは画面を閉じると消えます。\n必ず今すぐ「日報を画像で送信」で送ってください。", true);
   }
@@ -1493,8 +1506,16 @@ function saveRecords(arr){
   catch(e){ return false; }
 }
 
-function unsentRecords(){
+function lineUnsentRecords(){
   return loadRecords().filter(function(r){ return r && !r.sent; });
+}
+/* 赤い帯に出す日報：合言葉を入れていれば「ドライブに届いていないもの」
+   （以前の版で保存した日報は従来どおりLINE未送信のもの） */
+function unsentRecords(){
+  if(typeof driveKey === "function" && driveKey()){
+    return driveUnsentRecords();
+  }
+  return lineUnsentRecords();
 }
 
 function markSent(recordId){
@@ -1523,6 +1544,19 @@ function renderUnsentBar(){
   if(!bar) return;
   const list = unsentRecords();
   if(!list.length){ bar.style.display = "none"; return; }
+  const dk = typeof driveKey === "function" && driveKey();
+  const dn = dk ? driveUnsentRecords().length : 0;
+  document.getElementById("unsentTitle").textContent = dk ? "ドライブ未送信の日報が" : "未送信の日報が";
+  document.getElementById("unsentMsg").textContent = dk
+    ? "まだ会社のドライブに届いていません。電波がつながると自動で送ります。"
+    : "保存しただけでは会社に届きません。電波の入る場所で送信してください。";
+  document.getElementById("driveSendBtn").style.display = dn ? "block" : "none";
+  const lb = document.getElementById("lineSendBtn");
+  lb.textContent = dn ? "LINEで送る（予備）" : "未送信をまとめて送信";
+  lb.style.background = dn ? "#fff" : "#c62828";
+  lb.style.color = dn ? "#7f2f2a" : "#fff";
+  lb.style.border = dn ? "1px solid #e57373" : "0";
+  lb.style.display = (dn || lineUnsentRecords().length) ? "block" : "none";
   document.getElementById("unsentCount").textContent = list.length;
   document.getElementById("unsentList").innerHTML = list.map(function(r){
     const d = r.date || "日付なし";
@@ -1553,7 +1587,8 @@ function clearUnsent(){
   const n = unsentRecords().length;
   if(!n){ showToast("未送信の日報はありません。"); return; }
   if(!confirm("未送信の日報 " + n + "件をすべて削除します。\n元に戻せません。よろしいですか？")) return;
-  saveRecords(loadRecords().filter(function(r){ return r && r.sent; }));
+  const drop = new Set(unsentRecords().map(function(r){ return r.recordId; }));
+  saveRecords(loadRecords().filter(function(r){ return r && !drop.has(r.recordId); }));
   showToast(n + "件を削除しました。");
   renderUnsentBar();
 }
@@ -1575,7 +1610,7 @@ function prepareImages(list){
 }
 
 async function sendUnsent(){
-  const list = unsentRecords();
+  const list = lineUnsentRecords();
   if(!list.length){ showToast("未送信の日報はありません。"); return; }
 
   const ready = list.every(function(r){ return preparedImages.has(r.recordId || r.id); });
@@ -1617,6 +1652,137 @@ async function sendUnsent(){
 }
 
 window.addEventListener("load", function(){ renderUnsentBar(); prepareImages(unsentRecords()); });
+
+/* =============================
+  Googleドライブへ送信（会社の「日報受け口」）
+  ・保存（提出）した日報を、画像（.png）とデータ（.json）で自動送信する
+  ・電波が無いときは端末に残し、つながったとき／アプリを開いたときに自動で送る
+  ・LINE送信（共有）は予備として残す。LINEで送ってもドライブ送信は別に行う
+============================= */
+const DRIVE_URL     = "https://script.google.com/macros/s/AKfycby3MD8Lj1om5jopPcdJLktTCk4eZ_bI5aRrmbhj9qDv3Cn9GLVfFL9qLfvOvL5tCLT_1A/exec";
+const DRIVE_KEY_LS  = "TOKUWA_DRIVE_KEY_V1";
+let driveBusy = false;
+
+function driveKey(){
+  try{ return localStorage.getItem(DRIVE_KEY_LS) || ""; }catch(e){ return ""; }
+}
+/* ドライブに届いていない日報（このバージョン以降に保存したもの） */
+function driveUnsentRecords(){
+  // 新しい日報：ドライブ未送信のもの／以前の版で保存した日報：LINEでも送っていないもの
+  return loadRecords().filter(function(r){
+    return r && !r.driveSkip && (r.driveSent === false || (r.driveSent === undefined && !r.sent));
+  });
+}
+function markDriveSent(recordId){
+  const arr = loadRecords();
+  arr.forEach(function(r){
+    if(r && r.recordId === recordId){ r.driveSent = true; r.driveSentAt = new Date().toISOString(); }
+  });
+  saveRecords(arr);
+}
+function blobToDataUrl(blob){
+  return new Promise(function(res, rej){
+    const fr = new FileReader();
+    fr.onload = function(){ res(fr.result); };
+    fr.onerror = function(){ rej(fr.error); };
+    fr.readAsDataURL(blob);
+  });
+}
+async function drivePost(body){
+  const ctl = ("AbortController" in window) ? new AbortController() : null;
+  const timer = ctl ? setTimeout(function(){ ctl.abort(); }, 90000) : null;
+  try{
+    const res = await fetch(DRIVE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },   // text/plain にして事前確認（CORS）を起こさない
+      body: JSON.stringify(body),
+      signal: ctl ? ctl.signal : undefined
+    });
+    return await res.json();
+  }finally{ if(timer) clearTimeout(timer); }
+}
+async function driveSendOne(r){
+  let image = "";
+  try{ image = await blobToDataUrl(await getImageFile(r)); }catch(e){ image = ""; }   // 画像が作れなくてもデータは送る
+  const rec = JSON.parse(JSON.stringify(r));
+  delete rec.sent; delete rec.sentAt; delete rec.driveSent; delete rec.driveSentAt; delete rec.driveSkip;
+  return drivePost({ action: "submit", key: driveKey(), record: rec, image: image });
+}
+/* 未送信をまとめて送る。manual=true のときは結果を知らせる */
+async function driveSendAll(manual){
+  if(driveBusy) return;
+  const list = driveUnsentRecords();
+  if(!list.length){ if(manual) showToast("ドライブ未送信の日報はありません。"); renderUnsentBar(); return; }
+  if(!driveKey()){
+    if(manual){ showToast("先に「⚙ ドライブ送信の設定」で合言葉を入れてください。", true); openDriveSettings(); }
+    return;
+  }
+  if(navigator.onLine === false){ if(manual) showToast("電波がありません。つながったら自動で送ります。", true); return; }
+  driveBusy = true;
+  let ok = 0, err = "";
+  try{
+    for(const r of list){
+      let res;
+      try{ res = await driveSendOne(r); }
+      catch(e){ err = "network"; break; }
+      if(res && res.ok){ markDriveSent(r.recordId); ok++; renderUnsentBar(); continue; }
+      err = (res && res.error) || "unknown";
+      break;
+    }
+  }finally{ driveBusy = false; }
+  renderUnsentBar();
+  if(err === "bad_key"){
+    showToast("ドライブに送れません：合言葉が違います。「⚙ ドライブ送信の設定」で入れ直してください。", true);
+    openDriveSettings();
+  }else if(err && manual){
+    showToast(err === "network" ? "送信できませんでした。電波の良い所でもう一度送ってください。" : "送信できませんでした（" + err + "）。", true);
+  }else if(ok){
+    showToast(ok === 1 ? "会社のドライブに届きました。" : ok + "件を会社のドライブに送りました。");
+  }
+}
+function openDriveSettings(){
+  const d = document.getElementById("driveSettings");
+  if(d){ d.open = true; try{ d.scrollIntoView({ behavior: "smooth", block: "center" }); }catch(e){} }
+}
+function renderDriveKeyState(){
+  const s = document.getElementById("driveKeyState");
+  if(s) s.textContent = driveKey() ? "（設定済み）" : "（未設定）";
+  const inp = document.getElementById("driveKeyInput");
+  if(inp && document.activeElement !== inp) inp.value = driveKey();
+}
+async function driveSaveKey(){
+  const v = (document.getElementById("driveKeyInput").value || "").trim();
+  const msg = document.getElementById("driveTestMsg");
+  if(!v){
+    try{ localStorage.removeItem(DRIVE_KEY_LS); }catch(e){}
+    renderDriveKeyState(); renderUnsentBar();
+    msg.textContent = "合言葉を消しました。";
+    return;
+  }
+  msg.textContent = "確認しています…";
+  let res = null;
+  try{ res = await drivePost({ action: "ping", key: v }); }catch(e){ res = null; }
+  if(res && res.ok){
+    try{ localStorage.setItem(DRIVE_KEY_LS, v); }catch(e){}
+    msg.textContent = "✓ 保存しました。日報が会社のドライブに届くようになりました。";
+    renderDriveKeyState(); renderUnsentBar();
+    driveSendAll(false);
+  }else if(res && res.error === "bad_key"){
+    msg.textContent = "✕ 合言葉が違います。会社に確認してください。";
+  }else{
+    // 電波が無いときは確認できないが、保存はしておく（つながったら送る）
+    try{ localStorage.setItem(DRIVE_KEY_LS, v); }catch(e){}
+    msg.textContent = "保存しました（今は確認できませんでした。電波のある所で自動で送ります）。";
+    renderDriveKeyState(); renderUnsentBar();
+  }
+}
+window.addEventListener("load", function(){
+  renderDriveKeyState();
+  setTimeout(function(){ driveSendAll(false); }, 1500);
+});
+window.addEventListener("online", function(){ driveSendAll(false); });
+document.addEventListener("visibilitychange", function(){ if(document.visibilityState === "visible") driveSendAll(false); });
+setInterval(function(){ if(driveUnsentRecords().length) driveSendAll(false); }, 120000);
 
 
 function baseFileName(p){
