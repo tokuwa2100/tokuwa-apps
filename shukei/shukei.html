@@ -363,6 +363,41 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
 
 <style>
 /* ===== 保存と共有 ===== */
+.gd-row { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+.gd-st { font-size:13px; font-weight:800; padding:4px 10px; border-radius:999px; background:var(--bg); border:1px solid var(--border); }
+.gd-st.ok { background:var(--green-light); color:var(--green); border-color:#a7e3c4; }
+.gd-st.warn { background:#fef3c7; color:#92400e; border-color:#fcd34d; }
+.gd-sub, .cu-sub { font-size:12px; color:var(--text2); }
+.gd-msg { margin-top:8px; font-size:13px; font-weight:700; color:#b45309; }
+.gd-det, .cu-det { margin-top:12px; font-size:13px; }
+.gd-det summary, .cu-det summary, .cu-pdet summary { cursor:pointer; font-weight:700; color:var(--text2); padding:4px 0; }
+.cu-hint { font-size:12px; color:var(--text2); margin:6px 0 10px; line-height:1.6; }
+.cu-um { background:#fffbeb; border:1.5px solid #fcd34d; border-radius:12px; padding:10px 12px; }
+.cu-um-t { font-weight:800; color:#92400e; font-size:14px; }
+.cu-um-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px 0; border-top:1px solid #fde68a; font-size:13px; }
+.cu-act { display:inline-flex; gap:4px; }
+.cu-act select, .cu-cut, .cu-ovadd input { padding:6px 8px; border:1.5px solid var(--border); border-radius:8px; font-family:inherit; font-size:13px; background:#fff; }
+.cu-act button, .cu-ovadd button, .cu-del, .cu-prow button, .cu-tag button { padding:6px 10px; border:1.5px solid var(--border); border-radius:8px; background:#fff; font-family:inherit; font-size:12px; font-weight:700; cursor:pointer; }
+.cu-item { border:1px solid var(--border); border-radius:12px; padding:10px 12px; margin-top:10px; }
+.cu-line { display:flex; gap:8px; align-items:center; }
+.cu-line .cu-name { margin:0; font-weight:800; }
+.cu-lb { display:block; font-size:12px; color:var(--text2); margin-top:8px; }
+.cu-lb .tk-in { margin:4px 0 0; }
+.cu-ovs { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+.cu-ovadd { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:6px; font-size:12px; }
+.cu-tag { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:700; padding:2px 8px; border-radius:999px; background:var(--bg); border:1px solid var(--border); }
+.cu-tag.amber { background:#fef3c7; color:#92400e; border-color:#fcd34d; }
+.cu-tag button { padding:0 6px; font-size:11px; }
+.cu-follow { display:inline-flex; align-items:center; gap:4px; font-weight:700; }
+.cu-info { font-size:13px; margin:-4px 0 8px; }
+.cu-warn { color:#b45309; font-weight:700; }
+.cu-pdet { margin-bottom:12px; font-size:13px; border:1px solid var(--border); border-radius:10px; padding:6px 10px; }
+.cu-prow { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:6px 0; border-top:1px solid var(--border); }
+.cu-prow.out { opacity:.7; }
+.cu-pd { font-weight:800; min-width:7.5em; }
+.cu-pn { color:var(--text2); font-size:12px; }
+.cu-pb { margin-left:auto; display:inline-flex; gap:4px; flex-wrap:wrap; }
+@media print { #gd-card, #cu-card, #cu-period { display:none !important; } }
 .tk-badge { margin-left:auto; font-size:12px; font-weight:800; padding:4px 10px; border-radius:999px; background:var(--bg); color:var(--text2); border:1px solid var(--border); white-space:nowrap; }
 .tk-badge.ok { background:var(--green-light); color:var(--green); border-color:#a7e3c4; }
 .tk-badge.warn { background:#fef3c7; color:#92400e; border-color:#fcd34d; }
@@ -495,9 +530,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
     </details>
   </div>
 
+  <!-- Googleドライブ -->
+  <div class="card" id="gd-card">
+    <div class="card-title blue">☁ Googleドライブの日報（現場のスマホから直接届いたもの）</div>
+    <div id="gd-body"></div>
+    <details class="gd-det">
+      <summary>ドライブ連携の設定（事務所用の合言葉：<span id="gd-key-state">未設定</span>）</summary>
+      <div class="cu-hint">事務所用の合言葉を入れて「保存」を押してください（このPCで1回だけ）。作業員用の合言葉では取り込めません。</div>
+      <div style="display:flex;gap:8px"><input id="gd-key" class="tk-in" type="password" autocomplete="off" placeholder="事務所用の合言葉" style="margin:0"><button class="btn btn-primary" style="width:auto;flex:none" onclick="gdSaveKey()">保存</button></div>
+    </details>
+  </div>
+
   <!-- STEP 1: ファイル読み込み -->
   <div class="card">
-    <div class="card-title">📂 STEP 1　データファイルを読み込む</div>
+    <div class="card-title">📂 STEP 1　日報の画像を読み込む（LINEで届いたもの）</div>
     <div class="upload-zone" id="upload-zone">
       <input type="file" id="file-input" accept="image/*,.png,.jpg,.jpeg,.json,.JSON,application/json" multiple onchange="handleFiles(event)">
       <div class="icon">📂</div>
@@ -505,7 +551,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
       <div class="sub-txt">コア日報・常用日報の画像（QR入り）を何枚でもまとめて読み込み可能。従来のJSONも読めます</div>
     </div>
     <div id="file-list" style="margin-top:14px;"></div>
-    <div class="hint">※各日報アプリの「日報を画像で送信」で作った画像です（右下のQRコードから数字を読み取ります）。<br>※読み込んだ日報は保存され、次に開いたときも残ります。同じ日報を2回入れても二重にはなりません。</div>
+    <div class="hint">※各日報アプリの「LINEで送る（予備）」で届いた画像です（右下のQRコードから数字を読み取ります）。ここで読み込んだ日報もドライブにそろえて保存します。<br>※読み込んだ日報は保存され、次に開いたときも残ります。同じ日報を2回入れても二重にはなりません。</div>
   </div>
 
 
@@ -538,6 +584,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
     <div id="merge-list"></div>
   </div>
 
+  <!-- 取引先と締め日 -->
+  <div class="card" id="cu-card">
+    <div class="card-title blue" style="display:flex;align-items:center;gap:8px;">📅 取引先と締め日 <span id="cu-count" class="tk-badge"></span></div>
+    <div id="cu-body"></div>
+  </div>
+
   <!-- STEP 2: 日報種別タブ + 集計 -->
   <div class="card hidden" id="step2-card">
     <div class="card-title blue">📊 STEP 2　日報の種類・お客様・現場・期間を選んで集計表を確認</div>
@@ -551,6 +603,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
       <label>現場：</label>
       <select id="sel-site" onchange="updateMonths(); renderTable();"></select>
       <label>締め日：</label>
+      <label class="cu-follow"><input type="checkbox" id="cu-follow" checked onchange="cuFollowChanged(this)">締め日一覧に従う</label>
       <select id="sel-cutoff" onchange="updateMonths();">
         <option value="0">月末締め</option>
         <option value="5">5日締め</option>
@@ -563,6 +616,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
       <select id="sel-month" onchange="renderTable();"></select>
     </div>
     <div id="client-label" style="font-size:12px; color:var(--text2); margin-bottom:12px;"></div>
+    <div id="cu-period"></div>
 
     <div class="stats-grid hidden" id="stats-grid"></div>
     <div id="table-area"></div>
@@ -677,8 +731,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "shukei";
-const APP_VERSION   = "1.2.0";
-const APP_BUILD     = "2026-10-23";
+const APP_VERSION   = "1.3.0";
+const APP_BUILD     = "2026-10-30";
 
 (function(){
   const b = document.getElementById("verBadge");
@@ -4251,6 +4305,7 @@ function edFormHtml(type, d){
   const core = type === "core";
   h += `<div class="ed-sec"><div class="ed-sec-t">基本</div><div class="ed-row">`
     + edIn("作業日", "date", "date")
+    + edIn("請求月（繰越）", "billMonth", "sel", { vals: edBillMonthOpts(d) })
     + edIn("お客様名", core ? "client" : "customer", "text", { wide: true })
     + edIn("現場名", "site", "text", { wide: true })
     + edIn("作業確認書", "needConfirm", "sel", { vals: T })
@@ -4323,7 +4378,15 @@ function edFormHtml(type, d){
 }
 
 /* ---------------- 変更点の書き出し（履歴用） ---------------- */
+function edBillMonthOpts(d){
+  const out = [[null, "締め日どおり（自動）"]];
+  const base = /^\d{4}-\d{2}/.test(d.date || "") ? d.date.slice(0, 7) : null;
+  if(base) for(let k = -2; k <= 3; k++){ const ym = cuYmAdd(base, k); out.push([ym, `${cuYmLabel(ym)}分に入れる`]); }
+  if(d.billMonth && !out.some(x => x[0] === d.billMonth)) out.push([d.billMonth, `${cuYmLabel(d.billMonth)}分に入れる`]);
+  return out;
+}
 const ED_KEYS = {
+  billMonth: "請求月（繰越）",
   date: "作業日", client: "お客様名", customer: "お客様名", site: "現場名", needConfirm: "作業確認書", waste: "廃棄処分",
   otherNote: "その他・備考", workDesc: "作業内容", useHighway: "高速道路の使用",
   name: "氏名", company: "外注会社", person: "外注担当", outsource: "外注", start: "開始", end: "終了", hours: "実働",
@@ -4349,9 +4412,11 @@ function edLabel(path){
   return out.join(" ");
 }
 function edFmt(v, path){
+  if((v === undefined || v === null || v === "") && path === "billMonth") return "締め日どおり";
   if(v === undefined || v === null || v === "") return "（空）";
   if(/\.(start|end)$/.test(path || "") && typeof v === "number") return cfHalf(v);
   if(path === "needConfirm") return v === true ? "渡す" : "不要";
+  if(path === "billMonth") return /^\d{4}-\d{2}$/.test(String(v)) ? cuYmLabel(v) + "分" : String(v);
   if(typeof v === "boolean") return v ? "あり" : "なし";
   if(Array.isArray(v)) return v.length ? `${v.length}件` : "（なし）";
   return String(v);
@@ -4573,6 +4638,645 @@ dvBuildRec = function(r){
 };
 
 /* 起動 */
+/* =========================================================
+   Googleドライブ連携
+   ・ドライブに届いた日報（現場のスマホから直接送られたもの）を取り込む
+   ・集計表で直した内容・削除は、ドライブのデータにも反映する
+   ・合言葉（事務所用）はPCごとに1回だけ入れる
+   ========================================================= */
+// ★ Apps Script を公開したときのURL（日報アプリと同じもの）
+const DRIVE_URL = "";
+const GD_KEY_STORE   = "TOKUWA_SHUKEI_DRIVE_KEY_V1";
+const GD_SYNC_STORE  = "TOKUWA_SHUKEI_DRIVE_SYNC_V1";    // 前回どこまで取り込んだか（更新日時）
+const GD_QUEUE_STORE = "TOKUWA_SHUKEI_DRIVE_QUEUE_V1";   // ドライブへ反映待ちの日報id
+const GD_LAST_STORE  = "TOKUWA_SHUKEI_DRIVE_LAST_V1";
+const GD_FROM = "Googleドライブ";
+const GD = { busy: false, flushing: false, msg: "", images: new Map(), bootDone: false };
+
+function gdUrl(){
+  try{ const o = localStorage.getItem("TOKUWA_DRIVE_URL_OVERRIDE"); if(o) return o; }catch(e){}
+  return DRIVE_URL;
+}
+function gdKey(){ try{ return localStorage.getItem(GD_KEY_STORE) || ""; }catch(e){ return ""; } }
+function gdQueue(){ try{ return JSON.parse(localStorage.getItem(GD_QUEUE_STORE) || "[]"); }catch(e){ return []; } }
+function gdSaveQueue(q){ try{ localStorage.setItem(GD_QUEUE_STORE, JSON.stringify([...new Set(q)])); }catch(e){} }
+function gdQueueAdd(id){ const q = gdQueue(); if(!q.includes(id)){ q.push(id); gdSaveQueue(q); } }
+function gdReady(){ return !!(gdUrl() && gdKey()); }
+function gdCanWrite(){ return TK.mode === "local" || (TK.mode === "cloud" && navigator.onLine !== false); }
+
+async function gdPost(body){
+  const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), 120000) : null;
+  try{
+    const res = await fetch(gdUrl(), {
+      method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(body), redirect: "follow", signal: ctrl ? ctrl.signal : undefined
+    });
+    if(!res.ok) return { ok: false, error: "http_" + res.status, net: true };
+    return await res.json();
+  }catch(e){ return { ok: false, error: "network", net: true }; }
+  finally{ if(timer) clearTimeout(timer); }
+}
+function gdErrText(res){
+  if(!res) return "応答がありません";
+  if(res.error === "bad_key") return "合言葉が違います";
+  if(res.error === "office_only") return "作業員用の合言葉です。事務所用の合言葉を入れてください";
+  if(res.error === "not_configured") return "ドライブ側の合言葉が未登録です（手順書を参照）";
+  if(res.net) return "ドライブにつながりません";
+  return "エラー（" + res.error + "）";
+}
+function gdBlobToB64(file){
+  return new Promise((ok, ng) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).replace(/^data:[^,]*,/, "")); fr.onerror = () => ng(fr.error); fr.readAsDataURL(file); });
+}
+
+/* ---------- ドライブから取り込む ---------- */
+async function gdImport(manual){
+  if(GD.busy) return;
+  if(!gdReady()){ if(manual) showToast(gdUrl() ? "⚠️ 事務所用の合言葉を入れてください" : "⚠️ ドライブの送信先がまだ設定されていません"); gdRender(); return; }
+  if(TK.mode === "cloud-wait"){ if(manual) showToast("⚠️ 先に共有へログインしてください"); return; }
+  if(!TK.ready) return;
+  if(navigator.onLine === false){ if(manual) showToast("⚠️ インターネットにつながっていません"); return; }
+  GD.busy = true; GD.msg = "取り込み中…"; gdRender();
+  let since = ""; try{ since = localStorage.getItem(GD_SYNC_STORE) || ""; }catch(e){}
+  let added = 0, seen = 0, err = "";
+  try{
+    for(let loop = 0; loop < 50; loop++){
+      const res = await gdPost({ action: "list", key: gdKey(), since, limit: 200 });
+      if(!res || !res.ok){ err = gdErrText(res); break; }
+      const recs = (res.items || []).filter(it => !it.deleted && it.record).map(it => {
+        const r = it.record; r.id = it.id; if(!r.recordId) r.recordId = it.id;
+        normalizeRecord(r); return r;
+      });
+      seen += recs.length;
+      if(recs.length){
+        const out = await tkImport(recs, GD_FROM);
+        added += out.added.length;
+      }
+      since = res.next || since;
+      try{ localStorage.setItem(GD_SYNC_STORE, since); }catch(e){}
+      if(!res.more) break;
+    }
+  }catch(e){ err = e && e.message || String(e); console.error("gdImport", e); }
+  GD.busy = false;
+  const now = new Date();
+  try{ localStorage.setItem(GD_LAST_STORE, now.toISOString()); }catch(e){}
+  GD.msg = err ? "⚠️ " + err : "";
+  gdRender();
+  if(err){ if(manual) showToast("❌ 取り込めませんでした：" + err); return; }
+  if(added) showToast(`✅ ドライブから ${added}件の日報を取り込みました`);
+  else if(manual) showToast("ℹ️ 新しい日報はありませんでした");
+  const um = cuUnmatched();
+  if(added && um.length) setTimeout(() => showToast(`⚠️ 締め日一覧にない取引先名が ${um.length}件あります（「取引先と締め日」で直してください）`), 2600);
+}
+
+/* ---------- 集計表での修正・削除をドライブへ反映 ---------- */
+async function gdFlush(){
+  if(GD.flushing || !gdReady() || navigator.onLine === false) return;
+  let q = gdQueue();
+  if(!q.length){ gdRender(); return; }
+  GD.flushing = true; gdRender();
+  try{
+    for(const id of q.slice()){
+      const w = TK.reports.get(id);
+      if(!w){ if(TK.mode === "cloud" && TK.status !== "live") break; q = q.filter(x => x !== id); gdSaveQueue(q); continue; }
+      const body = { action: "update", key: gdKey(), recordId: id, record: tkClone(w.current),
+                     deleted: !!w.deleted, by: w.updatedBy || tkEditor(), edits: w.edits || [] };
+      const img = GD.images.get(id);
+      if(img){ try{ body.image = await gdBlobToB64(img); }catch(e){} }
+      const res = await gdPost(body);
+      if(!res || !res.ok){ GD.msg = "⚠️ ドライブへの反映：" + gdErrText(res); break; }
+      GD.images.delete(id);
+      q = gdQueue().filter(x => x !== id); gdSaveQueue(q);
+      GD.msg = "";
+    }
+  }finally{ GD.flushing = false; gdRender(); }
+}
+let gdFlushTimer = null;
+function gdFlushSoon(){ clearTimeout(gdFlushTimer); gdFlushTimer = setTimeout(gdFlush, 800); }
+
+/* 修正・削除・取り込みのあとにドライブへの反映を予約する */
+(function(){
+  const origUpdate = tkUpdate, origDel = tkSetDeleted, origImport = tkImport, origProc = processRecords;
+  tkUpdate = async function(id){
+    const r = await origUpdate.apply(this, arguments);
+    gdQueueAdd(id); gdFlushSoon();
+    return r;
+  };
+  tkSetDeleted = async function(id){
+    const r = await origDel.apply(this, arguments);
+    gdQueueAdd(id); gdFlushSoon();
+    return r;
+  };
+  tkImport = async function(records, fileName){
+    const res = await origImport.apply(this, arguments);
+    // LINE・画像で入れた日報もドライブにそろえる（ドライブから来たものはそのまま）
+    if(fileName !== GD_FROM) res.added.forEach(id => gdQueueAdd(id));
+    else res.added.forEach(id => GD.images.delete(id));
+    await cuAutoFix(res.added);
+    if(res.added.length) gdFlushSoon();
+    return res;
+  };
+  // 画像で読み込んだ日報は、その画像もドライブへ送る
+  processRecords = function(data, file){
+    try{
+      if(file && isImageFile(file) && data && !Array.isArray(data) && data.id != null){
+        if(GD.images.size > 200) GD.images.clear();
+        GD.images.set(String(data.id), file);
+      }
+    }catch(e){}
+    return origProc.apply(this, arguments);
+  };
+})();
+
+/* ---------- 画面（ドライブのカード） ---------- */
+function gdRender(){
+  const box = document.getElementById("gd-body");
+  if(!box) return;
+  const ready = gdReady();
+  const q = gdQueue().length;
+  let last = ""; try{ last = localStorage.getItem(GD_LAST_STORE) || ""; }catch(e){}
+  const lastTxt = last ? new Date(last).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "まだ";
+  let st;
+  if(!gdUrl()) st = `<span class="gd-st warn">送信先（Apps Script）が未設定</span>`;
+  else if(!gdKey()) st = `<span class="gd-st warn">事務所用の合言葉が未設定</span>`;
+  else if(GD.busy) st = `<span class="gd-st">⏳ 取り込み中…</span>`;
+  else st = `<span class="gd-st ok">連携中</span>`;
+  box.innerHTML = `
+    <div class="gd-row">${st}<span class="gd-sub">最後に確認：${esc(lastTxt)}（5分ごとに自動で確認）</span></div>
+    ${q ? `<div class="gd-sub">ドライブへ反映待ちの修正：<b>${q}件</b>${GD.flushing ? "（反映中…）" : "（つながると自動で反映）"}</div>` : ""}
+    ${GD.msg ? `<div class="gd-msg">${esc(GD.msg)}</div>` : ""}
+    <button class="btn btn-primary" style="margin-top:10px" onclick="gdImport(true)" ${ready && !GD.busy ? "" : "disabled"}>☁ ドライブから今すぐ取り込む</button>`;
+  const ks = document.getElementById("gd-key-state");
+  if(ks) ks.textContent = gdKey() ? "設定済み" : "未設定";
+}
+async function gdSaveKey(){
+  const inp = document.getElementById("gd-key");
+  const v = (inp.value || "").trim();
+  if(!v){ showToast("⚠️ 合言葉を入れてください"); return; }
+  if(!gdUrl()){ try{ localStorage.setItem(GD_KEY_STORE, v); }catch(e){} inp.value = ""; gdRender(); showToast("✅ 合言葉を保存しました（送信先の設定後に使えます）"); return; }
+  const res = await gdPost({ action: "ping", key: v });
+  if(res && res.ok && res.role === "office"){
+    try{ localStorage.setItem(GD_KEY_STORE, v); }catch(e){}
+    inp.value = ""; GD.msg = ""; gdRender();
+    showToast("✅ 合言葉を保存しました。ドライブを確認します");
+    gdImport(false); gdFlushSoon();
+  }else if(res && res.ok){
+    showToast("⚠️ これは作業員用の合言葉です。事務所用の合言葉を入れてください");
+  }else showToast("❌ " + gdErrText(res));
+}
+
+/* =========================================================
+   取引先と締め日
+   ・取引先ごとの締め日（月末・○日締め）を1つの一覧で持つ（全PCで共有）
+   ・月ごとに締め日を変えられる（締め日より前に締めた・あとで締めた）
+   ・日報ごとに「何月分に入れるか（繰越）」を指定できる（修正の履歴に残る）
+   ・名前の表記ゆれ（㈱・株式会社・空白など）は同じ取引先として扱い、取り込み時に正式名へ直す
+   ========================================================= */
+const CU_LOCAL_KEY  = "TOKUWA_SHUKEI_CUSTOMERS_V1";
+const CU_FOLLOW_KEY = "TOKUWA_SHUKEI_FOLLOW_CUTOFF_V1";
+const CU = new Map();     // id → { id, name, cutoff(0=月末), aliases[], overrides{ "2026-11": "2026-11-12" } }
+let cuUnsub = null, cuLocalLoaded = false;
+
+function cuNorm(s){
+  return String(s || "").normalize("NFKC").replace(/[\s　]/g, "")
+    .replace(/株式会社|有限会社|合同会社|\(株\)|\(有\)|\(同\)/g, "").replace(/様$/, "").toLowerCase();
+}
+function cuFind(name){
+  const n = cuNorm(name);
+  if(!n) return null;
+  for(const c of CU.values()) if(cuNorm(c.name) === n) return c;
+  for(const c of CU.values()) if((c.aliases || []).some(a => cuNorm(a) === n)) return c;
+  return null;
+}
+function cuFollow(){ try{ return localStorage.getItem(CU_FOLLOW_KEY) !== "0"; }catch(e){ return true; } }
+function cuCutLabel(n){ return n ? `${n}日締め` : "月末締め"; }
+
+/* ---------- 日付の計算 ---------- */
+const cuPad = n => String(n).padStart(2, "0");
+function cuYmAdd(ym, k){ const [y, m] = ym.split("-").map(Number); const d = new Date(Date.UTC(y, m - 1 + k, 1)); return `${d.getUTCFullYear()}-${cuPad(d.getUTCMonth() + 1)}`; }
+function cuLastDay(ym){ const [y, m] = ym.split("-").map(Number); return new Date(Date.UTC(y, m, 0)).getUTCDate(); }
+function cuDayAdd(iso, k){ const [y, m, d] = iso.split("-").map(Number); const t = new Date(Date.UTC(y, m - 1, d + k)); return `${t.getUTCFullYear()}-${cuPad(t.getUTCMonth() + 1)}-${cuPad(t.getUTCDate())}`; }
+function cuEndBy(cutoff, ym){ const ld = cuLastDay(ym); const d = (!cutoff || cutoff >= ld) ? ld : cutoff; return `${ym}-${cuPad(d)}`; }
+function cuEnd(c, ym){
+  const o = c.overrides && c.overrides[ym];
+  return /^\d{4}-\d{2}-\d{2}$/.test(o || "") ? o : cuEndBy(c.cutoff || 0, ym);
+}
+function cuDateLabel(iso){ if(!/^\d{4}-\d{2}-\d{2}$/.test(iso || "")) return iso || ""; const [y, m, d] = iso.split("-").map(Number); return `${m}/${d}(${"日月火水木金土"[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]})`; }
+function cuYmLabel(ym){ const [y, m] = ym.split("-").map(Number); return `${y}年${m}月`; }
+
+// 取引先・月（請求月）ごとの締め期間。取引先が一覧にない、または「一覧に従う」をOFFにしたときは選んだ締め日で計算
+function cuPeriod(client, ym, cutoff){
+  const c = cuFollow() ? cuFind(client) : null;
+  const [y, m] = ym.split("-").map(Number);
+  if(c){
+    const end = cuEnd(c, ym), start = cuDayAdd(cuEnd(c, cuYmAdd(ym, -1)), 1);
+    const ov = c.overrides && c.overrides[ym];
+    const lb = ov ? `${Number(ov.slice(5, 7))}/${Number(ov.slice(8))}締め・変更` : cuCutLabel(c.cutoff || 0);
+    return { start, end, label: `${y}年${m}月分（${lb}）`, cust: c, changed: !!ov };
+  }
+  const cut = Number.isNaN(cutoff) || cutoff == null ? 0 : cutoff;
+  return {
+    start: cuDayAdd(cuEndBy(cut, cuYmAdd(ym, -1)), 1), end: cuEndBy(cut, ym),
+    label: cut === 0 ? `${y}年${m}月` : `${y}年${m}月（${cut}日締め）`, cust: null
+  };
+}
+function cuCurCutoff(){ return parseInt(document.getElementById("sel-cutoff").value, 10); }
+function cuCurClient(){ return document.getElementById("sel-client").value; }
+
+// この日報は何月分か（繰越の指定があればそれ、無ければ締め日どおり）
+function cuBillMonth(r, client, cutoff){
+  if(/^\d{4}-\d{2}$/.test(r.billMonth || "")) return r.billMonth;
+  const d = r.date || "";
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(d)) return "";
+  const m = d.slice(0, 7);
+  for(const ym of [cuYmAdd(m, -1), m, cuYmAdd(m, 1), cuYmAdd(m, 2)]){
+    const p = cuPeriod(client, ym, cutoff);
+    if(d >= p.start && d <= p.end) return ym;
+  }
+  return m;
+}
+function cuSiteRecs(site){
+  const client = cuCurClient();
+  return getEffectiveRecords().filter(r => detectType(r) === activeType && getClientName(r) === client && getEffectiveSite(r.site) === site);
+}
+
+/* ---------- 集計の期間計算を置き換え ---------- */
+getPeriodRange = function(yearMonth, cutoff){
+  const client = cuCurClient();
+  const base = cuPeriod(client, yearMonth, cutoff);
+  // 繰越で入った日報があれば、その日付まで表の範囲を広げる
+  let s = base.start, e = base.end;
+  const site = document.getElementById("sel-site").value;
+  if(site && activeType){
+    cuSiteRecs(site).forEach(r => {
+      if(!r.date || cuBillMonth(r, client, cutoff) !== yearMonth) return;
+      if(r.date < s) s = r.date;
+      if(r.date > e) e = r.date;
+    });
+  }
+  const wide = s !== base.start || e !== base.end;
+  return Object.assign({}, base, { start: s, end: e, baseStart: base.start, baseEnd: base.end, label: base.label + (wide ? "・繰越含む" : "") });
+};
+getRecordsInPeriod = function(site, yearMonth){
+  const client = cuCurClient(), cutoff = cuCurCutoff();
+  return cuSiteRecs(site).filter(r => cuBillMonth(r, client, cutoff) === yearMonth);
+};
+function cuSyncCutoffSelect(){
+  const sel = document.getElementById("sel-cutoff");
+  const chk = document.getElementById("cu-follow");
+  if(chk) chk.checked = cuFollow();
+  const c = cuFollow() ? cuFind(cuCurClient()) : null;
+  if(c){
+    const v = String(c.cutoff || 0);
+    if(![...sel.options].some(o => o.value === v)){
+      const o = document.createElement("option"); o.value = v; o.textContent = cuCutLabel(c.cutoff || 0); sel.appendChild(o);
+    }
+    sel.value = v;
+    sel.disabled = true;
+    sel.title = "締め日一覧の設定で集計しています";
+  }else{
+    sel.disabled = false;
+    sel.title = "";
+  }
+}
+updateMonths = function(){
+  if(!activeType) return;
+  cuSyncCutoffSelect();
+  const client = cuCurClient(), site = document.getElementById("sel-site").value, cutoff = cuCurCutoff();
+  const monthSet = new Set();
+  cuSiteRecs(site).forEach(r => { const ym = cuBillMonth(r, client, cutoff); if(ym) monthSet.add(ym); });
+  const months = [...monthSet].sort();
+  const sel = document.getElementById("sel-month");
+  const prev = sel.value;
+  sel.innerHTML = months.map(m => {
+    const range = getPeriodRange(m, cutoff);
+    return `<option value="${m}">${esc(range.label)}　（${range.start.slice(5)}〜${range.end.slice(5)}）</option>`;
+  }).join("");
+  if(prev && months.includes(prev)) sel.value = prev;
+  else if(months.length) sel.value = months[months.length - 1];
+  renderTable();
+};
+function cuFollowChanged(el){
+  try{ localStorage.setItem(CU_FOLLOW_KEY, el.checked ? "1" : "0"); }catch(e){}
+  updateMonths();
+}
+
+/* 集計表の下に「締め日の情報」と「この期間の日報（繰越の設定）」を出す */
+(function(){
+  const orig = renderTable;
+  renderTable = function(){
+    orig.apply(this, arguments);
+    try{ cuRenderPeriod(); }catch(e){ console.error("cuRenderPeriod", e); }
+  };
+})();
+function cuRenderPeriod(){
+  const box = document.getElementById("cu-period");
+  if(!box) return;
+  const site = document.getElementById("sel-site").value, ym = document.getElementById("sel-month").value;
+  const client = cuCurClient(), cutoff = cuCurCutoff();
+  if(!site || !ym || !activeType){ box.innerHTML = ""; return; }
+  const base = cuPeriod(client, ym, cutoff);
+  const c = cuFind(client);
+  let info;
+  if(c && cuFollow()) info = `📅 締め日一覧：<b>${esc(c.name)}</b>　${cuCutLabel(c.cutoff || 0)}${base.changed ? `　<span class="cu-tag amber">この月は ${esc(base.end.slice(5).replace("-", "/"))} 締めに変更</span>` : ""}`;
+  else if(c) info = `📅 締め日一覧に従わず、選んだ締め日で集計しています`;
+  else info = `<span class="cu-warn">⚠️ この取引先は締め日一覧に未登録です（選んだ締め日で集計）。下の「取引先と締め日」で登録できます</span>`;
+
+  const all = cuSiteRecs(site);
+  const inThis = all.filter(r => cuBillMonth(r, client, cutoff) === ym);
+  const carriedIn = inThis.filter(r => r.billMonth && !(r.date >= base.start && r.date <= base.end));
+  const carriedOut = all.filter(r => r.date >= base.start && r.date <= base.end && cuBillMonth(r, client, cutoff) !== ym);
+  const rows = inThis.concat(carriedOut).sort((a, b) => (a.date || "") < (b.date || "") ? -1 : 1);
+  const prevYm = cuYmAdd(ym, -1), nextYm = cuYmAdd(ym, 1);
+  const row = r => {
+    const out = carriedOut.includes(r);
+    const tag = out ? `<span class="cu-tag amber">繰越済み → ${cuYmLabel(cuBillMonth(r, client, cutoff))}分</span>`
+              : r.billMonth ? `<span class="cu-tag amber">繰越で${cuYmLabel(ym)}分に入れた</span>` : "";
+    const names = (r.workers || []).map(w => w && w.name).filter(Boolean).join("・");
+    const btns = out
+      ? `<button onclick="cuMove('${esc(r.id)}','${ym}')">この月に戻す</button>`
+      : `<button onclick="cuMove('${esc(r.id)}','${prevYm}')">◀ ${Number(prevYm.slice(5))}月分へ</button><button onclick="cuMove('${esc(r.id)}','${nextYm}')">${Number(nextYm.slice(5))}月分へ ▶</button>${r.billMonth ? `<button onclick="cuMove('${esc(r.id)}',null)">締め日どおりに戻す</button>` : ""}`;
+    return `<div class="cu-prow${out ? " out" : ""}"><span class="cu-pd">${esc(cuDateLabel(r.date))}</span><span class="cu-pn">${esc(names)}</span>${tag}<span class="cu-pb">${btns}</span></div>`;
+  };
+  box.innerHTML = `<div class="cu-info">${info}</div>
+    <details class="cu-pdet"${carriedIn.length || carriedOut.length ? " open" : ""}>
+      <summary>この期間の日報 ${inThis.length}件（基本の期間 ${esc(base.start.slice(5).replace("-", "/"))}〜${esc(base.end.slice(5).replace("-", "/"))}）${carriedIn.length ? `・繰越で入った ${carriedIn.length}件` : ""}${carriedOut.length ? `・翌月以降へ繰越 ${carriedOut.length}件` : ""}　— 繰越の設定</summary>
+      <div class="cu-hint">締め日をまたいで請求したい日報は「◀ 前月分へ」「翌月分へ ▶」で動かせます（修正の履歴に残り、ドライブにも反映します）。</div>
+      ${rows.map(row).join("") || `<div class="cu-hint">日報はありません</div>`}
+    </details>`;
+}
+async function cuMove(id, ym){
+  const w = TK.reports.get(id);
+  if(!w){ showToast("⚠️ 日報が見つかりません"); return; }
+  if(!gdCanWrite()){ showToast("⚠️ インターネットにつながってから操作してください"); return; }
+  const cur = tkClone(w.current);
+  const before = cur.billMonth || null;
+  if(ym) cur.billMonth = ym; else delete cur.billMonth;
+  const fmt = v => v ? `${cuYmLabel(v)}分` : "締め日どおり";
+  try{
+    await tkUpdate(id, cur, [{ path: "billMonth", label: "請求月（繰越）", before: fmt(before), after: fmt(ym) }], "繰越の設定", w.rev);
+    showToast(ym ? `✅ ${cuYmLabel(ym)}分に入れました` : "✅ 締め日どおりに戻しました");
+    if(ym && document.getElementById("sel-month").value !== ym){
+      // 移した先の月も選べるように月の一覧を作り直す（表示中の月はそのまま）
+      updateMonths();
+    }
+  }catch(e){ showToast("❌ " + e.message); }
+}
+
+/* ---------- 取引先一覧の保存（共有中はFirebase、そうでなければこのPC） ---------- */
+function cuLoadLocal(){
+  CU.clear();
+  try{ (JSON.parse(localStorage.getItem(CU_LOCAL_KEY) || "[]") || []).forEach(c => CU.set(c.id, c)); }catch(e){}
+  cuLocalLoaded = true;
+}
+function cuSaveLocal(){ try{ localStorage.setItem(CU_LOCAL_KEY, JSON.stringify([...CU.values()])); }catch(e){} }
+function cuDb(){ return firebase.firestore(firebase.app()).collection("customers"); }
+function cuWatchMode(){
+  if(TK.mode === "cloud" && !cuUnsub && typeof firebase !== "undefined" && firebase.apps && firebase.apps.length){
+    CU.clear(); cuLocalLoaded = false;
+    cuUnsub = cuDb().onSnapshot(snap => {
+      snap.docChanges().forEach(ch => {
+        if(ch.type === "removed") CU.delete(ch.doc.id);
+        else CU.set(ch.doc.id, Object.assign({}, ch.doc.data(), { id: ch.doc.id }));
+      });
+      cuChanged();
+    }, err => console.error("customers", err));
+  }else if(TK.mode !== "cloud" && cuUnsub){
+    try{ cuUnsub(); }catch(e){}
+    cuUnsub = null; CU.clear();
+    if(TK.mode === "local") cuLoadLocal();
+    cuChanged();
+  }else if(TK.mode === "local" && !cuLocalLoaded){
+    cuLoadLocal(); cuChanged();
+  }
+}
+let cuChangedTimer = null;
+function cuChanged(){
+  clearTimeout(cuChangedTimer);
+  cuChangedTimer = setTimeout(() => {
+    cuRender();
+    try{ if(activeType && !document.getElementById("step2-card").classList.contains("hidden")) updateMonths(); }catch(e){}
+  }, 80);
+}
+async function cuSave(c){
+  if(!gdCanWrite()){ showToast("⚠️ インターネットにつながってから操作してください"); return false; }
+  c = Object.assign({}, c, { updatedAt: tkNowIso(), updatedBy: tkEditor() });
+  c.aliases = [...new Set((c.aliases || []).map(s => String(s).trim()).filter(Boolean))];
+  c.overrides = c.overrides || {};
+  c.cutoff = parseInt(c.cutoff, 10) || 0;
+  try{
+    if(TK.mode === "cloud"){ const id = c.id; const data = Object.assign({}, c); delete data.id; await cuDb().doc(id).set(data); CU.set(id, c); }
+    else{ CU.set(c.id, c); cuSaveLocal(); }
+  }catch(e){ showToast("❌ 保存できませんでした: " + e.message); return false; }
+  cuChanged();
+  return true;
+}
+async function cuRemove(id){
+  const c = CU.get(id);
+  if(!c || !confirm(`「${c.name}」を締め日一覧から外しますか？\n（日報は消えません）`)) return;
+  if(!gdCanWrite()){ showToast("⚠️ インターネットにつながってから操作してください"); return; }
+  try{
+    if(TK.mode === "cloud") await cuDb().doc(id).delete();
+    CU.delete(id); if(TK.mode === "local") cuSaveLocal();
+  }catch(e){ showToast("❌ " + e.message); return; }
+  cuChanged();
+}
+function cuNewId(){ return "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+/* ---------- 名前の表記合わせ ---------- */
+function cuClientField(r){ return detectType(r) === "joyou" ? "customer" : "client"; }
+async function cuRename(ids, newName, reason){
+  let n = 0;
+  for(const id of ids){
+    const w = TK.reports.get(id);
+    if(!w) continue;
+    const cur = tkClone(w.current);
+    const f = cuClientField(cur);
+    const before = cur[f] || cur.client || cur.customer || "";
+    if(before === newName) continue;
+    cur[f] = newName;
+    try{
+      await tkUpdate(id, cur, [{ path: f, label: "お客様名", before: before || "（空）", after: newName }], reason, w.rev);
+      n++;
+    }catch(e){ console.error("cuRename", e); showToast("❌ " + e.message); break; }
+  }
+  return n;
+}
+// 取り込んだ日報の名前が一覧の別名・表記ゆれに当たれば、正式名に直す
+async function cuAutoFix(ids){
+  if(!ids || !ids.length || !CU.size) return;
+  const fix = [];
+  ids.forEach(id => {
+    const w = TK.reports.get(id);
+    if(!w || w.deleted) return;
+    const name = getClientName(w.current);
+    const c = cuFind(name);
+    if(c && c.name !== name) fix.push([id, c.name]);
+  });
+  for(const [id, nm] of fix) await cuRename([id], nm, "取引先名の表記合わせ（取り込み時・自動）");
+}
+// 一覧の取引先に当たるのに書き方が違う日報を、正式名へそろえる
+async function cuFixAllFor(c, reason){
+  if(!c) return 0;
+  const ids = [];
+  cuNamesInUse().forEach((list, n) => { if(n !== c.name && cuFind(n) === c) ids.push(...list); });
+  if(!ids.length) return 0;
+  return cuRename(ids, c.name, reason || "取引先名の表記合わせ");
+}
+function cuNamesInUse(){
+  const m = new Map();
+  [...TK.reports.values()].filter(w => !w.deleted).forEach(w => {
+    const n = getClientName(w.current) || "";
+    if(!n) return;
+    if(!m.has(n)) m.set(n, []);
+    m.get(n).push(w.id);
+  });
+  return m;
+}
+function cuUnmatched(){
+  return [...cuNamesInUse().entries()].filter(([n]) => !cuFind(n)).sort((a, b) => b[1].length - a[1].length);
+}
+async function cuMergeName(idx){
+  const um = cuUnmatched()[idx];
+  if(!um) return;
+  const [name, ids] = um;
+  const sel = document.getElementById("cu-um-sel-" + idx);
+  const c = CU.get(sel && sel.value);
+  if(!c){ showToast("⚠️ まとめる取引先を選んでください"); return; }
+  if(!confirm(`「${name}」の日報 ${ids.length}件を「${c.name}」に直します。\n次から届く「${name}」も自動で「${c.name}」に直します。`)) return;
+  if(!(await cuSave(Object.assign({}, c, { aliases: (c.aliases || []).concat([name]) })))) return;
+  const n = await cuRename(ids, c.name, "取引先名の表記合わせ");
+  const k = await cuFixAllFor(CU.get(c.id));
+  showToast(`✅ ${n + k}件を「${c.name}」に直しました`);
+}
+async function cuRegisterName(idx){
+  const um = cuUnmatched()[idx];
+  if(!um) return;
+  const cut = document.getElementById("cu-um-cut-" + idx);
+  const c = { id: cuNewId(), name: um[0], cutoff: parseInt(cut.value, 10) || 0, aliases: [], overrides: {} };
+  if(!(await cuSave(c))) return;
+  const k = await cuFixAllFor(CU.get(c.id) || c);
+  showToast(`✅ 「${um[0]}」を締め日一覧に登録しました` + (k ? `（書き方の違う日報 ${k}件も直しました）` : ""));
+}
+
+/* ---------- 一覧の編集 ---------- */
+function cuCutOptions(cur){
+  let h = `<option value="0"${!cur ? " selected" : ""}>月末締め</option>`;
+  for(let d = 1; d <= 28; d++) h += `<option value="${d}"${cur === d ? " selected" : ""}>${d}日締め</option>`;
+  return h;
+}
+async function cuEditField(id, field, el){
+  const c = CU.get(id);
+  if(!c) return;
+  const n = Object.assign({}, c);
+  if(field === "name"){
+    const v = el.value.trim();
+    if(!v || v === c.name){ el.value = c.name; return; }
+    const other = cuFind(v);
+    if(other && other.id !== id){ showToast(`⚠️ 「${other.name}」と同じ名前になります`); el.value = c.name; return; }
+    n.name = v;
+    n.aliases = (c.aliases || []).concat([c.name]).filter(a => cuNorm(a) !== cuNorm(v));
+    if(!(await cuSave(n))) return;
+    const ids = cuNamesInUse().get(c.name) || [];
+    if(ids.length && confirm(`「${c.name}」の日報 ${ids.length}件の名前も「${v}」に直しますか？`)){
+      const k = await cuRename(ids, v, "取引先の正式名を変更");
+      showToast(`✅ ${k}件を直しました`);
+    }
+    return;
+  }
+  if(field === "cutoff") n.cutoff = parseInt(el.value, 10) || 0;
+  if(field === "aliases") n.aliases = el.value.split(/[,、，\n]/).map(s => s.trim()).filter(Boolean);
+  if(!(await cuSave(n))) return;
+  const k = field === "aliases" ? await cuFixAllFor(CU.get(id)) : 0;
+  showToast("✅ 保存しました" + (k ? `（日報 ${k}件の名前を直しました）` : ""));
+}
+async function cuAddOverride(id){
+  const c = CU.get(id);
+  const ym = document.getElementById("cu-ov-m-" + id).value;
+  const d = document.getElementById("cu-ov-d-" + id).value;
+  if(!/^\d{4}-\d{2}$/.test(ym) || !/^\d{4}-\d{2}-\d{2}$/.test(d)){ showToast("⚠️ 何月分か と 締めた日 を入れてください"); return; }
+  const prevEnd = cuEnd(c, cuYmAdd(ym, -1));
+  if(d <= prevEnd){ showToast(`⚠️ 前の月の締め日（${prevEnd.slice(5).replace("-", "/")}）より後の日にしてください`); return; }
+  const n = Object.assign({}, c, { overrides: Object.assign({}, c.overrides, { [ym]: d }) });
+  if(await cuSave(n)) showToast(`✅ ${cuYmLabel(ym)}分は ${Number(d.slice(5, 7))}/${Number(d.slice(8))} 締めにしました`);
+}
+async function cuDelOverride(id, ym){
+  const c = CU.get(id);
+  const ov = Object.assign({}, c.overrides); delete ov[ym];
+  if(await cuSave(Object.assign({}, c, { overrides: ov }))) showToast("✅ いつもの締め日に戻しました");
+}
+async function cuAdd(){
+  const name = (prompt("取引先名（正式名）を入れてください") || "").trim();
+  if(!name) return;
+  const ex = cuFind(name);
+  if(ex){ showToast(`⚠️ 「${ex.name}」がすでにあります`); return; }
+  const cut = parseInt(prompt("締め日を数字で入れてください（月末締めは 0）", "0") || "0", 10);
+  const c = { id: cuNewId(), name, cutoff: (cut >= 1 && cut <= 28) ? cut : 0, aliases: [], overrides: {} };
+  if(!(await cuSave(c))) return;
+  const k = await cuFixAllFor(CU.get(c.id) || c);
+  if(k) showToast(`✅ 書き方の違う日報 ${k}件を「${name}」に直しました`);
+}
+
+function cuRender(){
+  const box = document.getElementById("cu-body");
+  if(!box) return;
+  const list = [...CU.values()].sort((a, b) => a.name.localeCompare(b.name, "ja"));
+  const um = cuUnmatched();
+  const cnt = document.getElementById("cu-count");
+  if(cnt) cnt.textContent = um.length ? `一覧にない名前 ${um.length}件` : `${list.length}社`;
+  if(cnt) cnt.className = "tk-badge " + (um.length ? "warn" : "ok");
+  const custOpts = `<option value="">まとめる先を選ぶ…</option>` + list.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
+  const thisYm = (() => { const t = new Date(); return `${t.getFullYear()}-${cuPad(t.getMonth() + 1)}`; })();
+
+  let h = "";
+  if(TK.mode === "cloud-wait") h += `<div class="cu-hint">共有にログインすると、締め日一覧が表示されます。</div>`;
+  if(um.length){
+    h += `<div class="cu-um"><div class="cu-um-t">⚠️ 締め日一覧にない取引先名（表記ゆれ・新しい取引先）</div>
+      <div class="cu-hint">同じ会社なら「まとめる」で正式名に直します（日報の名前を修正し、履歴とドライブにも残ります）。新しい取引先なら締め日を選んで「登録」してください。</div>`;
+    um.forEach(([name, ids], i) => {
+      const guess = list.find(c => cuNorm(c.name).includes(cuNorm(name)) || cuNorm(name).includes(cuNorm(c.name)));
+      h += `<div class="cu-um-row"><b>${esc(name)}</b><span class="cu-sub">日報 ${ids.length}件</span>
+        <span class="cu-act"><select id="cu-um-sel-${i}">${custOpts.replace(guess ? `value="${esc(guess.id)}"` : "@@", guess ? `value="${esc(guess.id)}" selected` : "@@")}</select><button onclick="cuMergeName(${i})">まとめる</button></span>
+        <span class="cu-act"><select id="cu-um-cut-${i}">${cuCutOptions(0)}</select><button onclick="cuRegisterName(${i})">新しく登録</button></span></div>`;
+    });
+    h += `</div>`;
+  }
+  h += `<details class="cu-det"${um.length ? "" : ""}><summary>締め日一覧を開く（${list.length}社）</summary>
+    <div class="cu-hint">締め日はいつもの締め日です。ある月だけ締め日より前（または後）に締めたときは、その取引先の「月ごとの締め日変更」に入れてください。翌月以降の期間も自動でずれます。</div>`;
+  list.forEach(c => {
+    const ovs = Object.entries(c.overrides || {}).sort();
+    h += `<div class="cu-item">
+      <div class="cu-line"><input class="tk-in cu-name" value="${esc(c.name)}" onchange="cuEditField('${esc(c.id)}','name',this)">
+        <select class="cu-cut" onchange="cuEditField('${esc(c.id)}','cutoff',this)">${cuCutOptions(c.cutoff || 0)}</select>
+        <button class="cu-del" onclick="cuRemove('${esc(c.id)}')">外す</button></div>
+      <label class="cu-lb">表記ゆれ（別の書き方。カンマ区切り）<input class="tk-in" value="${esc((c.aliases || []).join("、"))}" placeholder="例：井上商会、イノウエ商会" onchange="cuEditField('${esc(c.id)}','aliases',this)"></label>
+      <div class="cu-lb">月ごとの締め日変更</div>
+      <div class="cu-ovs">${ovs.map(([ym, d]) => `<span class="cu-tag amber">${cuYmLabel(ym)}分 → ${Number(d.slice(5, 7))}/${Number(d.slice(8))}締め <button onclick="cuDelOverride('${esc(c.id)}','${ym}')">×</button></span>`).join("") || `<span class="cu-sub">なし（いつもの締め日）</span>`}</div>
+      <div class="cu-ovadd"><input type="month" id="cu-ov-m-${esc(c.id)}" value="${thisYm}"><span>分を</span><input type="date" id="cu-ov-d-${esc(c.id)}"><span>締めにする</span><button onclick="cuAddOverride('${esc(c.id)}')">追加</button></div>
+    </div>`;
+  });
+  h += `<button class="btn btn-outline" style="margin-top:10px" onclick="cuAdd()">＋ 取引先を追加</button></details>`;
+  box.innerHTML = h;
+}
+
+/* ---------- 起動・定期処理 ---------- */
+(function(){
+  const orig = tkRenderStatus;
+  tkRenderStatus = function(){
+    orig.apply(this, arguments);
+    try{ cuWatchMode(); }catch(e){ console.error(e); }
+    try{ cuRender(); gdRender(); }catch(e){ console.error(e); }
+    if(!GD.bootDone && TK.ready && (TK.mode === "local" || (TK.mode === "cloud" && TK.status === "live"))){
+      GD.bootDone = true;
+      setTimeout(() => { gdFlush(); gdImport(false); }, 1500);
+    }
+    if(TK.mode !== "cloud" && TK.mode !== "local") GD.bootDone = false;
+  };
+})();
+setInterval(() => { if(gdReady() && TK.ready && TK.mode !== "cloud-wait") gdImport(false); }, 5 * 60 * 1000);
+setInterval(() => { if(gdQueue().length) gdFlush(); }, 60 * 1000);
+window.addEventListener("online", () => { gdFlushSoon(); });
+
 tkBoot();
 </script>
 </body>
