@@ -396,6 +396,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
 .ed-tabs button { flex:1; padding:8px; border-radius:9px; border:1.5px solid var(--border); background:#fff; font-family:inherit; font-size:13px; font-weight:800; color:var(--text2); cursor:pointer; }
 .ed-tabs button.on { background:var(--primary); border-color:var(--primary); color:#fff; }
 .ed-sec { margin-top:14px; }
+.rv-tabs { display:flex; gap:6px; margin:8px 0 10px; }
+.rv-tabs button { flex:1; padding:7px; border-radius:9px; border:1.5px solid var(--border); background:#fff; font-family:inherit; font-size:12.5px; font-weight:800; color:var(--text2); cursor:pointer; }
+.rv-tabs button.on { background:var(--orange); border-color:var(--orange); color:#fff; }
+.dv-rec .rpv { font-size:13px; }
+.dv-rec-btns { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+.dv-rec-btns button { flex:1; min-width:120px; padding:8px; border-radius:9px; border:1.5px solid var(--border); background:#fff; font-family:inherit; font-size:12.5px; font-weight:800; color:var(--text); cursor:pointer; }
+.dv-rec-btns button.pri { background:var(--primary); border-color:var(--primary); color:#fff; }
+.dv-rec .ed-meta { margin:6px 0 0; }
 .ed-sec-t { font-size:13px; font-weight:900; color:var(--text); border-left:4px solid var(--orange); padding-left:8px; margin-bottom:8px; }
 .ed-row { display:flex; flex-wrap:wrap; gap:8px 10px; align-items:flex-end; }
 .ed-line { padding:6px 0; border-bottom:1px dashed var(--border); }
@@ -443,7 +451,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
 .rp .rp-r, .rpv .rp-r { text-align:right; white-space:nowrap; }
 .rp-nw { white-space:nowrap; }
 .rp-muted { color:#777; }
-.rp-pre { white-space:pre-wrap; }
+.rp-pre, .rp td.rp-pre, .rpv td.rp-pre { white-space:pre-wrap; }
 .rpv { font-size:14px; }
 .rp { position:relative; background:#fff; padding:30px 34px 0; font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic","Meiryo","Noto Sans JP","Noto Sans CJK JP",sans-serif; }
 .rp-head { display:flex; justify-content:space-between; align-items:flex-end; border-bottom:3px solid #1f3a5f; padding-bottom:8px; }
@@ -692,8 +700,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "shukei";
-const APP_VERSION   = "1.3.1";
-const APP_BUILD     = "2026-11-01";
+const APP_VERSION   = "1.4.0";
+const APP_BUILD     = "2026-11-02";
 
 (function(){
   const b = document.getElementById("verBadge");
@@ -3210,7 +3218,9 @@ function dvPrint(){
 /* ---- 本体の組み立て ---- */
 // 明示的に表示済みのキー（これ以外は「その他の記入項目」に自動で出す）
 const DV_KNOWN = new Set(["id","date","app","type","client","customer","site",
-  "workers","tools","survey","otherNote","waste","workDesc","needConfirm"]);
+  "workers","tools","survey","otherNote","waste","workDesc","needConfirm",
+  "highway","useHighway","recordId","createdAt","appVersion","appBuild","version","_rev","_editCount",
+  "revision","revisedAt","revisedBy","driveSent","driveSentAt","driveSkip","sent","sentAt"]);
 
 function dvBuildBody(dateKey){
   const recs = dvMap[dateKey] || [];
@@ -3230,13 +3240,66 @@ function dvSortCores(cores){
   );
 }
 
+/* 「作業確認書」「詳細」の切り替え（日ごと・見返すで共通。選んだ方を覚えておく） */
+let rvMode = (function(){ try{ return localStorage.getItem("TOKUWA_SHUKEI_RV_MODE") === "detail" ? "detail" : "sheet"; }catch(e){ return "sheet"; } })();
+function rvSetMode(m){
+  rvMode = m === "detail" ? "detail" : "sheet";
+  try{ localStorage.setItem("TOKUWA_SHUKEI_RV_MODE", rvMode); }catch(e){}
+  const dv = document.getElementById("dv-overlay");
+  if(dv && !dv.classList.contains("hidden") && dv.dataset.date){
+    const top = document.getElementById("dv-body").scrollTop;
+    document.getElementById("dv-body").innerHTML = dvBuildBody(dv.dataset.date);
+    document.getElementById("dv-body").scrollTop = top;
+  }
+  if(typeof edId !== "undefined" && edId && typeof edMode !== "undefined" && edMode === "view") edRender();
+}
+function rvTabs(){
+  return `<div class="rv-tabs">`
+    + `<button class="${rvMode === "sheet" ? "on" : ""}" onclick="rvSetMode('sheet')">📄 作業確認書（届く画像と同じ形）</button>`
+    + `<button class="${rvMode === "detail" ? "on" : ""}" onclick="rvSetMode('detail')">🔎 詳細（階・部位ごと）</button></div>`;
+}
+/* 登録元・修正件数の印（見返す画面と同じ） */
+function rvMeta(w){
+  if(!w) return "";
+  const n = (w.edits || []).filter(e => !e.sys).length;
+  return `<div class="ed-meta">登録：${esc(edDt(w.importedAt))}　${esc(w.importedBy || "")}${w.importedFrom ? `　（${esc(w.importedFrom)}）` : ""}`
+    + `　／　${n ? `<b style="color:#b45309">修正 ${n}件</b>（最終：${esc(edDt(w.updatedAt))}　${esc(w.updatedBy || "")}）` : "修正なし（原本のまま）"}`
+    + `${w.deleted ? `　<b style="color:#b91c1c">削除済み</b>` : ""}</div>`;
+}
+/* 日報1件の本体（タブで切り替え） */
+function rvBody(type, rec){
+  return rvTabs() + (rvMode === "detail"
+    ? dvDetailHtml(rec)
+    : `<div class="rpv">${rpBody(type, rec)}</div>`);
+}
+/* 日ごとから修正・画像へ */
+function dvEdit(id){ edOpen(id); if(typeof edId !== "undefined" && edId) setTimeout(edStartEdit, 50); }
+function dvImage(id){ edOpen(id); if(typeof edId !== "undefined" && edId) edImage(); }
+
 function dvBuildRec(r, idx, total){
   const type = detectType(r);
+  const w = r.id != null ? TK.reports.get(String(r.id)) : null;
   let h = `<div class="dv-rec">`;
   h += `<div class="dv-rec-hd">${esc(r.site || "（現場名なし）")}` +
        `<span>${esc(getClientName(r) || "（お客様名なし）")} 様　／　` +
        `${esc(REPORT_TYPES[type] ? REPORT_TYPES[type].label : "日報")}` +
        `${total > 1 ? `　（${idx+1} / ${total}件目）` : ""}</span></div>`;
+  h += rvMeta(w);
+  h += rvBody(type, r);
+  if(w){
+    const q = esc(w.id).replace(/'/g, "\\'");
+    h += `<div class="dv-rec-btns">`
+      + (w.deleted ? "" : `<button class="pri" onclick="dvEdit('${q}')">✏️ この日報を修正する</button>`)
+      + `<button onclick="dvImage('${q}')">🖼 画像を出す</button>`
+      + `<button onclick="edOpen('${q}')">📋 履歴・原本を見る</button></div>`;
+  }
+  h += `</div>`;
+  return h;
+}
+
+/* 詳細（階・部位ごとのコア明細など）。日ごと・見返すで共通 */
+function dvDetailHtml(r){
+  let h = "";
 
   /* 作業員・時間 */
   const ws = r.workers || [];
@@ -3303,6 +3366,14 @@ function dvBuildRec(r, idx, total){
          `<div class="dv-note plain">${esc(r.workDesc)}</div></div>`;
   }
 
+  /* 高速道路 */
+  const hw = r.highway || [];
+  if(hw.length || r.useHighway === true){
+    h += `<div class="dv-sec"><div class="dv-sec-t">🛣 高速道路</div>` +
+         (hw.length ? hw.map(x => `<span class="dv-chip">${esc(x.from || "")} ⇄ ${esc(x.to || "")}　${esc(x.trip || "")}／${esc(x.pay || "")}</span>`).join("") : `<span class="dv-chip">使用あり</span>`) +
+         `</div>`;
+  }
+
   /* 残材処分 */
   if(typeof r.waste === "boolean"){
     h += `<div class="dv-sec"><div class="dv-sec-t">🗑 残材処分</div>` +
@@ -3350,8 +3421,6 @@ function dvBuildRec(r, idx, total){
   if(!ws.length && !cores.length && !tools.length && !r.workDesc && !r.otherNote){
     h += `<div class="dv-empty">記入内容がありません</div>`;
   }
-
-  h += `</div>`;
   return h;
 }
 
@@ -4081,7 +4150,7 @@ function edRender(){
       <button class="${edShowOrig ? "" : "on"}" onclick="edShowOrig=false;edRender()">現在の内容（修正後）</button>
       <button class="${edShowOrig ? "on" : ""}" onclick="edShowOrig=true;edRender()">原本（現場から届いた内容）</button>
     </div>` : "";
-  body.innerHTML = info + toggle + `<div class="rpv">${rpBody(w.type, rec)}</div>` + edHistoryHtml(w);
+  body.innerHTML = info + toggle + rvBody(w.type, rec) + edHistoryHtml(w);
   foot.innerHTML = (w.deleted
       ? `<button style="background:var(--green);color:#fff" onclick="edRestore()">♻️ 復元する</button>`
       : `<button style="background:var(--primary);color:#fff" onclick="edStartEdit()">✏️ 修正する</button>`
@@ -4579,13 +4648,6 @@ async function edImage(){
   }catch(e){ showToast("❌ " + e.message); }
 }
 
-/* ---------------- 日付ビューアからも開けるように ---------------- */
-const edOrigDvBuildRec = dvBuildRec;
-dvBuildRec = function(r){
-  const html = edOrigDvBuildRec.apply(this, arguments);
-  if(!r || r.id == null || !TK.reports.has(String(r.id))) return html;
-  return html + `<button class="btn btn-outline" style="margin:-4px 0 12px;padding:8px" onclick="dvClose();edOpen('${esc(String(r.id)).replace(/'/g, "\\'")}')">✏️ この日報を開く（修正・履歴）</button>`;
-};
 
 /* 起動 */
 tkBoot();
