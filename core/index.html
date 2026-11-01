@@ -472,7 +472,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
   <div id="historyView" class="noshot" style="display:none;position:fixed;inset:0;z-index:40;background:#f4f6f8;overflow:auto;-webkit-overflow-scrolling:touch;">
     <div style="position:sticky;top:0;display:flex;align-items:center;gap:10px;padding:12px 16px;background:#fff;border-bottom:1px solid #ddd;">
-      <div style="flex:1;font-weight:800;font-size:17px;">過去の日報（3か月分）</div>
+      <div style="flex:1;font-weight:800;font-size:17px;">過去の日報（3か月分）<div style="font-size:12px;font-weight:400;color:#666;">削除しても会社のドライブの日報は消えません</div></div>
       <button class="btn btn-gray" type="button" onclick="closeHistory()" style="padding:10px 16px;">閉じる</button>
     </div>
     <div id="historyList" style="padding:12px 16px 40px;"></div>
@@ -501,7 +501,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "core";
-const APP_VERSION   = "1.9.1";
+const APP_VERSION   = "1.10.0";
 const APP_BUILD     = "2026-11-01";
 
 (function(){
@@ -1730,6 +1730,7 @@ function trimHistoryForSpace(arr, current){
   for(let i = arr.length - 1; i >= 0; i--){ if(drop.has(i)) arr.splice(i, 1); }
 }
 function openHistory(){
+  resetHistDel();
   pruneHistory();
   const unsent = unsentKeys();
   historyList = loadRecords().filter(function(r){ return r && typeof r === "object"; })
@@ -1746,14 +1747,68 @@ function openHistory(){
         + '<div style="font-weight:800;font-size:16px;">' + escapeHtmlLite(r.date || "") + '</div>'
         + '<div style="font-size:12px;font-weight:700;padding:2px 8px;border-radius:10px;' + (ng ? 'background:#fdecea;color:#b00020;">未送信' : 'background:#e8f5e9;color:#1b5e20;">送信済み') + '</div>'
         + '</div>'
-        + '<div style="font-size:14px;margin-top:4px;">' + escapeHtmlLite(who) + (who && r.site ? '　' : '') + escapeHtmlLite(r.site || "") + '</div>'
+        + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:4px;">'
+        + '<div style="font-size:14px;min-width:0;overflow-wrap:anywhere;">' + escapeHtmlLite(who) + (who && r.site ? '　' : '') + escapeHtmlLite(r.site || "") + '</div>'
+        + (ng
+            ? '<button type="button" onclick="event.stopPropagation();showToast(\'まだ会社に届いていないため、削除できません。送信されると削除できるようになります。\', true)" style="flex:none;padding:8px 12px;font-size:13px;font-weight:700;color:#999;background:#f2f2f2;border:1px solid #ddd;border-radius:8px;">削除</button>'
+            : '<button type="button" id="histDel' + i + '" onclick="event.stopPropagation();deleteHistory(' + i + ')" style="flex:none;padding:8px 12px;font-size:13px;font-weight:700;color:#b00020;background:#fff;border:1px solid #e57373;border-radius:8px;">削除</button>')
+        + '</div>'
         + '</div>';
     }).join("");
   }
   document.getElementById("historyView").style.display = "block";
   document.body.style.overflow = "hidden";
 }
+/* 過去の日報を1件削除（端末の中の記録だけ。会社のドライブの日報は消えない）
+   ・未送信の日報は削除できない
+   ・1回目のタップで「本当に削除」に変わり、もう一度押すと削除 */
+var histDelArm = -1, histDelTimer = null;
+function deleteHistory(i){
+  const r = historyList[i];
+  if(!r) return;
+  if(unsentKeys().has(recKey(r))){
+    showToast("まだ会社に届いていないため、削除できません。送信されると削除できるようになります。", true);
+    return;
+  }
+  const btn = document.getElementById("histDel" + i);
+  if(histDelArm !== i){
+    resetHistDel();
+    histDelArm = i;
+    if(btn){ btn.innerText = "本当に削除"; btn.style.background = "#b00020"; btn.style.color = "#fff"; }
+    histDelTimer = setTimeout(resetHistDel, 4000);
+    return;
+  }
+  resetHistDel();
+  try{
+    const arr = loadRecords();
+    const key = recKey(r);
+    let idx = key ? arr.findIndex(function(x){ return recKey(x) === key; }) : -1;
+    if(idx < 0){ const js = JSON.stringify(r); idx = arr.findIndex(function(x){ return JSON.stringify(x) === js; }); }
+    if(idx < 0){ showToast("この日報は見つかりませんでした。", true); openHistory(); return; }
+    arr.splice(idx, 1);
+    localStorage.setItem(RECORDS_KEY, JSON.stringify(arr));
+    try{ if(key) preparedImages.delete(key); }catch(e){}
+  }catch(e){
+    showToast("削除できませんでした。", true);
+    return;
+  }
+  const v = document.getElementById("historyView");
+  const y = v ? v.scrollTop : 0;
+  openHistory();
+  if(v) v.scrollTop = y;
+  try{ renderUnsentBar(); }catch(e){}
+  showToast("削除しました（会社のドライブの日報はそのまま残っています）。");
+}
+function resetHistDel(){
+  if(histDelTimer){ clearTimeout(histDelTimer); histDelTimer = null; }
+  if(histDelArm >= 0){
+    const b = document.getElementById("histDel" + histDelArm);
+    if(b){ b.innerText = "削除"; b.style.background = "#fff"; b.style.color = "#b00020"; }
+  }
+  histDelArm = -1;
+}
 function closeHistory(){
+  resetHistDel();
   document.getElementById("historyView").style.display = "none";
   document.body.style.overflow = "";
 }
