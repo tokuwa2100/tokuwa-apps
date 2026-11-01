@@ -171,6 +171,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   .siglabel{font-size:15px;margin-bottom:8px;font-weight:900}
   canvas{width:100%;height:180px;border:2px solid #ccc;border-radius:10px;background:#fafafa;touch-action:none}
   #previewCanvas{height:auto;border:0;border-radius:0;background:#fff;touch-action:auto}
+  #afterSaveBtns.hidden{display:none}
   .sigbtns{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap}
   /* 外注入力 */
   .w-outsource{margin-top:10px;padding:10px;border:2px dashed var(--orange);border-radius:10px;background:#fff7f0}
@@ -372,13 +373,17 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
         <canvas id="sign"></canvas>
         <div class="sigbtns">
           <button class="btn btn-gray" type="button" onclick="clearSign()">署名クリア</button>
-          <button class="btn btn-green" id="saveBtn" type="button" onclick="saveAll()">署名して送信</button>
+          <button class="btn btn-green" id="photoBtn" type="button" onclick="saveToPhotos()">署名して保存</button>
+        </div>
+        <div id="photoState" class="noshot" style="display:none;margin-top:12px;padding:12px;border-radius:10px;background:#fff3e0;border:2px solid #fb8c00;color:#a64a00;font-weight:700;line-height:1.6;text-align:center;"></div>
+        <div class="sigbtns">
+          <button class="btn btn-gray" id="saveBtn" type="button" onclick="saveAll()" disabled style="flex:1;padding:16px;font-size:18px;">日報を提出</button>
         </div>
         <div id="driveDone" class="noshot" style="display:none;margin-top:12px;padding:14px;border-radius:10px;text-align:center;font-weight:700;line-height:1.6;"></div>
         <div class="sigbtns hidden" id="afterSaveBtns">
           <button class="btn btn-gray" type="button" onclick="newReport()">新しい日報を作成</button>
         </div>
-        <div class="hint noshot">※「署名して送信」を押すと、上の日報（署名入り）が会社のGoogleドライブへ送られます。電波が無いときは端末に残り、つながったときに自動で送ります。</div>
+        <div class="hint noshot">※「署名して保存」を押すと、上の日報（署名入り）を写真に保存できます（出てきた画面で「画像を保存」を選んでください）。続けて「日報を提出」を押すと、同じ画像が会社のGoogleドライブへ送られます。電波が無いときは端末に残り、つながったときに自動で送ります。</div>
       </div>
 
       <div class="footer">
@@ -396,7 +401,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "joyou";
-const APP_VERSION   = "1.5.1";
+const APP_VERSION   = "1.6.0";
 const APP_BUILD     = "2026-11-01";
 
 (function(){
@@ -494,7 +499,7 @@ function setNeed(v){
   document.getElementById("needYes").classList.toggle("active", v===true);
   document.getElementById("needRow").classList.remove("err");
   const d = window.__TOKUWA_JOYOU_DRAFT__;
-  if(d && d.needConfirm !== v){ d.needConfirm = v; previewStart(d); }
+  if(d && d.needConfirm !== v){ d.needConfirm = v; if(photoSaved) invalidatePhoto(); previewStart(d); }
 }
 
 /* 集計アプリ側の並び順と完全に一致させること */
@@ -956,6 +961,9 @@ function getPos(evt){
 }
 function startDraw(evt){
   evt.preventDefault?.();
+  if(isSaved){ showToast("提出済みのため、署名は変更できません。", true); return; }
+  if(photoBusy) return;
+  if(photoSaved) invalidatePhoto();
   resizeCanvasToDisplaySize();
   isDrawing = true;
   last = getPos(evt);
@@ -987,6 +995,8 @@ canvas.addEventListener("touchmove", moveDraw, {passive:false});
 canvas.addEventListener("touchend", endDraw, {passive:false});
 
 function clearSign(){
+  if(isSaved){ showToast("提出済みのため、署名は変更できません。", true); return; }
+  if(photoBusy) return;
   resizeCanvasToDisplaySize();
   ctx.clearRect(0,0,canvas.width,canvas.height);
   hasSignature = false;
@@ -1038,28 +1048,23 @@ function beep(){
 function setSavedState(saved){
   isSaved = saved;
   const banner = document.getElementById("statusBanner");
-  const btn = document.getElementById("saveBtn");
   const afterBtns = document.getElementById("afterSaveBtns");
   if(saved){
     banner.classList.remove("ng"); banner.classList.add("ok");
     banner.innerText = "提出完了（保存済み）";
-    btn.innerText = "送信済み";
-    btn.classList.add("btn-gray");
-    btn.classList.remove("btn-green");
     afterBtns.classList.remove("hidden");
   }else{
     banner.classList.remove("ok"); banner.classList.add("ng");
     banner.innerText = "未保存";
-    btn.innerText = "署名して送信";
-    btn.classList.add("btn-green");
-    btn.classList.remove("btn-gray");
     afterBtns.classList.add("hidden");
   }
+  if(!saved) invalidatePhoto(); else updateSignButtons();
   if(typeof renderDriveDone === "function") renderDriveDone();
 }
 
 function saveAll(){
   if(isSaved) return; // 二重保存防止
+  if(photoBusy){ showToast("画像を作成しています。少しお待ちください。", true); return; }
 
   if(needConfirm === null){
     document.getElementById("needRow").classList.add("err");
@@ -1076,13 +1081,11 @@ function saveAll(){
     return;
   }
 
-  const draft = window.__TOKUWA_JOYOU_DRAFT__ || collectData();
-  draft.needConfirm = needConfirm;
-  resizeCanvasToDisplaySize();
-  let signaturePng = "";
-  try{ signaturePng = canvas.toDataURL("image/png"); }catch(e){}
-
-  const payload = { app:"joyou-nippo", type:"joyou", version:3, appVersion: APP_VERSION, appBuild: APP_BUILD, recordId: draft.recordId || newRecordId(), sent:false, driveSent:false, ...draft, signaturePng };
+  if(!photoReady()){
+    showToast("先に「署名して保存」を押してください。", true);
+    return;
+  }
+  const payload = photoSaved.payload;
 
   let storedOk = false;
   if(storageAvailable()){
@@ -1110,6 +1113,126 @@ function saveAll(){
   }
   driveSendAll(false);
 }
+
+
+/* =============================
+  署名して保存（写真に保存）→ 日報を提出
+  ・「署名して保存」で、提出するのと同じ画像を作り、共有画面（「画像を保存」で写真へ）を開く
+  ・「日報を提出」は保存してから押せる。提出する画像は保存した画像と同じもの
+============================= */
+var photoSaved = null;   // { payload, file }
+var photoBusy = false;
+function photoReady(){ return !!(photoSaved && photoSaved.file); }
+function invalidatePhoto(){
+  try{ if(photoSaved && photoSaved.payload && photoSaved.payload.recordId) preparedImages.delete(photoSaved.payload.recordId); }catch(e){}
+  photoSaved = null;
+  updateSignButtons();
+}
+function buildSignedPayload(){
+  const draft = window.__TOKUWA_JOYOU_DRAFT__ || collectData();
+  draft.needConfirm = needConfirm;
+  resizeCanvasToDisplaySize();
+  let signaturePng = "";
+  try{ signaturePng = canvas.toDataURL("image/png"); }catch(e){}
+
+  const payload = { app:"joyou-nippo", type:"joyou", version:3, appVersion: APP_VERSION, appBuild: APP_BUILD, recordId: draft.recordId || newRecordId(), sent:false, driveSent:false, ...draft, signaturePng };
+  return payload;
+}
+function updateSignButtons(){
+  const pb = document.getElementById("photoBtn");
+  const sb = document.getElementById("saveBtn");
+  const st = document.getElementById("photoState");
+  if(!pb || !sb) return;
+  pb.disabled = photoBusy;
+  pb.innerText = photoBusy ? "画像を作成中…" : (photoReady() ? "写真にもう一度保存" : "署名して保存");
+  pb.classList.toggle("btn-green", !photoReady());
+  pb.classList.toggle("btn-gray", photoReady());
+  if(isSaved){
+    sb.disabled = true; sb.innerText = "提出済み";
+    sb.classList.add("btn-gray"); sb.classList.remove("btn-green");
+  }else if(photoReady()){
+    sb.disabled = false; sb.innerText = "日報を提出";
+    sb.classList.add("btn-green"); sb.classList.remove("btn-gray");
+  }else{
+    sb.disabled = true; sb.innerText = "日報を提出";
+    sb.classList.add("btn-gray"); sb.classList.remove("btn-green");
+  }
+  sb.style.opacity = sb.disabled && !isSaved ? ".5" : "";
+  if(st){
+    if(photoReady() && !isSaved){
+      st.innerHTML = '<div style="font-size:17px;">まだ提出していません</div><div style="font-size:13px;font-weight:400;">下の「日報を提出」を押してください</div>';
+      st.style.display = "block";
+    }else{
+      st.style.display = "none";
+    }
+  }
+}
+async function sharePhoto(file){
+  try{
+    if(navigator.share && navigator.canShare && navigator.canShare({ files: [file] })){
+      await navigator.share({ files: [file] });
+      return "shared";
+    }
+  }catch(e){
+    if(e && e.name === "AbortError") return "cancel";
+    if(e && e.name === "NotAllowedError") return "retry";
+    return "error";
+  }
+  // 共有が使えない端末は、画像をダウンロードする
+  try{
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(file);
+    a.download = file.name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 10000);
+    return "download";
+  }catch(e){ return "error"; }
+}
+function photoMsg(r){
+  if(r === "shared")        showToast(isSaved ? "写真への保存の画面を閉じました。" : "続けて「日報を提出」を押してください。");
+  else if(r === "download") showToast(isSaved ? "画像を保存しました。" : "画像を保存しました。続けて「日報を提出」を押してください。");
+  else if(r === "cancel")   showToast("写真には保存していません。保存するときは「写真にもう一度保存」を押してください。", true);
+  else if(r === "retry")    showToast("画像ができました。「写真にもう一度保存」を押すと保存の画面が開きます。", true);
+  else                      showToast("保存の画面を開けませんでした。そのまま「日報を提出」はできます。", true);
+}
+async function saveToPhotos(){
+  if(photoBusy) return;
+  if(photoReady()){ photoMsg(await sharePhoto(photoSaved.file)); return; }
+  if(isSaved) return;
+  if(needConfirm === null){
+    document.getElementById("needRow").classList.add("err");
+    showToast("作業確認書を「不要」か「お客様へ渡す」から選んでください。", true);
+    try{ document.getElementById("needRow").scrollIntoView({ behavior: "smooth", block: "center" }); }catch(e){}
+    return;
+  }
+  if(previewBuilding){
+    showToast("日報の画像を作成しています。少しお待ちください。", true);
+    return;
+  }
+  if(!hasSignature){
+    showToast("ご署名をお願いします。（署名欄が空のままです）", true);
+    return;
+  }
+  photoBusy = true;
+  updateSignButtons();
+  let payload, file;
+  try{
+    payload = buildSignedPayload();
+    preparedImages.delete(payload.recordId);
+    file = await getImageFile(payload);
+  }catch(e){
+    showToast((e && e.message) || "日報の画像を作成できませんでした。", true);
+    return;
+  }finally{
+    photoBusy = false;
+    updateSignButtons();
+  }
+  photoSaved = { payload: payload, file: file };
+  updateSignButtons();
+  photoMsg(await sharePhoto(file));
+}
+window.addEventListener("load", function(){ updateSignButtons(); });
 
 /* =============================
   未送信バッジ（保存済みだが未送信の日報を可視化）
