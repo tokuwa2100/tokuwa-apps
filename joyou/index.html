@@ -169,7 +169,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
   .sigwrap{background:#fff;border-radius:12px;padding:14px;box-shadow:var(--shadow)}
   .siglabel{font-size:15px;margin-bottom:8px;font-weight:900}
-  canvas{width:100%;height:180px;border:2px solid #ccc;border-radius:10px;background:#fafafa;touch-action:none}
+  #sign{display:block;width:100%;height:180px;border:2px solid #ccc;border-radius:10px;background:#fafafa;touch-action:none}
   #previewCanvas{height:auto;border:0;border-radius:0;background:#fff;touch-action:auto}
   #afterSaveBtns.hidden{display:none}
   .sigbtns{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap}
@@ -421,7 +421,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "joyou";
-const APP_VERSION   = "1.7.0";
+const APP_VERSION   = "1.7.1";
 const APP_BUILD     = "2026-11-01";
 
 (function(){
@@ -1155,12 +1155,28 @@ function invalidatePhoto(){
   photoSaved = null;
   updateSignButtons();
 }
+/* 署名は、日報画像の署名欄に入る大きさ（高さ最大 (QR_BOX-20)×SHOT_SCALE）に縮めて記録する
+   （白地のJPEGにする。見た目は同じで、端末に残すデータが小さくなる） */
+function signatureForRecord(){
+  const maxH = (QR_BOX - 20) * SHOT_SCALE;
+  const r = Math.min(1, maxH / canvas.height);
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(canvas.width * r));
+  c.height = Math.max(1, Math.round(canvas.height * r));
+  const g = c.getContext("2d");
+  g.fillStyle = "#fff";                 // 署名欄は白地なので、白地のJPEGにして小さくする
+  g.fillRect(0, 0, c.width, c.height);
+  g.imageSmoothingEnabled = true;
+  g.imageSmoothingQuality = "high";
+  g.drawImage(canvas, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", 0.85);
+}
 function buildSignedPayload(){
   const draft = window.__TOKUWA_JOYOU_DRAFT__ || collectData();
   draft.needConfirm = needConfirm;
   resizeCanvasToDisplaySize();
   let signaturePng = "";
-  try{ signaturePng = canvas.toDataURL("image/png"); }catch(e){}
+  try{ signaturePng = signatureForRecord(); }catch(e){}
 
   const payload = { app:"joyou-nippo", type:"joyou", version:3, appVersion: APP_VERSION, appBuild: APP_BUILD, recordId: draft.recordId || newRecordId(), sent:false, driveSent:false, ...draft, signaturePng };
   return payload;
