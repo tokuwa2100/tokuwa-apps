@@ -220,6 +220,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       <button type="button" id="driveSendBtn" onclick="driveSendAll(true)" style="width:100%;padding:12px;margin-bottom:8px;font-size:15px;font-weight:700;color:#fff;background:#c62828;border:0;border-radius:8px;">今すぐドライブへ送信</button>
       <button type="button" onclick="clearUnsent()" style="width:100%;padding:10px;margin-top:8px;font-size:13px;color:#7f2f2a;background:transparent;border:1px solid #e57373;border-radius:8px;">未送信をすべて削除（テスト用）</button>
     </div>
+    <button class="btn btn-outline noshot" type="button" onclick="openHistory()" style="width:100%;margin:0 0 14px;padding:12px;font-size:16px;">📄 過去の日報を見る</button>
 
       <div class="section">
         <h2>基本情報</h2>
@@ -373,17 +374,13 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
         <canvas id="sign"></canvas>
         <div class="sigbtns">
           <button class="btn btn-gray" type="button" onclick="clearSign()">署名クリア</button>
-          <button class="btn btn-green" id="photoBtn" type="button" onclick="saveToPhotos()">署名して保存</button>
-        </div>
-        <div id="photoState" class="noshot" style="display:none;margin-top:12px;padding:12px;border-radius:10px;background:#fff3e0;border:2px solid #fb8c00;color:#a64a00;font-weight:700;line-height:1.6;text-align:center;"></div>
-        <div class="sigbtns">
-          <button class="btn btn-gray" id="saveBtn" type="button" onclick="saveAll()" disabled style="flex:1;padding:16px;font-size:18px;">日報を提出</button>
+          <button class="btn btn-green" id="photoBtn" type="button" onclick="openFinal()">署名して確認</button>
         </div>
         <div id="driveDone" class="noshot" style="display:none;margin-top:12px;padding:14px;border-radius:10px;text-align:center;font-weight:700;line-height:1.6;"></div>
         <div class="sigbtns hidden" id="afterSaveBtns">
           <button class="btn btn-gray" type="button" onclick="newReport()">新しい日報を作成</button>
         </div>
-        <div class="hint noshot">※「署名して保存」を押すと、上の日報（署名入り）を写真に保存できます（出てきた画面で「画像を保存」を選んでください）。続けて「日報を提出」を押すと、同じ画像が会社のGoogleドライブへ送られます。電波が無いときは端末に残り、つながったときに自動で送ります。</div>
+        <div class="hint noshot">※「署名して確認」を押すと、署名入りの日報が大きく表示されます。内容を確認して「提出する」を押すと、会社のGoogleドライブへ送られます。電波が無いときは端末に残り、つながったときに自動で送ります。提出した日報は、入力画面の「過去の日報を見る」で見返せます（3か月分）。</div>
       </div>
 
       <div class="footer">
@@ -391,6 +388,29 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       </div>
     </div>
 
+  </div>
+
+  <div id="historyView" class="noshot" style="display:none;position:fixed;inset:0;z-index:40;background:#f4f6f8;overflow:auto;-webkit-overflow-scrolling:touch;">
+    <div style="position:sticky;top:0;display:flex;align-items:center;gap:10px;padding:12px 16px;background:#fff;border-bottom:1px solid #ddd;">
+      <div style="flex:1;font-weight:800;font-size:17px;">過去の日報（3か月分）</div>
+      <button class="btn btn-gray" type="button" onclick="closeHistory()" style="padding:10px 16px;">閉じる</button>
+    </div>
+    <div id="historyList" style="padding:12px 16px 40px;"></div>
+  </div>
+
+  <div id="finalView" class="noshot" style="display:none;position:fixed;inset:0;z-index:50;background:#333;flex-direction:column;">
+    <div style="padding:12px 16px 4px;color:#fff;">
+      <div id="finalTitle" style="font-weight:800;font-size:18px;">最終確認</div>
+      <div id="finalMsg" style="font-size:13px;line-height:1.5;opacity:.9;"></div>
+    </div>
+    <div id="finalScroll" style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:8px 10px;">
+      <img id="finalImg" alt="日報" style="display:block;width:100%;height:auto;background:#fff;">
+    </div>
+    <div style="display:flex;gap:10px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:#222;">
+      <button class="btn btn-gray" id="finalBack" type="button" onclick="closeFinal()" style="flex:1;">戻って直す</button>
+      <button class="btn btn-gray" id="finalPhoto" type="button" onclick="finalToPhotos()" style="flex:1;display:none;">写真に保存</button>
+      <button class="btn btn-green" id="saveBtn" type="button" onclick="submitFinal()" style="flex:2;font-size:18px;">提出する</button>
+    </div>
   </div>
 
   <div id="toast"></div>
@@ -401,7 +421,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "joyou";
-const APP_VERSION   = "1.6.0";
+const APP_VERSION   = "1.7.0";
 const APP_BUILD     = "2026-11-01";
 
 (function(){
@@ -1064,7 +1084,7 @@ function setSavedState(saved){
 
 function saveAll(){
   if(isSaved) return; // 二重保存防止
-  if(photoBusy){ showToast("画像を作成しています。少しお待ちください。", true); return; }
+  if(photoBusy){ showToast("日報を作成しています。少しお待ちください。", true); return; }
 
   if(needConfirm === null){
     document.getElementById("needRow").classList.add("err");
@@ -1082,7 +1102,7 @@ function saveAll(){
   }
 
   if(!photoReady()){
-    showToast("先に「署名して保存」を押してください。", true);
+    showToast("先に「署名して確認」を押してください。", true);
     return;
   }
   const payload = photoSaved.payload;
@@ -1093,7 +1113,12 @@ function saveAll(){
     try{
       const arr = JSON.parse(localStorage.getItem(KEY) || "[]");
       arr.push(payload);
-      localStorage.setItem(KEY, JSON.stringify(arr));
+      try{
+        localStorage.setItem(KEY, JSON.stringify(arr));
+      }catch(e1){
+        trimHistoryForSpace(arr, payload);
+        localStorage.setItem(KEY, JSON.stringify(arr));
+      }
       storedOk = true;
     }catch(e){ storedOk = false; }
   }
@@ -1116,12 +1141,14 @@ function saveAll(){
 
 
 /* =============================
-  署名して保存（写真に保存）→ 日報を提出
-  ・「署名して保存」で、提出するのと同じ画像を作り、共有画面（「画像を保存」で写真へ）を開く
-  ・「日報を提出」は保存してから押せる。提出する画像は保存した画像と同じもの
+  署名して確認 → 最終確認（署名入りの日報を大きく表示）→ 提出する
+  ・最終確認で表示する画像 ＝ 会社のドライブへ送る画像
 ============================= */
 var photoSaved = null;   // { payload, file }
 var photoBusy = false;
+var finalMode = "";      // "confirm"（提出前の最終確認）／"view"（見返すだけ）
+var finalUrl = "";
+var finalFile = null;
 function photoReady(){ return !!(photoSaved && photoSaved.file); }
 function invalidatePhoto(){
   try{ if(photoSaved && photoSaved.payload && photoSaved.payload.recordId) preparedImages.delete(photoSaved.payload.recordId); }catch(e){}
@@ -1140,66 +1167,37 @@ function buildSignedPayload(){
 }
 function updateSignButtons(){
   const pb = document.getElementById("photoBtn");
-  const sb = document.getElementById("saveBtn");
-  const st = document.getElementById("photoState");
-  if(!pb || !sb) return;
+  if(!pb) return;
   pb.disabled = photoBusy;
-  pb.innerText = photoBusy ? "画像を作成中…" : (photoReady() ? "写真にもう一度保存" : "署名して保存");
-  pb.classList.toggle("btn-green", !photoReady());
-  pb.classList.toggle("btn-gray", photoReady());
-  if(isSaved){
-    sb.disabled = true; sb.innerText = "提出済み";
-    sb.classList.add("btn-gray"); sb.classList.remove("btn-green");
-  }else if(photoReady()){
-    sb.disabled = false; sb.innerText = "日報を提出";
-    sb.classList.add("btn-green"); sb.classList.remove("btn-gray");
-  }else{
-    sb.disabled = true; sb.innerText = "日報を提出";
-    sb.classList.add("btn-gray"); sb.classList.remove("btn-green");
-  }
-  sb.style.opacity = sb.disabled && !isSaved ? ".5" : "";
-  if(st){
-    if(photoReady() && !isSaved){
-      st.innerHTML = '<div style="font-size:17px;">まだ提出していません</div><div style="font-size:13px;font-weight:400;">下の「日報を提出」を押してください</div>';
-      st.style.display = "block";
-    }else{
-      st.style.display = "none";
-    }
-  }
+  pb.innerText = photoBusy ? "日報を作成中…" : (isSaved ? "提出した日報を見る" : "署名して確認");
 }
-async function sharePhoto(file){
-  try{
-    if(navigator.share && navigator.canShare && navigator.canShare({ files: [file] })){
-      await navigator.share({ files: [file] });
-      return "shared";
-    }
-  }catch(e){
-    if(e && e.name === "AbortError") return "cancel";
-    if(e && e.name === "NotAllowedError") return "retry";
-    return "error";
-  }
-  // 共有が使えない端末は、画像をダウンロードする
-  try{
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(file);
-    a.download = file.name;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 10000);
-    return "download";
-  }catch(e){ return "error"; }
+function showFinal(file, mode, title, msg){
+  try{ if(finalUrl) URL.revokeObjectURL(finalUrl); }catch(e){}
+  finalUrl = URL.createObjectURL(file);
+  finalFile = file;
+  finalMode = mode;
+  document.getElementById("finalImg").src = finalUrl;
+  document.getElementById("finalTitle").innerText = title;
+  document.getElementById("finalMsg").innerText = msg || "";
+  document.getElementById("saveBtn").style.display = mode === "confirm" ? "" : "none";
+  document.getElementById("finalPhoto").style.display = mode === "confirm" ? "none" : "";
+  document.getElementById("finalBack").innerText = mode === "confirm" ? "戻って直す" : "閉じる";
+  const v = document.getElementById("finalView");
+  v.style.display = "flex";
+  document.getElementById("finalScroll").scrollTop = 0;
+  document.body.style.overflow = "hidden";
 }
-function photoMsg(r){
-  if(r === "shared")        showToast(isSaved ? "写真への保存の画面を閉じました。" : "続けて「日報を提出」を押してください。");
-  else if(r === "download") showToast(isSaved ? "画像を保存しました。" : "画像を保存しました。続けて「日報を提出」を押してください。");
-  else if(r === "cancel")   showToast("写真には保存していません。保存するときは「写真にもう一度保存」を押してください。", true);
-  else if(r === "retry")    showToast("画像ができました。「写真にもう一度保存」を押すと保存の画面が開きます。", true);
-  else                      showToast("保存の画面を開けませんでした。そのまま「日報を提出」はできます。", true);
+function closeFinal(){
+  document.getElementById("finalView").style.display = "none";
+  if(document.getElementById("historyView").style.display !== "block") document.body.style.overflow = "";
+  finalMode = "";
 }
-async function saveToPhotos(){
+async function openFinal(){
   if(photoBusy) return;
-  if(photoReady()){ photoMsg(await sharePhoto(photoSaved.file)); return; }
-  if(isSaved) return;
+  if(isSaved){
+    if(photoReady()) showFinal(photoSaved.file, "view", "提出した日報", "会社のドライブへ送った日報です。");
+    return;
+  }
   if(needConfirm === null){
     document.getElementById("needRow").classList.add("err");
     showToast("作業確認書を「不要」か「お客様へ渡す」から選んでください。", true);
@@ -1214,25 +1212,143 @@ async function saveToPhotos(){
     showToast("ご署名をお願いします。（署名欄が空のままです）", true);
     return;
   }
-  photoBusy = true;
-  updateSignButtons();
-  let payload, file;
-  try{
-    payload = buildSignedPayload();
-    preparedImages.delete(payload.recordId);
-    file = await getImageFile(payload);
-  }catch(e){
-    showToast((e && e.message) || "日報の画像を作成できませんでした。", true);
-    return;
-  }finally{
-    photoBusy = false;
+  if(!photoReady()){
+    photoBusy = true;
     updateSignButtons();
+    let payload, file;
+    try{
+      payload = buildSignedPayload();
+      preparedImages.delete(payload.recordId);
+      file = await getImageFile(payload);
+    }catch(e){
+      showToast((e && e.message) || "日報の画像を作成できませんでした。", true);
+      return;
+    }finally{
+      photoBusy = false;
+      updateSignButtons();
+    }
+    photoSaved = { payload: payload, file: file };
   }
-  photoSaved = { payload: payload, file: file };
-  updateSignButtons();
-  photoMsg(await sharePhoto(file));
+  showFinal(photoSaved.file, "confirm", "最終確認", "署名と内容を確認して「提出する」を押してください。直すときは「戻って直す」。");
 }
-window.addEventListener("load", function(){ updateSignButtons(); });
+function submitFinal(){
+  if(finalMode !== "confirm") return;
+  saveAll();
+  if(isSaved){
+    closeFinal();
+    try{ document.getElementById("driveDone").scrollIntoView({ behavior: "smooth", block: "center" }); }catch(e){}
+  }
+}
+async function sharePhoto(file){
+  try{
+    if(navigator.share && navigator.canShare && navigator.canShare({ files: [file] })){
+      await navigator.share({ files: [file] });
+      return "shared";
+    }
+  }catch(e){
+    if(e && e.name === "AbortError") return "cancel";
+    if(e && e.name === "NotAllowedError") return "retry";
+    return "error";
+  }
+  try{
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(file);
+    a.download = file.name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 10000);
+    return "download";
+  }catch(e){ return "error"; }
+}
+async function finalToPhotos(){
+  if(!finalFile) return;
+  const r = await sharePhoto(finalFile);
+  if(r === "download") showToast("画像を保存しました。");
+  else if(r === "retry") showToast("もう一度「写真に保存」を押してください。", true);
+  else if(r === "error") showToast("保存の画面を開けませんでした。", true);
+}
+
+/* =============================
+  過去の日報（端末に残っている提出済みの日報を見返す）
+  ・3か月より古い日報は、会社のドライブへ送れたものから自動で消す
+============================= */
+const HISTORY_DAYS = 90;
+var historyList = [];
+function recTime(r){
+  const t = Date.parse((r && (r.createdAt || r.savedAt)) || "");
+  if(!isNaN(t)) return t;
+  const d = Date.parse(((r && r.date) || "") + "T00:00:00");
+  return isNaN(d) ? 0 : d;
+}
+function recKey(r){ return (r && (r.recordId || r.id || r.createdAt)) || ""; }
+function unsentKeys(){
+  const set = new Set();
+  try{ driveUnsentRecords().forEach(function(r){ set.add(recKey(r)); }); }catch(e){}
+  return set;
+}
+function pruneHistory(){
+  try{
+    const arr = loadRecords();
+    if(!arr.length) return;
+    const unsent = unsentKeys();
+    const limit = Date.now() - HISTORY_DAYS * 86400000;
+    const keep = arr.filter(function(r){
+      if(!r || typeof r !== "object") return false;
+      const t = recTime(r);
+      return unsent.has(recKey(r)) || t === 0 || t >= limit;
+    });
+    if(keep.length !== arr.length) localStorage.setItem(RECORDS_KEY, JSON.stringify(keep));
+  }catch(e){}
+}
+// 端末の容量が足りないとき：送信済みの古い日報から消す（未送信と今回の日報は残す）
+function trimHistoryForSpace(arr, current){
+  const unsent = unsentKeys();
+  const order = arr.map(function(r, i){ return { r: r, i: i }; })
+    .filter(function(x){ return x.r !== current && !unsent.has(recKey(x.r)); })
+    .sort(function(a, b){ return recTime(a.r) - recTime(b.r); });
+  const n = Math.max(1, Math.ceil(order.length / 3));
+  const drop = new Set(order.slice(0, n).map(function(x){ return x.i; }));
+  for(let i = arr.length - 1; i >= 0; i--){ if(drop.has(i)) arr.splice(i, 1); }
+}
+function openHistory(){
+  pruneHistory();
+  const unsent = unsentKeys();
+  historyList = loadRecords().filter(function(r){ return r && typeof r === "object"; })
+    .sort(function(a, b){ return recTime(b) - recTime(a); });
+  const box = document.getElementById("historyList");
+  if(!historyList.length){
+    box.innerHTML = '<div style="padding:30px 0;text-align:center;color:#777;">この端末で提出した日報はまだありません。</div>';
+  }else{
+    box.innerHTML = historyList.map(function(r, i){
+      const who = r.client || r.customer || "";
+      const ng = unsent.has(recKey(r));
+      return '<div onclick="viewHistory(' + i + ')" style="background:#fff;border-radius:10px;padding:12px 14px;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,.12);cursor:pointer;">'
+        + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">'
+        + '<div style="font-weight:800;font-size:16px;">' + escapeHtmlLite(r.date || "") + '</div>'
+        + '<div style="font-size:12px;font-weight:700;padding:2px 8px;border-radius:10px;' + (ng ? 'background:#fdecea;color:#b00020;">未送信' : 'background:#e8f5e9;color:#1b5e20;">送信済み') + '</div>'
+        + '</div>'
+        + '<div style="font-size:14px;margin-top:4px;">' + escapeHtmlLite(who) + (who && r.site ? '　' : '') + escapeHtmlLite(r.site || "") + '</div>'
+        + '</div>';
+    }).join("");
+  }
+  document.getElementById("historyView").style.display = "block";
+  document.body.style.overflow = "hidden";
+}
+function closeHistory(){
+  document.getElementById("historyView").style.display = "none";
+  document.body.style.overflow = "";
+}
+async function viewHistory(i){
+  const r = historyList[i];
+  if(!r) return;
+  showToast("日報を表示しています…");
+  let file;
+  try{ file = await getImageFile(r); }
+  catch(e){ showToast("この日報は画像にできませんでした（古い版で保存した日報です）。", true); return; }
+  const who = r.client || r.customer || "";
+  showFinal(file, "view", "過去の日報", [r.date || "", who, r.site || ""].filter(Boolean).join("　"));
+}
+window.addEventListener("load", function(){ updateSignButtons(); pruneHistory(); });
 
 /* =============================
   未送信バッジ（保存済みだが未送信の日報を可視化）
