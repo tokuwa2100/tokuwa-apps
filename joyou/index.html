@@ -237,13 +237,6 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
           </div>
         </div>
 
-        <label style="margin-top:12px;">作業確認書</label>
-        <div class="pillrow" id="needRow">
-          <div class="pill orange" id="needNo"  onclick="setNeed(false)">不要</div>
-          <div class="pill orange" id="needYes" onclick="setNeed(true)">お客様へ渡す</div>
-        </div>
-        <div class="hint">※お客様から確認書を求められた場合は「お客様へ渡す」を選んでください。事務所側に発行待ちとして表示されます。</div>
-
         <label style="margin-top:12px;">作業内容</label>
         <textarea id="workDesc" placeholder="例：○○部のハツリ工事　周囲構造物に注意しながら施工"></textarea>
 
@@ -309,6 +302,16 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     <div id="page-confirm" class="hidden">
       <div id="statusBanner" class="banner ng">未保存</div>
 
+      <div class="card" style="padding:10px;">
+        <div style="font-weight:700;margin-bottom:8px;">本日の作業内容の確認をお願いいたします。</div>
+        <div id="previewWrap" style="position:relative;background:#eee;border-radius:6px;overflow:hidden;">
+          <canvas id="previewCanvas" style="display:block;width:100%;height:auto;"></canvas>
+          <div id="previewBusy" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.75);font-weight:700;color:#555;">日報を作成しています…</div>
+        </div>
+        <div class="hint noshot">※この画像がそのまま会社へ送られます。ピンチで拡大できます。署名は下の枠に書くと、画像の署名欄に入ります。</div>
+      </div>
+
+      <div id="confirmText" class="hidden">
       <div class="card">
         <div class="item">作業日：<span id="c-date"></span></div>
         <div class="item">お客様名：<span id="c-customer"></span> 様</div>
@@ -352,18 +355,29 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
         </div>
       </div>
 
+      </div><!-- /confirmText -->
+
+      <div class="card">
+        <label style="margin-top:0;">作業確認書（お客様にお聞きください）</label>
+        <div class="pillrow" id="needRow">
+          <div class="pill orange" id="needNo"  onclick="setNeed(false)">不要</div>
+          <div class="pill orange" id="needYes" onclick="setNeed(true)">お客様へ渡す</div>
+        </div>
+        <div class="hint">※お客様から確認書を求められた場合は「お客様へ渡す」を選んでください。事務所で発行して後日お渡しします。</div>
+      </div>
+
       <div class="sigwrap">
         <div class="siglabel">ご署名</div>
         <canvas id="sign"></canvas>
         <div class="sigbtns">
           <button class="btn btn-gray" type="button" onclick="clearSign()">署名クリア</button>
-          <button class="btn btn-green" id="saveBtn" type="button" onclick="saveAll()">保存（提出）</button>
+          <button class="btn btn-green" id="saveBtn" type="button" onclick="saveAll()">署名して送信</button>
         </div>
         <div id="driveDone" class="noshot" style="display:none;margin-top:12px;padding:14px;border-radius:10px;text-align:center;font-weight:700;line-height:1.6;"></div>
         <div class="sigbtns hidden" id="afterSaveBtns">
           <button class="btn btn-gray" type="button" onclick="newReport()">新しい日報を作成</button>
         </div>
-        <div class="hint noshot">※「保存（提出）」を押すと、日報（B5画像・集計用QR入り）が会社のGoogleドライブへ自動で送られます。電波が無いときは端末に残り、つながったときに自動で送ります。</div>
+        <div class="hint noshot">※「署名して送信」を押すと、上の日報（署名入り）が会社のGoogleドライブへ送られます。電波が無いときは端末に残り、つながったときに自動で送ります。</div>
       </div>
 
       <div class="footer">
@@ -381,8 +395,8 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "joyou";
-const APP_VERSION   = "1.4.0";
-const APP_BUILD     = "2026-10-30";
+const APP_VERSION   = "1.5.0";
+const APP_BUILD     = "2026-11-01";
 
 (function(){
   const tv = document.getElementById("titleVer");
@@ -478,6 +492,8 @@ function setNeed(v){
   document.getElementById("needNo").classList.toggle("active", v===false);
   document.getElementById("needYes").classList.toggle("active", v===true);
   document.getElementById("needRow").classList.remove("err");
+  const d = window.__TOKUWA_JOYOU_DRAFT__;
+  if(d && d.needConfirm !== v){ d.needConfirm = v; previewStart(d); }
 }
 
 /* 集計アプリ側の並び順と完全に一致させること */
@@ -740,7 +756,6 @@ function goConfirm(){
   if(!(document.getElementById("customer").value || "").trim()) mark(document.getElementById("customer"));
   if(!(document.getElementById("site").value || "").trim()) mark(document.getElementById("site"));
   if(!(document.getElementById("workDesc").value || "").trim()) mark(document.getElementById("workDesc"));
-  if(needConfirm === null) mark(document.getElementById("needRow"));
 
   const cards = document.querySelectorAll("#workers .workerCard");
   if(cards.length === 0){
@@ -883,6 +898,9 @@ function goConfirm(){
 
   setSavedState(false);
   window.__TOKUWA_JOYOU_DRAFT__ = data;
+  data.recordId = newRecordId();          // 送る画像のQRと同じ番号にする
+  data.needConfirm = needConfirm;
+  previewStart(data);
 
   document.getElementById("page-input").classList.add("hidden");
   document.getElementById("page-confirm").classList.remove("hidden");
@@ -957,6 +975,7 @@ function endDraw(evt){
   evt.preventDefault?.();
   isDrawing = false;
   last = null;
+  previewDrawSig();
 }
 canvas.addEventListener("mousedown", startDraw);
 canvas.addEventListener("mousemove", moveDraw);
@@ -971,6 +990,7 @@ function clearSign(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   hasSignature = false;
   setSavedState(false);
+  previewDrawSig();
 }
 
 /* =============================
@@ -1022,14 +1042,14 @@ function setSavedState(saved){
   if(saved){
     banner.classList.remove("ng"); banner.classList.add("ok");
     banner.innerText = "提出完了（保存済み）";
-    btn.innerText = "保存済み";
+    btn.innerText = "送信済み";
     btn.classList.add("btn-gray");
     btn.classList.remove("btn-green");
     afterBtns.classList.remove("hidden");
   }else{
     banner.classList.remove("ok"); banner.classList.add("ng");
     banner.innerText = "未保存";
-    btn.innerText = "保存（提出）";
+    btn.innerText = "署名して送信";
     btn.classList.add("btn-green");
     btn.classList.remove("btn-gray");
     afterBtns.classList.add("hidden");
@@ -1040,17 +1060,28 @@ function setSavedState(saved){
 function saveAll(){
   if(isSaved) return; // 二重保存防止
 
+  if(needConfirm === null){
+    document.getElementById("needRow").classList.add("err");
+    showToast("作業確認書を「不要」か「お客様へ渡す」から選んでください。", true);
+    try{ document.getElementById("needRow").scrollIntoView({ behavior: "smooth", block: "center" }); }catch(e){}
+    return;
+  }
+  if(previewBuilding){
+    showToast("日報の画像を作成しています。少しお待ちください。", true);
+    return;
+  }
   if(!hasSignature){
     showToast("ご署名をお願いします。（署名欄が空のままです）", true);
     return;
   }
 
   const draft = window.__TOKUWA_JOYOU_DRAFT__ || collectData();
+  draft.needConfirm = needConfirm;
   resizeCanvasToDisplaySize();
   let signaturePng = "";
   try{ signaturePng = canvas.toDataURL("image/png"); }catch(e){}
 
-  const payload = { app:"joyou-nippo", type:"joyou", version:3, appVersion: APP_VERSION, appBuild: APP_BUILD, recordId: newRecordId(), sent:false, driveSent:false, ...draft, signaturePng };
+  const payload = { app:"joyou-nippo", type:"joyou", version:3, appVersion: APP_VERSION, appBuild: APP_BUILD, recordId: draft.recordId || newRecordId(), sent:false, driveSent:false, ...draft, signaturePng };
 
   let storedOk = false;
   if(storageAvailable()){
@@ -1423,6 +1454,8 @@ function newReport(){
   hasSignature = false;
   setSavedState(false);
   window.__TOKUWA_JOYOU_DRAFT__ = null;
+  previewSeq++; previewBase.img = null; previewBase.sigBox = null;
+  try{ const pc = document.getElementById("previewCanvas"); pc.width = 1; pc.height = 1; }catch(e){}
 
   backToEdit();
   window.scrollTo(0,0);
@@ -1482,7 +1515,7 @@ const QR_MAGIC = "TKW1";                  // 集計表が「徳和の日報QR」
 /* QRに入れるデータ（署名画像は大きいので入れない。署名は画像の方で確認） */
 function packForQR(p){
   const d = Object.assign({}, p);
-  delete d.signaturePng; delete d.sent; delete d.sentAt;
+  delete d.signaturePng; delete d.sent; delete d.sentAt; delete d._preview;
   const z = fflate.deflateSync(fflate.strToU8(JSON.stringify(d)), { level: 9 });
   const head = fflate.strToU8(QR_MAGIC);
   const out = new Uint8Array(head.length + z.length);
@@ -1520,6 +1553,56 @@ function drawQR(g, qr, x, y, size){
 function rptEsc(s){ return escapeHtmlLite(s); }
 
 /* 1件の日報 → B5縦のPNG（Blob） */
+let lastSigBox = null;
+
+/* =============================
+  確認画面の日報プレビュー（送る画像と同じもの）
+  ・署名なしで1枚作って表示し、署名は書くたびに署名欄へ重ねる
+============================= */
+let previewBuilding = false, previewSeq = 0;
+const previewBase = { img: null, sigBox: null };
+function previewStart(p){
+  const seq = ++previewSeq;
+  const busy = document.getElementById("previewBusy");
+  previewBuilding = true;
+  if(busy) busy.style.display = "flex";
+  (async function(){
+    try{
+      const q = Object.assign({}, p, { signaturePng: "", _preview: true });
+      const blob = await buildReportImage(q);
+      if(seq !== previewSeq) return;
+      const img = await new Promise(function(res, rej){
+        const im = new Image();
+        im.onload = function(){ res(im); };
+        im.onerror = rej;
+        im.src = URL.createObjectURL(blob);
+      });
+      if(seq !== previewSeq) return;
+      previewBase.img = img; previewBase.sigBox = lastSigBox;
+      previewDrawSig();
+    }catch(e){
+      if(seq === previewSeq) showToast((e && e.message) || "日報の画像を作成できませんでした。", true);
+    }finally{
+      if(seq === previewSeq){ previewBuilding = false; if(busy) busy.style.display = "none"; }
+    }
+  })();
+}
+function previewDrawSig(){
+  const pc = document.getElementById("previewCanvas");
+  const img = previewBase.img;
+  if(!pc || !img) return;
+  if(pc.width !== img.width || pc.height !== img.height){ pc.width = img.width; pc.height = img.height; }
+  const g = pc.getContext("2d");
+  g.drawImage(img, 0, 0);
+  const box = previewBase.sigBox;
+  if(!box || !hasSignature || !canvas.width) return;
+  // 画像の署名欄と同じ入れ方（枠に収めて中央に）
+  const maxH = (QR_BOX - 20) * SHOT_SCALE;
+  const r = Math.min(box.w / canvas.width, Math.min(box.h, maxH) / canvas.height, 1 * SHOT_SCALE);
+  const w = canvas.width * r, h = canvas.height * r;
+  g.drawImage(canvas, box.x + (box.w - w) / 2, box.y + (box.h - h) / 2, w, h);
+}
+
 async function buildReportImage(p){
   if(typeof html2canvas === "undefined" || typeof qrcode === "undefined" || typeof fflate === "undefined"){
     throw new Error("画像作成の部品を読み込めませんでした。ページを開き直してください。");
@@ -1577,7 +1660,7 @@ async function buildReportImage(p){
   <div class="rp-body"><div class="rp-in">${renderReportBody(p)}</div></div>
   <div class="rp-foot">
     <div class="rp-sig"><div class="lb">ご署名（本日の作業内容を確認しました）</div>
-      <div class="im">${p.signaturePng ? `<img src="${p.signaturePng}">` : `<span class="rp-muted">（署名なし）</span>`}</div></div>
+      <div class="im">${p.signaturePng ? `<img src="${p.signaturePng}">` : p._preview ? "" : `<span class="rp-muted">（署名なし）</span>`}</div></div>
     <div class="rp-qr"><div class="box"></div>集計用QR（集計表アプリで読取）</div>
   </div>
   <div class="rp-id"><span>${rptEsc(p.recordId || p.id || "")}</span><span>作成 ${rptEsc(createdStr)}　${rptEsc(REPORT_APP)} v${rptEsc(p.appVersion || APP_VERSION)}</span></div>
@@ -1612,6 +1695,8 @@ async function buildReportImage(p){
     const base = rp.getBoundingClientRect();
     g.imageSmoothingEnabled = false;
     drawQR(g, qr, (box.left - base.left) * SHOT_SCALE, (box.top - base.top) * SHOT_SCALE, QR_BOX * SHOT_SCALE);
+    const sb = page.querySelector(".rp-sig .im").getBoundingClientRect();
+    lastSigBox = { x: (sb.left - base.left) * SHOT_SCALE, y: (sb.top - base.top) * SHOT_SCALE, w: sb.width * SHOT_SCALE, h: sb.height * SHOT_SCALE };
 
     const blob = await new Promise(res => out.toBlob(res, "image/png"));
     if(!blob) throw new Error("画像の作成に失敗しました。");
