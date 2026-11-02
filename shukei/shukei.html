@@ -404,6 +404,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
 .dv-rec-btns button { flex:1; min-width:120px; padding:8px; border-radius:9px; border:1.5px solid var(--border); background:#fff; font-family:inherit; font-size:12.5px; font-weight:800; color:var(--text); cursor:pointer; }
 .dv-rec-btns button.pri { background:var(--primary); border-color:var(--primary); color:#fff; }
 .dv-rec .ed-meta { margin:6px 0 0; }
+.rv-orig { border:1px solid var(--border); border-radius:10px; overflow:hidden; background:#f3f4f6; }
+.rv-orig img { display:block; width:100%; height:auto; }
+.rv-orig .rv-ld { padding:40px 10px; text-align:center; color:var(--text2); font-size:13px; }
+.rv-btns { display:flex; gap:8px; margin:10px 0 4px; flex-wrap:wrap; }
+.rv-btns button { flex:1; min-width:140px; padding:9px; border-radius:9px; border:1.5px solid var(--border); background:#fff; font-family:inherit; font-size:12.5px; font-weight:800; color:var(--text); cursor:pointer; }
+.rv-btns button.pri { background:var(--green); border-color:var(--green); color:#fff; }
+.rv-badge { display:inline-block; font-size:11px; font-weight:800; padding:2px 8px; border-radius:999px; background:#fff3cd; color:#7c4a00; margin-bottom:6px; }
+.rv-badge.ok { background:var(--green-light); color:var(--green); }
+#cf-print img.rv-print { width:100%; height:auto; display:block; page-break-inside:avoid; }
 .ed-sec-t { font-size:13px; font-weight:900; color:var(--text); border-left:4px solid var(--orange); padding-left:8px; margin-bottom:8px; }
 .ed-row { display:flex; flex-wrap:wrap; gap:8px 10px; align-items:flex-end; }
 .ed-line { padding:6px 0; border-bottom:1px dashed var(--border); }
@@ -598,7 +607,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
 
   <!-- 作業確認書 -->
   <div class="card hidden" id="confirm-card">
-    <div class="card-title amber">📝 作業確認書</div>
+    <div class="card-title amber">📝 お客様へ渡す日報（現場でサインされた原本）</div>
     <div id="cf-alert"></div>
     <div id="cf-unknown"></div>
     <div id="cf-pending"></div>
@@ -700,7 +709,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "shukei";
-const APP_VERSION   = "1.4.0";
+const APP_VERSION   = "1.5.0";
 const APP_BUILD     = "2026-11-02";
 
 (function(){
@@ -2614,65 +2623,79 @@ function renderConfirmCard(){
   document.getElementById("cf-company").classList.remove("hidden");
 
   const issuedKeys = k => cfDocs[k] && cfDocs[k].no;
-  const pending = groups.filter(g => cfNeedState(g) === "yes" && !issuedKeys(g.key));
+  const pending = groups.filter(g => cfNeedState(g) === "yes" && !issuedKeys(g.key) && !cfSkip[g.key]);
   const unknown = groups.filter(g => cfNeedState(g) === "unknown" && !issuedKeys(g.key) && !cfSkip[g.key]);
   const issued  = groups.filter(g => issuedKeys(g.key));
+  document.getElementById("cf-company").classList.add("hidden");   // 番号付きの発行はやめたので会社情報の欄は出さない
 
   const alertEl = document.getElementById("cf-alert");
   let al = "";
-  if(pending.length) al += `<div class="cf-alert">⚠️ 作業確認書の発行待ち ${pending.length}件（現場で「お客様へ渡す」と選択された日報です）</div>`;
-  if(unknown.length) al += `<div class="cf-alert" style="border-color:var(--danger);color:#b91c1c;background:#fef2f2;">🚨 作業確認書の要否が未記入の日報が ${unknown.length}件あります。現場に確認して、下で「不要」か「発行」を選んでください。</div>`;
-  if(!pending.length && !unknown.length) al += `<div class="hint" style="margin-bottom:12px;">発行待ち・未記入はありません。</div>`;
+  if(pending.length) al += `<div class="cf-alert">⚠️ お客様へ渡す日報が ${pending.length}件あります（現場で「お客様へ渡す」と選択された日報です。原本画像をPDFや画像でお渡しください）</div>`;
+  if(unknown.length) al += `<div class="cf-alert" style="border-color:var(--danger);color:#b91c1c;background:#fef2f2;">🚨 渡す／不要が未記入の日報が ${unknown.length}件あります。現場に確認して、下で「不要」か「渡し済み」にしてください。</div>`;
+  if(!pending.length && !unknown.length) al += `<div class="hint" style="margin-bottom:12px;">お渡し待ち・未記入はありません。</div>`;
   alertEl.innerHTML = al;
 
-  document.getElementById("cf-unknown").innerHTML = unknown.length ? `
-    <div class="card-title amber">🚨 要否が未記入（チェック漏れの可能性）</div>
-    ${unknown.map(g=>`
-      <div class="cf-item" style="border-color:var(--danger);">
-        <div class="cf-info">
-          <div class="cf-t1">${esc(g.client)} 様<span class="cf-badge warn">${esc(cfKindLabel(g.type))}</span></div>
-          <div class="cf-t2">${esc(cfDateSlash(g.date))}${esc(cfYoubi(g.date))}　${esc(g.site)}</div>
-        </div>
-        <button class="btn btn-outline" onclick="cfMarkNoNeed('${esc(g.key).replace(/'/g,"\\'")}')">不要</button>
-        <button class="btn btn-green" onclick="cfIssue('${esc(g.key).replace(/'/g,"\\'")}')">発行する</button>
-      </div>`).join("")}
-    <div class="hint">要否の項目が無かった頃の日報や、選択が保存されていない日報がここに出ます。</div>` : "";
-
-  document.getElementById("cf-pending").innerHTML = pending.map(g=>`
+  const Q = k => esc(k).replace(/'/g, "\\'");
+  const row = (g, extraBadge, btns) => `
     <div class="cf-item">
       <div class="cf-info">
-        <div class="cf-t1">${esc(g.client)} 様<span class="cf-badge">${esc(cfKindLabel(g.type))}</span></div>
-        <div class="cf-t2">${esc(cfDateSlash(g.date))}${esc(cfYoubi(g.date))}　${esc(g.site)}</div>
-      </div>
-      <button class="btn btn-green" onclick="cfIssue('${esc(g.key).replace(/'/g,"\\\\'")}')">作業確認書を発行</button>
-    </div>`).join("");
+        <div class="cf-t1">${esc(g.client)} 様<span class="cf-badge">${esc(cfKindLabel(g.type))}</span>${extraBadge || ""}</div>
+        <div class="cf-t2">${esc(cfDateSlash(g.date))}${esc(cfYoubi(g.date))}　${esc(g.site)}${g.recs.length > 1 ? `　（日報 ${g.recs.length}件）` : ""}</div>
+      </div>${btns}
+    </div>`;
+  const hasImg = g => g.recs.some(r => { const w = TK.reports.get(String(r.id)); return w && w.imageId; });
+  const imgBadge = g => hasImg(g) ? "" : `<span class="cf-badge warn">原本画像なし</span>`;
 
-  document.getElementById("cf-issued").innerHTML = issued.length ? `
-    <div class="card-title green" style="margin-top:18px;">発行済み</div>
-    ${issued.map(g=>{
+  document.getElementById("cf-unknown").innerHTML = unknown.length ? `
+    <div class="card-title amber">🚨 渡す／不要が未記入（チェック漏れの可能性）</div>
+    ${unknown.map(g => row(g, imgBadge(g),
+      `<button class="btn btn-outline" onclick="cfMarkNoNeed('${Q(g.key)}')">不要</button>
+       <button class="btn btn-green" onclick="cfHandOpen('${Q(g.key)}')">原本を出す</button>
+       <button class="btn btn-outline" onclick="cfMarkHanded('${Q(g.key)}')">渡し済み</button>`)).join("")}
+    <div class="hint">要否の項目が無かった頃の日報や、選択が保存されていない日報がここに出ます。</div>` : "";
+
+  document.getElementById("cf-pending").innerHTML = pending.map(g => row(g, imgBadge(g),
+      `<button class="btn btn-green" onclick="cfHandOpen('${Q(g.key)}')">原本を出す</button>
+       <button class="btn btn-outline" onclick="cfMarkHanded('${Q(g.key)}')">渡し済みにする</button>`)).join("");
+
+  let tail = "";
+  const handed = groups.filter(g => cfSkip[g.key] && cfSkip[g.key].handed && !issuedKeys(g.key));
+  if(handed.length){
+    tail += `<div class="card-title green" style="margin-top:18px;">渡し済み</div>` + handed.map(g => row(g,
+      `<span class="cf-badge">${esc(cfSkip[g.key].at)} ${esc(cfSkip[g.key].by || "")}</span>`,
+      `<button class="btn btn-outline" onclick="cfHandOpen('${Q(g.key)}')">原本を出す</button>
+       <button class="btn btn-outline" onclick="cfUnmarkNoNeed('${Q(g.key)}')">戻す</button>`)).join("");
+  }
+  if(issued.length){
+    tail += `<div class="card-title green" style="margin-top:18px;">以前に番号付きで発行したもの</div>` + issued.map(g => {
       const d = cfDocs[g.key];
       return `<div class="cf-item">
         <div class="cf-info">
           <div class="cf-t1">No. ${esc(d.no)}　${esc(d.sheet.customer)} 様<span class="cf-badge">${esc(cfKindLabel(g.type))}</span>${d.edits && d.edits.length ? '<span class="cf-badge warn">訂正あり</span>' : ''}</div>
           <div class="cf-t2">${esc(cfDateSlash(g.date))}　${esc(d.sheet.site)}　／　${esc(cfDateJP(d.issuedAt))} 発行</div>
         </div>
-        <button class="btn btn-outline" onclick="cfOpen('${esc(g.key).replace(/'/g,"\\\\'")}')">開く</button>
+        <button class="btn btn-outline" onclick="cfOpen('${Q(g.key)}')">開く</button>
       </div>`;
-    }).join("")}` : "";
-
-  const skipped = groups.filter(g => cfSkip[g.key] && !issuedKeys(g.key));
-  if(skipped.length){
-    document.getElementById("cf-issued").insertAdjacentHTML("beforeend", `
-      <div class="card-title" style="margin-top:18px;">不要として確認済み</div>
-      ${skipped.map(g=>`
-        <div class="cf-item">
-          <div class="cf-info">
-            <div class="cf-t1">${esc(g.client)} 様<span class="cf-badge">${esc(cfKindLabel(g.type))}</span></div>
-            <div class="cf-t2">${esc(cfDateSlash(g.date))}　${esc(g.site)}　／　${esc(cfSkip[g.key].at)} 確認</div>
-          </div>
-          <button class="btn btn-outline" onclick="cfUnmarkNoNeed('${esc(g.key).replace(/'/g,"\\'")}')">戻す</button>
-        </div>`).join("")}`);
+    }).join("");
   }
+  const skipped = groups.filter(g => cfSkip[g.key] && !cfSkip[g.key].handed && !issuedKeys(g.key));
+  if(skipped.length){
+    tail += `<div class="card-title" style="margin-top:18px;">不要として確認済み</div>` + skipped.map(g => row(g,
+      `<span class="cf-badge">${esc(cfSkip[g.key].at)} 確認</span>`,
+      `<button class="btn btn-outline" onclick="cfUnmarkNoNeed('${Q(g.key)}')">戻す</button>`)).join("");
+  }
+  document.getElementById("cf-issued").innerHTML = tail;
+}
+function cfHandOpen(key){
+  const g = cfGroups().find(x => x.key === key);
+  if(!g){ showToast("⚠️ 日報が見つかりません"); return; }
+  dvOpenRecs(g.recs.map(r => String(r.id)), `${g.client} 様　${g.site}`, `${cfDateSlash(g.date)}${cfYoubi(g.date)}　${cfKindLabel(g.type)}　／　お客様へ渡す原本`);
+}
+function cfMarkHanded(key){
+  cfSkip[key] = { at: cfToday(), handed: true, by: tkEditor() };
+  cfSaveSkip();
+  renderConfirmCard();
+  showToast("✅ 渡し済みにしました");
 }
 
 function cfIssue(key){
@@ -3180,12 +3203,30 @@ function dvOpen(dateKey){
     `<div class="dv-sub">日報 ${dvMap[dateKey].length}件</div></div>`;
   document.getElementById("dv-body").innerHTML = dvBuildBody(dateKey);
   document.getElementById("dv-body").scrollTop = 0;
-  ov.dataset.date = dateKey;
+  rvLoadImgs(document.getElementById("dv-body"));
+  ov.dataset.date = dateKey; ov.dataset.recs = "";
   ov.classList.remove("hidden");
   document.body.style.overflow = "hidden";
   const i = dvDates.indexOf(dateKey);
   document.getElementById("dv-prev").disabled = (i <= 0);
   document.getElementById("dv-next").disabled = (i < 0 || i >= dvDates.length - 1);
+}
+function dvBuildRecs(ids){
+  const recs = ids.map(id => TK.reports.get(id)).filter(w => w).map(tkView);
+  if(!recs.length) return `<div class="dv-empty">日報がありません</div>`;
+  return recs.map((r,i) => dvBuildRec(r, i, recs.length)).join("");
+}
+function dvOpenRecs(ids, title, sub){
+  const ov = document.getElementById("dv-overlay");
+  document.getElementById("dv-title").innerHTML = `<div><div class="dv-date">${esc(title)}</div><div class="dv-sub">${esc(sub || "")}</div></div>`;
+  document.getElementById("dv-body").innerHTML = dvBuildRecs(ids);
+  document.getElementById("dv-body").scrollTop = 0;
+  rvLoadImgs(document.getElementById("dv-body"));
+  ov.dataset.date = ""; ov.dataset.recs = ids.join(",");
+  ov.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+  document.getElementById("dv-prev").disabled = true;
+  document.getElementById("dv-next").disabled = true;
 }
 function dvClose(){
   document.getElementById("dv-overlay").classList.add("hidden");
@@ -3246,10 +3287,11 @@ function rvSetMode(m){
   rvMode = m === "detail" ? "detail" : "sheet";
   try{ localStorage.setItem("TOKUWA_SHUKEI_RV_MODE", rvMode); }catch(e){}
   const dv = document.getElementById("dv-overlay");
-  if(dv && !dv.classList.contains("hidden") && dv.dataset.date){
+  if(dv && !dv.classList.contains("hidden") && (dv.dataset.date || dv.dataset.recs)){
     const top = document.getElementById("dv-body").scrollTop;
-    document.getElementById("dv-body").innerHTML = dvBuildBody(dv.dataset.date);
+    document.getElementById("dv-body").innerHTML = dv.dataset.recs ? dvBuildRecs(dv.dataset.recs.split(",")) : dvBuildBody(dv.dataset.date);
     document.getElementById("dv-body").scrollTop = top;
+    rvLoadImgs(document.getElementById("dv-body"));
   }
   if(typeof edId !== "undefined" && edId && typeof edMode !== "undefined" && edMode === "view") edRender();
 }
@@ -3266,11 +3308,24 @@ function rvMeta(w){
     + `　／　${n ? `<b style="color:#b45309">修正 ${n}件</b>（最終：${esc(edDt(w.updatedAt))}　${esc(w.updatedBy || "")}）` : "修正なし（原本のまま）"}`
     + `${w.deleted ? `　<b style="color:#b91c1c">削除済み</b>` : ""}</div>`;
 }
-/* 日報1件の本体（タブで切り替え） */
-function rvBody(type, rec){
-  return rvTabs() + (rvMode === "detail"
-    ? dvDetailHtml(rec)
-    : `<div class="rpv">${rpBody(type, rec)}</div>`);
+/* 日報1件の本体（タブで切り替え）。作業確認書＝現場でサインされた原本画像 */
+function rvBody(type, rec, w){
+  if(rvMode === "detail") return rvTabs() + dvDetailHtml(rec);
+  const n = w ? (w.edits || []).filter(e => !e.sys).length : 0;
+  if(w && w.imageId && !rvShowCur.has(w.id)){
+    const q = esc(w.id).replace(/'/g, "\\'");
+    return rvTabs()
+      + `<span class="rv-badge ok">✓ 現場でサインされた原本（ドライブ）</span>`
+      + (n ? `<div class="hint" style="margin:0 0 6px">※事務所で修正 ${n}件あり。原本は現場でサインされた時点の内容です。<a href="#" onclick="rvToggleCur('${q}');return false;">修正後の内容を見る</a></div>` : "")
+      + `<div class="rv-orig" data-id="${esc(w.id)}"><div class="rv-ld">原本画像を読み込んでいます…</div></div>`
+      + `<div class="rv-btns"><button class="pri" onclick="rvPrintImage('${q}')">🖨 PDFで保存／印刷</button>`
+      + `<button onclick="rvSaveImage('${q}')">📥 画像を保存（メール添付用）</button></div>`;
+  }
+  const q = w ? esc(w.id).replace(/'/g, "\\'") : "";
+  const badge = w && w.imageId
+    ? `<span class="rv-badge">現在の内容（修正後）を表示中</span>　<a href="#" onclick="rvToggleCur('${q}');return false;" style="font-size:12px">原本画像に戻す</a>`
+    : `<span class="rv-badge">原本画像なし（ドライブ経由でない日報）・内容から作り直した表示</span>`;
+  return rvTabs() + `<div>${badge}</div><div class="rpv">${rpBody(type, rec)}</div>`;
 }
 /* 日ごとから修正・画像へ */
 function dvEdit(id){ edOpen(id); if(typeof edId !== "undefined" && edId) setTimeout(edStartEdit, 50); }
@@ -3285,12 +3340,12 @@ function dvBuildRec(r, idx, total){
        `${esc(REPORT_TYPES[type] ? REPORT_TYPES[type].label : "日報")}` +
        `${total > 1 ? `　（${idx+1} / ${total}件目）` : ""}</span></div>`;
   h += rvMeta(w);
-  h += rvBody(type, r);
+  h += rvBody(type, r, w);
   if(w){
     const q = esc(w.id).replace(/'/g, "\\'");
     h += `<div class="dv-rec-btns">`
       + (w.deleted ? "" : `<button class="pri" onclick="dvEdit('${q}')">✏️ この日報を修正する</button>`)
-      + `<button onclick="dvImage('${q}')">🖼 画像を出す</button>`
+      + `<button onclick="dvImage('${q}')">🖼 内容から画像を作る</button>`
       + `<button onclick="edOpen('${q}')">📋 履歴・原本を見る</button></div>`;
   }
   h += `</div>`;
@@ -3479,7 +3534,7 @@ function tkEditor(){
 function tkStrip(r){
   const d = tkClone(r);
   delete d.signaturePng; delete d.sent; delete d.sentAt;
-  delete d._editCount; delete d._rev; delete d._deleted;
+  delete d._editCount; delete d._rev; delete d._deleted; delete d.__imageId;
   return d;
 }
 function tkWrap(r, from){
@@ -3490,7 +3545,8 @@ function tkWrap(r, from){
     client: getClientName(cur) || "", site: cur.site || "",
     original: tkClone(cur), current: cur, edits: [], deleted: false, rev: 1,
     importedAt: now, importedBy: by, importedFrom: from || "",
-    updatedAt: now, updatedBy: by
+    updatedAt: now, updatedBy: by,
+    imageId: (r && r.__imageId) || ""          // ドライブ上の原本画像（現場でサイン済み）のファイルID
   };
 }
 function tkView(w){
@@ -4150,11 +4206,12 @@ function edRender(){
       <button class="${edShowOrig ? "" : "on"}" onclick="edShowOrig=false;edRender()">現在の内容（修正後）</button>
       <button class="${edShowOrig ? "on" : ""}" onclick="edShowOrig=true;edRender()">原本（現場から届いた内容）</button>
     </div>` : "";
-  body.innerHTML = info + toggle + rvBody(w.type, rec) + edHistoryHtml(w);
+  body.innerHTML = info + toggle + rvBody(w.type, rec, w) + edHistoryHtml(w);
+  rvLoadImgs(body);
   foot.innerHTML = (w.deleted
       ? `<button style="background:var(--green);color:#fff" onclick="edRestore()">♻️ 復元する</button>`
       : `<button style="background:var(--primary);color:#fff" onclick="edStartEdit()">✏️ 修正する</button>`
-        + `<button style="background:#fff;border:1.5px solid var(--border);color:var(--text)" onclick="edImage()">🖼 画像を出す${n ? "（修正版）" : ""}</button>`
+        + `<button style="background:#fff;border:1.5px solid var(--border);color:var(--text)" onclick="edImage()">🖼 内容から画像を作る${n ? "（修正版）" : ""}</button>`
         + `<button style="background:#fff;border:1.5px solid #fca5a5;color:#b91c1c" onclick="edDelete()">🗑 削除</button>`)
     + `<button style="background:#fff;border:1.5px solid var(--border);color:var(--text)" onclick="edClose()">閉じる</button>`;
 }
@@ -4663,6 +4720,7 @@ const DR_URL       = "https://script.google.com/macros/s/AKfycby3MD8Lj1om5jopPcd
 const DR_KEY_LS    = "TOKUWA_SHUKEI_DRIVE_KEY_V1";
 const DR_SINCE_LS  = "TOKUWA_SHUKEI_DRIVE_SINCE_V1";
 const DR_PEND_LS   = "TOKUWA_SHUKEI_DRIVE_PENDING_V1";
+const DR_IMGFILL_LS = "TOKUWA_SHUKEI_DRIVE_IMGFILL_V1";
 const DR_INTERVAL  = 5 * 60 * 1000;
 const DR = { busy: false, lastAt: "", lastAdded: 0, lastAddedAt: "", error: "" };
 
@@ -4696,6 +4754,9 @@ function drErrText(e){
        : e === "office_only" ? "作業員用の合言葉が入っています。事務所用の合言葉を入れてください"
        : e === "network" ? "ドライブにつながりません（インターネット接続を確認してください）"
        : e === "not_configured" ? "受け口の合言葉が登録されていません"
+       : e === "no_image" ? "ドライブに原本画像がありません"
+       : e === "not_found" ? "ドライブの台帳にこの日報がありません"
+       : e === "unknown_action" ? "受け口が古いままです（Apps Scriptを新バージョンでデプロイしてください）"
        : "エラー：" + e;
 }
 
@@ -4713,8 +4774,10 @@ async function drPull(manual){
   if(!navigator.onLine){ if(manual) showToast("⚠️ インターネットにつながっていません"); return; }
   DR.busy = true; DR.error = ""; drRender();
   let added = 0, skipped = 0;
+  const fill = [];
   try{
     let since = drLs(DR_SINCE_LS);
+    if(drLs(DR_IMGFILL_LS) !== "1") since = "";          // 初回だけ全部見て、原本画像IDを補う
     for(let guard = 0; guard < 100; guard++){
       let res;
       try{ res = await drPost({ action: "list", key: drKey(), since, limit: 200 }); }
@@ -4724,9 +4787,15 @@ async function drPull(manual){
       (res.items || []).forEach(it => {
         if(!it || !it.record || it.deleted) return;
         const id = String(it.id);
-        if(TK.reports.has(id)){ skipped++; return; }     // 登録済み（集計表での修正を上書きしない）
+        if(TK.reports.has(id)){
+          skipped++;
+          const w = TK.reports.get(id);
+          if(it.imageId && !w.imageId) fill.push([id, String(it.imageId)]);   // 以前に取り込んだ日報に原本画像IDを補う
+          return;
+        }
         const r = it.record;
         r.id = id;
+        r.__imageId = it.imageId ? String(it.imageId) : "";
         normalizeRecord(r);
         recs.push(r);
       });
@@ -4739,6 +4808,8 @@ async function drPull(manual){
       drLs(DR_SINCE_LS, since);
       if(!res.more) break;
     }
+    if(fill.length) await drSetImageIds(fill);
+    drLs(DR_IMGFILL_LS, "1");
     DR.lastAt = new Date().toISOString();
     if(added){ DR.lastAdded = added; DR.lastAddedAt = DR.lastAt; }
     if(manual || added) showToast(added ? `✅ ドライブから ${added}件を登録しました` : "ℹ️ ドライブに新しい日報はありません");
@@ -4750,6 +4821,95 @@ async function drPull(manual){
   }
   await drFlush();
   drRender();
+}
+
+/* ---------- 原本画像（現場でサインされた .png） ---------- */
+async function drSetImageIds(list){
+  for(const [id, imageId] of list){
+    const w = TK.reports.get(id);
+    if(!w) continue;
+    try{
+      if(TK.mode === "cloud"){
+        const nw = await TK.backend.update(tkDocId(id), null, d => ({ imageId }));
+        TK.reports.set(id, nw);
+      }else{
+        w.imageId = imageId;
+      }
+    }catch(e){ console.error("imageId", e); }
+  }
+  if(TK.mode === "local") tkLocalSave();
+  try{ renderConfirmCard(); }catch(e){}
+}
+const rvImgMem = new Map();      // id → dataURL（このページを開いている間）
+function rvDb(){
+  return new Promise((res, rej) => {
+    if(!("indexedDB" in window)) return res(null);
+    const rq = indexedDB.open("tokuwa_shukei_img", 1);
+    rq.onupgradeneeded = () => { rq.result.createObjectStore("img"); };
+    rq.onsuccess = () => res(rq.result);
+    rq.onerror = () => res(null);
+  });
+}
+async function rvDbGet(id){
+  try{ const db = await rvDb(); if(!db) return null;
+    return await new Promise(res => { const q = db.transaction("img").objectStore("img").get(id); q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); });
+  }catch(e){ return null; }
+}
+async function rvDbPut(id, v){
+  try{ const db = await rvDb(); if(!db) return;
+    db.transaction("img", "readwrite").objectStore("img").put(v, id);
+  }catch(e){}
+}
+/* 原本画像を取ってくる（PC内に覚えておく。2回目からはすぐ出る） */
+async function rvImage(id){
+  if(rvImgMem.has(id)) return rvImgMem.get(id);
+  const w = TK.reports.get(id);
+  if(!w || !w.imageId) throw new Error("原本画像がありません");
+  const c = await rvDbGet(id);
+  if(c && c.imageId === w.imageId){ rvImgMem.set(id, c); return c; }
+  if(!drKey()) throw new Error("「ドライブ連携の設定」に事務所用の合言葉を入れてください");
+  const res = await drPost({ action: "image", key: drKey(), recordId: id });
+  if(!res || !res.ok) throw new Error(res && res.error ? drErrText(res.error) : "ドライブにつながりません");
+  const v = { imageId: w.imageId, png: res.png, name: res.name || (id + ".png") };
+  rvImgMem.set(id, v); rvDbPut(id, v);
+  return v;
+}
+async function rvLoadImgs(root){
+  const els = (root || document).querySelectorAll(".rv-orig[data-id]:not([data-loaded])");
+  for(const el of els){
+    el.dataset.loaded = "1";
+    const id = el.dataset.id;
+    try{
+      const v = await rvImage(id);
+      el.innerHTML = `<img src="${v.png}" alt="原本画像">`;
+    }catch(e){
+      el.innerHTML = `<div class="rv-ld">⚠️ 原本画像を表示できませんでした<br><span style="font-size:12px">${esc(e.message || e)}</span><br>` +
+        `<button class="btn btn-outline" style="margin-top:8px;padding:6px 12px" onclick="this.closest('.rv-orig').removeAttribute('data-loaded');rvLoadImgs()">もう一度</button></div>`;
+    }
+  }
+}
+async function rvPrintImage(id){
+  try{
+    const v = await rvImage(id);
+    const p = document.getElementById("cf-print");
+    p.innerHTML = `<img class="rv-print" src="${v.png}">`;
+    window.print();
+    setTimeout(() => { p.innerHTML = ""; }, 1000);
+  }catch(e){ showToast("❌ " + (e.message || e)); }
+}
+async function rvSaveImage(id){
+  try{
+    const v = await rvImage(id);
+    const a = document.createElement("a");
+    a.href = v.png; a.download = v.name || (id + ".png");
+    document.body.appendChild(a); a.click(); a.remove();
+    showToast("📥 原本画像を保存しました");
+  }catch(e){ showToast("❌ " + (e.message || e)); }
+}
+const rvShowCur = new Set();   // 原本画像ではなく「現在の内容」を見ている日報
+function rvToggleCur(id){
+  if(rvShowCur.has(id)) rvShowCur.delete(id); else rvShowCur.add(id);
+  rvSetMode(rvMode);
 }
 
 /* ---------- 修正・削除・復元をドライブへ反映 ---------- */
