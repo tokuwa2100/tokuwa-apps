@@ -742,7 +742,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "shukei";
-const APP_VERSION   = "1.6.2";
+const APP_VERSION   = "1.6.3";
 const APP_BUILD     = "2026-11-03";
 
 (function(){
@@ -1131,7 +1131,9 @@ function normalize(s) {
   // NFKC正規化で半角カナ→全角カナ・全角英数→半角英数・濁点合成をまとめて処理
   // （以前の charCode+0xFEE0 方式は半角カナには適用できず「ﾋﾞﾙ」と「ビル」を同一視できなかった）
   return String(s).normalize('NFKC')
-    .replace(/ｰ|－|ー/g,'ー').replace(/\s/g,'').toLowerCase();
+    .replace(/ｰ|－|ー/g,'ー')
+    .replace(/[\s・･\/\\（）()\[\]「」【】、,．.]/g,'')  // 区切り記号は無視して比べる
+    .toLowerCase();
 }
 
 function levenshtein(a, b) {
@@ -1142,15 +1144,48 @@ function levenshtein(a, b) {
   return dp[m][n];
 }
 
+/* 名前に出てくる番号（1・2・3…／一・二・三…）を数字として取り出す。
+   「第六発電所」と「第七発電所」のような、番号だけ違う別現場を分けるために使う */
+const MG_KANJI_NUM = { "〇":0,"零":0,"一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9 };
+function mgKanjiToNum(t){
+  if(!t.includes("十")) return [...t].reduce((a,c)=>a*10+MG_KANJI_NUM[c], 0);
+  const [hi, lo] = t.split("十");
+  const h = hi === "" ? 1 : [...hi].reduce((a,c)=>a*10+MG_KANJI_NUM[c], 0);
+  const l = lo === "" ? 0 : [...lo].reduce((a,c)=>a*10+MG_KANJI_NUM[c], 0);
+  return h * 10 + l;
+}
+function mgNumsOf(sn){
+  const out = [];
+  (sn.match(/[0-9]+|[〇零一二三四五六七八九十]+/g) || []).forEach(t=>{
+    out.push(/^[0-9]+$/.test(t) ? parseInt(t, 10) : mgKanjiToNum(t));
+  });
+  return out;
+}
+
+/* 短いほうが長いほうの「飛ばし読み」で作れるか（＝略称かどうかの判定）
+   例：姫六発電所 → 姫川第六発電所／上教大自然棟 → 上越教育大学自然棟 */
+function isAbbrevOf(shortS, longS){
+  let i = 0;
+  for(let j = 0; j < longS.length && i < shortS.length; j++) if(longS[j] === shortS[i]) i++;
+  return i === shortS.length;
+}
+
 function detectSimilarSites(sites) {
   // 「似ている」の判定。距離4以内の一律判定だと「○○ビル」と「A棟」のような
   // 無関係な短い名前まで拾ってしまうため、短い名前ほど厳しくする（2026/11）
   const pairs=[];
   for(let i=0;i<sites.length;i++) for(let j=i+1;j<sites.length;j++) {
     const na=normalize(sites[i]), nb=normalize(sites[j]);
-    if(na===nb){ pairs.push([sites[i],sites[j]]); continue; }           // 全角半角・スペース違いだけ
+    if(na===nb){ pairs.push([sites[i],sites[j]]); continue; }           // 全角半角・記号違いだけ
+    // 両方に番号があって中身が違うなら別の現場とみなす（第六発電所／第七発電所、1F／2F など）
+    const n1=mgNumsOf(na), n2=mgNumsOf(nb);
+    if(n1.length && n2.length && n1.join(",")!==n2.join(",")) continue;
     const shorter=na.length<nb.length?na:nb, longer=na.length<nb.length?nb:na;
     if(shorter.length>=4 && longer.includes(shorter)){ pairs.push([sites[i],sites[j]]); continue; }
+    // 略称（文字を飛ばして書いたもの）。短すぎる名前と、省略しすぎのものは拾わない
+    if(shorter.length>=3 && shorter.length/longer.length>=0.5 && isAbbrevOf(shorter,longer)){
+      pairs.push([sites[i],sites[j]]); continue;
+    }
     const lim=Math.max(1, Math.floor(Math.min(na.length,nb.length)/4));
     if(levenshtein(na,nb)<=lim) pairs.push([sites[i],sites[j]]);
   }
