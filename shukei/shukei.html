@@ -351,6 +351,21 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
 .dv-tbl td.n { text-align:right; font-weight:800; color:var(--orange); }
 .dv-tbl tr.sum td { background:var(--green-light); font-weight:800; color:var(--green); }
 .dv-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.dv-wgrp { border:1px solid var(--border); border-radius:10px; padding:8px 10px; margin-bottom:8px; background:#fff; }
+.dv-wgrp:last-child { margin-bottom:0; }
+.dv-wgrp-t { display:flex; align-items:baseline; gap:8px; font-size:13px; font-weight:800; margin-bottom:6px; }
+.dv-wgrp-time { font-size:11px; font-weight:700; color:var(--text2); }
+.dv-wgrp-n { margin-left:auto; font-size:12px; font-weight:800; color:var(--orange); }
+.dv-grand { margin-top:6px; text-align:right; font-size:13px; font-weight:800; color:var(--green); }
+.mg-grp { border:1.5px solid #f59e0b; background:#fff7ed; border-radius:10px; padding:10px 12px; margin-bottom:10px; }
+.mg-grp-t { font-size:13px; font-weight:800; color:#b45309; margin-bottom:6px; }
+.mg-chip { display:inline-block; background:#fff; border:1px solid #fcd34d; border-radius:999px; padding:2px 10px; font-size:12px; font-weight:700; color:#92400e; margin:0 6px 6px 0; }
+.mg-row { display:flex; align-items:center; gap:8px; background:#fff; border:1px solid var(--border); border-radius:8px; padding:6px 10px; margin-top:6px; font-size:12px; }
+.mg-row .mg-d { font-weight:800; white-space:nowrap; }
+.mg-row .mg-m { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mg-row .mg-s { font-weight:800; color:#b45309; }
+.mg-row button { flex-shrink:0; background:var(--primary); color:#fff; border:none; border-radius:7px; padding:6px 10px; font-family:inherit; font-size:12px; font-weight:800; cursor:pointer; }
+.mg-ign { background:none; border:none; color:var(--text2); font-size:11px; font-weight:700; text-decoration:underline; cursor:pointer; padding:4px 0 0; }
 .dv-chip { display:inline-block; background:var(--bg); border:1px solid var(--border); border-radius:999px; padding:3px 10px; font-size:12px; font-weight:700; margin:0 6px 6px 0; }
 .dv-note { padding:7px 10px; background:#fff3cd; border-left:3px solid #f59e0b; border-radius:6px; font-size:12.5px; font-weight:700; color:#7c4a00; white-space:pre-wrap; }
 .dv-note.blue { background:#e8f0fe; border-left-color:var(--primary); color:#1a3f8f; }
@@ -563,10 +578,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
     <div id="sr-result"></div>
   </div>
 
-  <!-- STEP 1.5: 現場名統合 -->
+  <!-- STEP 1.5: 現場名の表記ゆれチェック -->
   <div class="card hidden" id="merge-card">
-    <div class="card-title amber">🔀 現場名の統合・修正</div>
-    <p style="font-size:13px; color:var(--text2); margin-bottom:14px;">表記ゆれがある場合はここで統合してください。</p>
+    <div class="card-title amber">⚠️ 現場名の表記ゆれチェック</div>
+    <p style="font-size:13px; color:var(--text2); margin-bottom:14px;">似た現場名が見つかりました。間違いがあれば、該当する日報を1件ずつ開いて現場名を直してください（修正の理由と履歴が残ります）。別の現場であれば「別の現場です」を押すと、このお知らせは出なくなります。</p>
     <div id="merge-list"></div>
   </div>
 
@@ -709,8 +724,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "shukei";
-const APP_VERSION   = "1.5.0";
-const APP_BUILD     = "2026-11-02";
+const APP_VERSION   = "1.6.0";
+const APP_BUILD     = "2026-11-03";
 
 (function(){
   const b = document.getElementById("verBadge");
@@ -765,7 +780,7 @@ function esc(s){ return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;
 // ===== STATE =====
 let allRecords = [];
 let loadedFiles = [];
-let mergeRules = [];
+let mergeRules = []; // 現場名の統合は廃止（2026/11）。常に空＝getEffectiveSite はそのままの現場名を返す
 let activeType = null; // 'core' | 'joyou' | ...
 
 // ===== 日報種別定義（ここに追加すれば拡張できる） =====
@@ -1110,63 +1125,95 @@ function levenshtein(a, b) {
 }
 
 function detectSimilarSites(sites) {
+  // 「似ている」の判定。距離4以内の一律判定だと「○○ビル」と「A棟」のような
+  // 無関係な短い名前まで拾ってしまうため、短い名前ほど厳しくする（2026/11）
   const pairs=[];
   for(let i=0;i<sites.length;i++) for(let j=i+1;j<sites.length;j++) {
     const na=normalize(sites[i]), nb=normalize(sites[j]);
+    if(na===nb){ pairs.push([sites[i],sites[j]]); continue; }           // 全角半角・スペース違いだけ
     const shorter=na.length<nb.length?na:nb, longer=na.length<nb.length?nb:na;
-    if(longer.includes(shorter)||levenshtein(na,nb)<=4) pairs.push([sites[i],sites[j]]);
+    if(shorter.length>=4 && longer.includes(shorter)){ pairs.push([sites[i],sites[j]]); continue; }
+    const lim=Math.max(1, Math.floor(Math.min(na.length,nb.length)/4));
+    if(levenshtein(na,nb)<=lim) pairs.push([sites[i],sites[j]]);
   }
   return pairs;
 }
 
+/* ===== 現場名の表記ゆれ「チェック」 =====
+   以前はここで現場名をまとめて統合（置き換え）していたが、
+   集計表の中だけで名前を差し替えると原本と食い違うため廃止（2026/11）。
+   いまは「似た現場名を見つけて知らせるだけ」で、直すときは
+   該当する日報を1件ずつ開いて修正する（理由と履歴が残る）。 */
+
+const MG_IGNORE_KEY = "TOKUWA_SITE_VARIANT_IGNORE_V1";
+function mgLoadIgnore(){
+  try{ return new Set(JSON.parse(localStorage.getItem(MG_IGNORE_KEY) || "[]")); }catch(e){ return new Set(); }
+}
+function mgSaveIgnore(set){
+  try{ localStorage.setItem(MG_IGNORE_KEY, JSON.stringify([...set])); }catch(e){}
+}
+function mgGroupKey(group){ return group.slice().sort().join(" ||| "); }
+let mgGroups = [];
+
+/* 似た現場名どうしをつないでグループにする（A↔B・B↔C なら A・B・C で1つ） */
+function detectSiteVariantGroups(sites){
+  const parent = new Map(sites.map(x => [x, x]));
+  const find = x => { while(parent.get(x) !== x) x = parent.get(x); return x; };
+  const union = (a,b) => { const ra = find(a), rb = find(b); if(ra !== rb) parent.set(ra, rb); };
+  detectSimilarSites(sites).forEach(([a,b]) => union(a,b));
+  const g = new Map();
+  sites.forEach(x => { const r = find(x); if(!g.has(r)) g.set(r, []); g.get(r).push(x); });
+  return [...g.values()].filter(a => a.length > 1)
+    .sort((a,b) => String(a[0]).localeCompare(String(b[0]), "ja"));
+}
+
 function renderMergeCard() {
-  const sites=[...new Set(allRecords.map(r=>r.site).filter(Boolean))].sort();
-  if(sites.length<=1){document.getElementById("merge-card").classList.add("hidden");return;}
-  document.getElementById("merge-card").classList.remove("hidden");
-  // 自動統合は「正規化して完全一致」（全角/半角・スペース・長音記号の違いのみ）の場合に限定。
-  // ※以前は編集距離4以内で自動統合していたが、「A棟」「B棟」のような別現場まで
-  //   無断で統合されるリスクがあるため、類似候補は手動でプルダウン選択する方式に変更
-  const similar=detectSimilarSites(sites);
-  similar.forEach(([a,b])=>{
-    if(normalize(a)!==normalize(b)) return;
-    if(!mergeRules.find(r=>r.from===a||r.from===b)){
-      // 統合先は半角カナが少ない方（＝全角表記）を優先。同数なら長い方
-      const hw=s=>(s.match(/[ｦ-ﾟ]/g)||[]).length;
-      const preferA = hw(a)!==hw(b) ? hw(a)<hw(b) : a.length>=b.length;
-      const off=preferA?a:b, al=preferA?b:a;
-      mergeRules.push({from:al,to:off});
-    }
-  });
-  renderMergeList(sites);
+  const card = document.getElementById("merge-card");
+  const list = document.getElementById("merge-list");
+  if(!card || !list) return;
+  const sites = [...new Set(allRecords.map(r => r.site).filter(Boolean))].sort();
+  const ign = mgLoadIgnore();
+  const groups = (sites.length <= 1 ? [] : detectSiteVariantGroups(sites))
+    .filter(g => !ign.has(mgGroupKey(g)));
+  mgGroups = groups;
+  if(!groups.length){ card.classList.add("hidden"); list.innerHTML = ""; return; }
+  card.classList.remove("hidden");
+  renderMergeList(groups);
 }
 
-function renderMergeList(sites) {
-  const allSites=[...new Set(allRecords.map(r=>r.site).filter(Boolean))].sort();
-  let html=""; // 説明文はカード側に既にあるため二重表示しない
-  html+=allSites.map(site=>{
-    const rule=mergeRules.find(r=>r.from===site);
-    const isAlias=!!rule;
-    return `<div style="display:grid;grid-template-columns:1fr auto 1fr auto;gap:8px;align-items:center;
-      margin-bottom:8px;background:${isAlias?'#fff7ed':'#f9fafb'};border-radius:10px;padding:10px 12px;
-      border:1.5px solid ${isAlias?'#f59e0b':'#e5e7eb'};">
-      <div style="font-size:13px;font-weight:700;color:${isAlias?'#d97706':'var(--text)'};">${esc(site)}${isAlias?'<span style="font-size:10px;"> ⚠️統合</span>':''}</div>
-      <div style="font-size:13px;color:var(--text2);text-align:center;">→</div>
-      <select style="width:100%;padding:8px 10px;border:1.5px solid ${isAlias?'#f59e0b':'#e5e7eb'};border-radius:8px;font-family:inherit;font-size:13px;background:white;"
-        data-site="${esc(site)}" onchange="setMergeRule(this.dataset.site,this.value)">
-        <option value="${esc(site)}" ${!rule?'selected':''}>（変更なし）</option>
-        ${allSites.filter(s=>s!==site).map(s=>`<option value="${esc(s)}" ${rule&&rule.to===s?'selected':''}>${esc(s)}</option>`).join('')}
-      </select>
-      <div style="font-size:11px;color:var(--text2);text-align:center;white-space:nowrap;">${allRecords.filter(r=>r.site===site).length}件</div>
-    </div>`;
-  }).join('');
-  document.getElementById("merge-list").innerHTML=html;
+function renderMergeList(groups) {
+  const canEdit = id => { try{ return typeof TK !== "undefined" && TK.reports && TK.reports.has(String(id)); }catch(e){ return false; } };
+  document.getElementById("merge-list").innerHTML = groups.map((group, gi) => {
+    const recs = allRecords.filter(r => group.includes(r.site))
+      .sort((a,b) => String(a.date||"").localeCompare(String(b.date||"")) || String(a.site||"").localeCompare(String(b.site||""), "ja"));
+    const chips = group.map(x =>
+      `<span class="mg-chip">${esc(x)}　${allRecords.filter(r => r.site === x).length}件</span>`).join("");
+    const rows = recs.map(r => {
+      const id = String(r.id);
+      const client = getClientName(r) || "（お客様名なし）";
+      return `<div class="mg-row">` +
+        `<span class="mg-d">${esc(cfDateSlash(r.date))}</span>` +
+        `<span class="mg-m">${esc(client)} 様　／　<span class="mg-s">${esc(r.site || "")}</span></span>` +
+        (canEdit(id)
+          ? `<button type="button" onclick="dvEdit('${esc(id).replace(/'/g, "\\'")}')">✏️ この日報を修正する</button>`
+          : `<span style="font-size:11px;color:var(--text2)">（「見返す」から修正してください）</span>`) +
+        `</div>`;
+    }).join("");
+    return `<div class="mg-grp">` +
+      `<div class="mg-grp-t">似た現場名が ${group.length}通りあります</div>${chips}${rows}` +
+      `<button type="button" class="mg-ign" onclick="mgIgnoreGroup(${gi})">別の現場です（このお知らせを消す）</button>` +
+      `</div>`;
+  }).join("");
 }
 
-function setMergeRule(from,to){
-  mergeRules=mergeRules.filter(r=>r.from!==from);
-  if(to!==from) mergeRules.push({from,to});
-  populateSites(); renderTable();
-  renderMergeList([...new Set(allRecords.map(r=>r.site).filter(Boolean))].sort());
+function mgIgnoreGroup(gi){
+  const group = mgGroups[gi];
+  if(!group) return;
+  const set = mgLoadIgnore();
+  set.add(mgGroupKey(group));
+  mgSaveIgnore(set);
+  renderMergeCard();
+  showToast("✅ このお知らせを消しました");
 }
 
 // ===== 現場・月セレクト =====
@@ -1332,6 +1379,34 @@ function aggregateCores(record) {
 
 function getL(c) {
   return (c.mat==="デッキ"||!c.lenMm) ? "デッキ" : (c.lenMm<=150?150:c.lenMm);
+}
+
+/* コア明細を「階・部位ごと」にまとめるキー（素材・径・長さ・適用も込み） */
+function coreGroupKey(c) {
+  return [c.mat||"", c.floor||"", c.part||"", c.diamNum||0, getL(c), getOptionLabel(c)].join("|");
+}
+
+/* 同じ明細（階・部位・素材・径・長さ・適用が同じもの）を合算する */
+function mergeCoreRows(list) {
+  const map = new Map();
+  (list||[]).forEach(c => {
+    const k = coreGroupKey(c);
+    if (map.has(k)) map.get(k).qty += (c.qty||0);
+    else map.set(k, { ...c, qty: c.qty||0 });
+  });
+  return [...map.values()];
+}
+
+/* 1件の日報を、作業員別のコア明細（階・部位ごとに合算）にする */
+function aggregateCoresByWorker(record) {
+  return (record.workers || []).map(w => {
+    const cores = dvSortCores(mergeCoreRows(w.cores));
+    return {
+      name: (typeof edWorkerLabel === "function" ? edWorkerLabel(w) : (w.name||"")) || (w.name||""),
+      start: w.start, end: w.end, hours: w.hours || 0,
+      cores, total: cores.reduce((s,c) => s + (c.qty||0), 0)
+    };
+  });
 }
 
 // 天井裏/高車/真空パッドのラベル生成
@@ -1656,17 +1731,15 @@ function buildDiaryHTML(records, range) {
       <div class="diary-content">`;
 
     Object.values(wkMap).forEach((w, i) => {
-      // 穿孔まとめ（φごと）
-      const coreMap = {};
-      w.cores.forEach(c => {
-        const phi = c.diamNum||0;
-        coreMap[phi] = (coreMap[phi]||0) + c.qty;
-      });
-      const coreTotal = Object.values(coreMap).reduce((s,v)=>s+v,0);
-      const coreStr = Object.entries(coreMap)
-        .sort((a,b)=>a[0]-b[0])
-        .map(([phi,qty])=>`φ${phi}×${qty}本`)
-        .join('　');
+      // 穿孔まとめ（階・部位ごとに合算。素材・径・長さ・適用が同じものは1つにまとめる）
+      const coreList = dvSortCores(mergeCoreRows(w.cores));
+      const coreTotal = coreList.reduce((s,c)=>s+(c.qty||0),0);
+      const coreStr = coreList.map(c=>{
+        const L = getL(c);
+        const op = getOptionLabel(c);
+        const mat = (c.mat && c.mat !== "RC") ? esc(c.mat) + " " : "";
+        return `${mat}${esc(c.floor||"—")} ${esc(c.part||"—")} φ${c.diamNum||0} ${L==="デッキ"?"デッキ":"L="+L}${op?" "+esc(op):""}×${c.qty||0}本`;
+      }).join('／');
 
       const timeStr = (w.start != null && w.end != null) ? `${esc(w.start)}〜${esc(w.end)}時　${w.hours}h` : `${w.hours}h`;
       html += `<div class="diary-worker">
@@ -3372,22 +3445,32 @@ function dvDetailHtml(r){
     h += `</table></div></div>`;
   }
 
-  /* コア穿孔明細（材質・階・壁床・径・長さ・天井裏/高車/真空パッド） */
-  const cores = dvSortCores(aggregateCores(r));
-  if(cores.length){
-    const tot = cores.reduce((s,c) => s + (c.qty || 0), 0);
-    h += `<div class="dv-sec"><div class="dv-sec-t">🔩 コア穿孔明細</div><div class="dv-scroll">` +
-         `<table class="dv-tbl"><tr><th>材質</th><th>階</th><th>部位</th><th>穿孔径</th>` +
-         `<th>穿孔長</th><th>適用</th><th>本数</th></tr>`;
-    cores.forEach(c => {
-      const L = getL(c);
-      h += `<tr><td>${esc(c.mat || "—")}</td><td>${esc(c.floor || "—")}</td>` +
-           `<td>${esc(c.part || "—")}</td><td>φ${c.diamNum || 0}</td>` +
-           `<td>${L === "デッキ" ? "デッキ" : "L=" + L}</td>` +
-           `<td>${esc(getOptionLabel(c) || "—")}</td>` +
-           `<td class="n">${c.qty || 0}本</td></tr>`;
+  /* コア穿孔明細（作業員別・階/部位ごとに合算） */
+  const wGroups = aggregateCoresByWorker(r).filter(g => g.cores.length);
+  if(wGroups.length){
+    const grand = wGroups.reduce((s,g) => s + g.total, 0);
+    h += `<div class="dv-sec"><div class="dv-sec-t">🔩 コア穿孔明細（作業員別）</div>`;
+    wGroups.forEach(g => {
+      const st = cfHalf(g.start), en = cfHalf(g.end);
+      const tm = (st && en) ? `${st}〜${en}　実働${g.hours}h` : (g.hours ? `実働${g.hours}h` : "");
+      h += `<div class="dv-wgrp">` +
+           `<div class="dv-wgrp-t">👷 ${esc(g.name || "—")}` +
+           (tm ? `<span class="dv-wgrp-time">${esc(tm)}</span>` : "") +
+           `<span class="dv-wgrp-n">計${g.total}本</span></div>` +
+           `<div class="dv-scroll"><table class="dv-tbl"><tr><th>材質</th><th>階</th><th>部位</th><th>穿孔径</th>` +
+           `<th>穿孔長</th><th>適用</th><th>本数</th></tr>`;
+      g.cores.forEach(c => {
+        const L = getL(c);
+        h += `<tr><td>${esc(c.mat || "—")}</td><td>${esc(c.floor || "—")}</td>` +
+             `<td>${esc(c.part || "—")}</td><td>φ${c.diamNum || 0}</td>` +
+             `<td>${L === "デッキ" ? "デッキ" : "L=" + L}</td>` +
+             `<td>${esc(getOptionLabel(c) || "—")}</td>` +
+             `<td class="n">${c.qty || 0}本</td></tr>`;
+      });
+      h += `</table></div></div>`;
     });
-    h += `<tr class="sum"><td colspan="6">合　計</td><td>${tot}本</td></tr></table></div></div>`;
+    if(wGroups.length > 1) h += `<div class="dv-grand">この日報の合計　${grand}本</div>`;
+    h += `</div>`;
   }
 
   /* 調査（レントゲン・鉄筋探査） */
