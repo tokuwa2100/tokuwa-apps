@@ -367,6 +367,22 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
 .mg-row button { flex-shrink:0; border:none; border-radius:7px; padding:6px 10px; font-family:inherit; font-size:12px; font-weight:800; cursor:pointer; }
 .mg-row .mg-fix { background:var(--primary); color:#fff; }
 .mg-row .mg-keep { background:#fff; color:var(--text2); border:1.5px solid var(--border); }
+.mgc-ov { position:fixed; inset:0; background:rgba(15,23,42,.55); z-index:400; display:flex; align-items:center; justify-content:center; padding:16px; }
+.mgc-ov.hidden { display:none !important; }
+.mgc-box { background:#fff; border-radius:14px; max-width:420px; width:100%; box-shadow:0 12px 40px rgba(0,0,0,.35); overflow:hidden; }
+.mgc-h { padding:14px 16px; font-size:15px; font-weight:900; color:#fff; }
+.mgc-h.fix { background:var(--primary); }
+.mgc-h.keep { background:var(--text2); }
+.mgc-b { padding:14px 16px 4px; font-size:13px; line-height:1.7; }
+.mgc-rec { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:8px 10px; margin:8px 0; font-size:13px; font-weight:800; }
+.mgc-rec .mgc-site { color:#b45309; }
+.mgc-note { font-size:12px; color:var(--text2); }
+.mgc-f { display:flex; gap:8px; padding:14px 16px 16px; }
+.mgc-f button { flex:1; padding:12px; border:none; border-radius:10px; font-family:inherit; font-size:14px; font-weight:800; cursor:pointer; }
+.mgc-f .no { background:#fff; border:1.5px solid var(--border); color:var(--text); }
+.mgc-f .yes { color:#fff; }
+.mgc-f .yes.fix { background:var(--primary); }
+.mgc-f .yes.keep { background:var(--green); }
 .mg-ign { background:none; border:none; color:var(--text2); font-size:11px; font-weight:700; text-decoration:underline; cursor:pointer; padding:4px 0 0; }
 .dv-chip { display:inline-block; background:var(--bg); border:1px solid var(--border); border-radius:999px; padding:3px 10px; font-size:12px; font-weight:700; margin:0 6px 6px 0; }
 .dv-note { padding:7px 10px; background:#fff3cd; border-left:3px solid #f59e0b; border-radius:6px; font-size:12.5px; font-weight:700; color:#7c4a00; white-space:pre-wrap; }
@@ -726,7 +742,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "shukei";
-const APP_VERSION   = "1.6.1";
+const APP_VERSION   = "1.6.2";
 const APP_BUILD     = "2026-11-03";
 
 (function(){
@@ -1214,22 +1230,87 @@ function renderMergeList(groups) {
   }).join("");
 }
 
-/* 押したあと、もう一度たずねてから実行する（押し間違い防止） */
+/* 押したあと、もう一度たずねてから実行する（押し間違い防止）。
+   アプリの見た目に合わせた確認画面を使う */
+let mgcCb = null;
+function mgcBox(){
+  let ov = document.getElementById("mgc-ov");
+  if(ov) return ov;
+  ov = document.createElement("div");
+  ov.id = "mgc-ov";
+  ov.className = "mgc-ov hidden";
+  ov.innerHTML = `<div class="mgc-box">
+      <div class="mgc-h" id="mgc-h"></div>
+      <div class="mgc-b">
+        <div id="mgc-msg"></div>
+        <div class="mgc-rec" id="mgc-rec"></div>
+        <div class="mgc-note" id="mgc-note"></div>
+      </div>
+      <div class="mgc-f">
+        <button type="button" class="no" onclick="mgcClose(false)">いいえ</button>
+        <button type="button" class="yes" id="mgc-ok" onclick="mgcClose(true)"></button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener("click", e => { if(e.target === ov) mgcClose(false); });
+  document.addEventListener("keydown", e => {
+    if(e.key === "Escape" && !document.getElementById("mgc-ov").classList.contains("hidden")) mgcClose(false);
+  });
+  return ov;
+}
+function mgcAsk(o, cb){
+  const ov = mgcBox();
+  const kind = o.kind === "fix" ? "fix" : "keep";
+  document.getElementById("mgc-h").className = "mgc-h " + kind;
+  document.getElementById("mgc-h").textContent = o.title;
+  document.getElementById("mgc-msg").textContent = o.msg;
+  document.getElementById("mgc-rec").innerHTML = o.rec;
+  document.getElementById("mgc-note").textContent = o.note || "";
+  const ok = document.getElementById("mgc-ok");
+  ok.className = "yes " + kind;
+  ok.textContent = o.okLabel;
+  mgcCb = cb;
+  ov.classList.remove("hidden");
+  setTimeout(() => ok.focus(), 0);
+}
+function mgcClose(yes){
+  const ov = document.getElementById("mgc-ov");
+  if(ov) ov.classList.add("hidden");
+  const cb = mgcCb;
+  mgcCb = null;
+  if(yes && cb) cb();
+}
+function mgRecLine(r){
+  if(!r) return "";
+  return `${esc(cfDateSlash(r.date))}　${esc(getClientName(r) || "（お客様名なし）")} 様<br><span class="mgc-site">${esc(r.site || "")}</span>`;
+}
 function mgAskFix(id){
   const r = allRecords.find(x => String(x.id) === String(id));
-  const nm = r ? `${r.date || ""}　${getClientName(r) || ""} 様　${r.site || ""}` : "";
-  if(!confirm(`この日報を修正しますか？\n\n${nm}\n\n修正の画面が開きます。理由を入れて保存すると、修正の履歴が残ります。`)) return;
-  dvEdit(String(id));
+  mgcAsk({
+    kind: "fix",
+    title: "この日報を修正しますか？",
+    msg: "次の日報の修正画面を開きます。",
+    rec: mgRecLine(r),
+    okLabel: "✏️ 修正する",
+    note: "現場名などを直して、修正の理由を入れて保存してください。修正の履歴が残ります。"
+  }, () => dvEdit(String(id)));
 }
 function mgAskKeep(id, site){
   const r = allRecords.find(x => String(x.id) === String(id));
-  const nm = r ? `${r.date || ""}　${getClientName(r) || ""} 様　${r.site || ""}` : "";
-  if(!confirm(`この日報は変更しないでいいですか？\n\n${nm}\n\n「はい」を押すと、このお知らせには出なくなります。あとからでも「見返す」から修正できます。`)) return;
-  const set = mgLoadIgnore();
-  set.add(mgRowKey(id, site));
-  mgSaveIgnore(set);
-  renderMergeCard();
-  showToast("✅ 変更しないままにしました");
+  mgcAsk({
+    kind: "keep",
+    title: "変更しないでいいですか？",
+    msg: "次の日報は、このままの現場名にします。",
+    rec: mgRecLine(r),
+    okLabel: "変更しない",
+    note: "このお知らせには出なくなります。あとからでも「見返す」から修正できます。"
+  }, () => {
+    const set = mgLoadIgnore();
+    set.add(mgRowKey(id, site));
+    mgSaveIgnore(set);
+    renderMergeCard();
+    showToast("✅ 変更しないままにしました");
+  });
 }
 
 // ===== 現場・月セレクト =====
