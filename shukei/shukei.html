@@ -364,7 +364,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
 .mg-row .mg-d { font-weight:800; white-space:nowrap; }
 .mg-row .mg-m { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .mg-row .mg-s { font-weight:800; color:#b45309; }
-.mg-row button { flex-shrink:0; background:var(--primary); color:#fff; border:none; border-radius:7px; padding:6px 10px; font-family:inherit; font-size:12px; font-weight:800; cursor:pointer; }
+.mg-row button { flex-shrink:0; border:none; border-radius:7px; padding:6px 10px; font-family:inherit; font-size:12px; font-weight:800; cursor:pointer; }
+.mg-row .mg-fix { background:var(--primary); color:#fff; }
+.mg-row .mg-keep { background:#fff; color:var(--text2); border:1.5px solid var(--border); }
 .mg-ign { background:none; border:none; color:var(--text2); font-size:11px; font-weight:700; text-decoration:underline; cursor:pointer; padding:4px 0 0; }
 .dv-chip { display:inline-block; background:var(--bg); border:1px solid var(--border); border-radius:999px; padding:3px 10px; font-size:12px; font-weight:700; margin:0 6px 6px 0; }
 .dv-note { padding:7px 10px; background:#fff3cd; border-left:3px solid #f59e0b; border-radius:6px; font-size:12.5px; font-weight:700; color:#7c4a00; white-space:pre-wrap; }
@@ -581,7 +583,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   <!-- STEP 1.5: 現場名の表記ゆれチェック -->
   <div class="card hidden" id="merge-card">
     <div class="card-title amber">⚠️ 現場名の表記ゆれチェック</div>
-    <p style="font-size:13px; color:var(--text2); margin-bottom:14px;">似た現場名が見つかりました。間違いがあれば、該当する日報を1件ずつ開いて現場名を直してください（修正の理由と履歴が残ります）。別の現場であれば「別の現場です」を押すと、このお知らせは出なくなります。</p>
+    <p style="font-size:13px; color:var(--text2); margin-bottom:14px;">似た現場名が見つかりました。日報を1件ずつ見て、書き間違いなら「修正する」、別の現場で正しければ「変更しない」を押してください。どちらもボタンを押したあと、もう一度たずねます。</p>
     <div id="merge-list"></div>
   </div>
 
@@ -724,7 +726,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "shukei";
-const APP_VERSION   = "1.6.0";
+const APP_VERSION   = "1.6.1";
 const APP_BUILD     = "2026-11-03";
 
 (function(){
@@ -1145,15 +1147,16 @@ function detectSimilarSites(sites) {
    いまは「似た現場名を見つけて知らせるだけ」で、直すときは
    該当する日報を1件ずつ開いて修正する（理由と履歴が残る）。 */
 
-const MG_IGNORE_KEY = "TOKUWA_SITE_VARIANT_IGNORE_V1";
+/* 「変更しない」と決めた日報を覚えておく（日報ID＋そのときの現場名で記憶。
+   あとで現場名を直せばキーが変わるので、またチェックの対象に戻る） */
+const MG_IGNORE_KEY = "TOKUWA_SITE_VARIANT_KEEP_V2";
 function mgLoadIgnore(){
   try{ return new Set(JSON.parse(localStorage.getItem(MG_IGNORE_KEY) || "[]")); }catch(e){ return new Set(); }
 }
 function mgSaveIgnore(set){
   try{ localStorage.setItem(MG_IGNORE_KEY, JSON.stringify([...set])); }catch(e){}
 }
-function mgGroupKey(group){ return group.slice().sort().join(" ||| "); }
-let mgGroups = [];
+function mgRowKey(id, site){ return String(id) + " ||| " + String(site || ""); }
 
 /* 似た現場名どうしをつないでグループにする（A↔B・B↔C なら A・B・C で1つ） */
 function detectSiteVariantGroups(sites){
@@ -1173,9 +1176,15 @@ function renderMergeCard() {
   if(!card || !list) return;
   const sites = [...new Set(allRecords.map(r => r.site).filter(Boolean))].sort();
   const ign = mgLoadIgnore();
-  const groups = (sites.length <= 1 ? [] : detectSiteVariantGroups(sites))
-    .filter(g => !ign.has(mgGroupKey(g)));
-  mgGroups = groups;
+  const groups = [];
+  (sites.length <= 1 ? [] : detectSiteVariantGroups(sites)).forEach(group => {
+    // 「変更しない」と決めた日報を除いて、まだ2通り以上の書き方が残っているグループだけ出す
+    const recs = allRecords.filter(r => group.includes(r.site) && !ign.has(mgRowKey(r.id, r.site)))
+      .sort((a,b) => String(a.date||"").localeCompare(String(b.date||""))
+                  || String(a.site||"").localeCompare(String(b.site||""), "ja"));
+    const left = [...new Set(recs.map(r => r.site))];
+    if(left.length > 1) groups.push({ names: left, recs });
+  });
   if(!groups.length){ card.classList.add("hidden"); list.innerHTML = ""; return; }
   card.classList.remove("hidden");
   renderMergeList(groups);
@@ -1183,37 +1192,44 @@ function renderMergeCard() {
 
 function renderMergeList(groups) {
   const canEdit = id => { try{ return typeof TK !== "undefined" && TK.reports && TK.reports.has(String(id)); }catch(e){ return false; } };
-  document.getElementById("merge-list").innerHTML = groups.map((group, gi) => {
-    const recs = allRecords.filter(r => group.includes(r.site))
-      .sort((a,b) => String(a.date||"").localeCompare(String(b.date||"")) || String(a.site||"").localeCompare(String(b.site||""), "ja"));
-    const chips = group.map(x =>
-      `<span class="mg-chip">${esc(x)}　${allRecords.filter(r => r.site === x).length}件</span>`).join("");
-    const rows = recs.map(r => {
-      const id = String(r.id);
+  document.getElementById("merge-list").innerHTML = groups.map(group => {
+    const chips = group.names.map(x =>
+      `<span class="mg-chip">${esc(x)}　${group.recs.filter(r => r.site === x).length}件</span>`).join("");
+    const rows = group.recs.map(r => {
+      const id = esc(String(r.id)).replace(/'/g, "\\'");
+      const site = esc(String(r.site || "")).replace(/'/g, "\\'");
       const client = getClientName(r) || "（お客様名なし）";
+      const btns = canEdit(String(r.id))
+        ? `<button type="button" class="mg-fix" onclick="mgAskFix('${id}')">✏️ 修正する</button>` +
+          `<button type="button" class="mg-keep" onclick="mgAskKeep('${id}','${site}')">変更しない</button>`
+        : `<span style="font-size:11px;color:var(--text2)">（「見返す」から修正してください）</span>`;
       return `<div class="mg-row">` +
         `<span class="mg-d">${esc(cfDateSlash(r.date))}</span>` +
         `<span class="mg-m">${esc(client)} 様　／　<span class="mg-s">${esc(r.site || "")}</span></span>` +
-        (canEdit(id)
-          ? `<button type="button" onclick="dvEdit('${esc(id).replace(/'/g, "\\'")}')">✏️ この日報を修正する</button>`
-          : `<span style="font-size:11px;color:var(--text2)">（「見返す」から修正してください）</span>`) +
-        `</div>`;
+        btns + `</div>`;
     }).join("");
     return `<div class="mg-grp">` +
-      `<div class="mg-grp-t">似た現場名が ${group.length}通りあります</div>${chips}${rows}` +
-      `<button type="button" class="mg-ign" onclick="mgIgnoreGroup(${gi})">別の現場です（このお知らせを消す）</button>` +
+      `<div class="mg-grp-t">似た現場名が ${group.names.length}通りあります</div>${chips}${rows}` +
       `</div>`;
   }).join("");
 }
 
-function mgIgnoreGroup(gi){
-  const group = mgGroups[gi];
-  if(!group) return;
+/* 押したあと、もう一度たずねてから実行する（押し間違い防止） */
+function mgAskFix(id){
+  const r = allRecords.find(x => String(x.id) === String(id));
+  const nm = r ? `${r.date || ""}　${getClientName(r) || ""} 様　${r.site || ""}` : "";
+  if(!confirm(`この日報を修正しますか？\n\n${nm}\n\n修正の画面が開きます。理由を入れて保存すると、修正の履歴が残ります。`)) return;
+  dvEdit(String(id));
+}
+function mgAskKeep(id, site){
+  const r = allRecords.find(x => String(x.id) === String(id));
+  const nm = r ? `${r.date || ""}　${getClientName(r) || ""} 様　${r.site || ""}` : "";
+  if(!confirm(`この日報は変更しないでいいですか？\n\n${nm}\n\n「はい」を押すと、このお知らせには出なくなります。あとからでも「見返す」から修正できます。`)) return;
   const set = mgLoadIgnore();
-  set.add(mgGroupKey(group));
+  set.add(mgRowKey(id, site));
   mgSaveIgnore(set);
   renderMergeCard();
-  showToast("✅ このお知らせを消しました");
+  showToast("✅ 変更しないままにしました");
 }
 
 // ===== 現場・月セレクト =====
