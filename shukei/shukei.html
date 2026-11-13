@@ -269,7 +269,23 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   #cf-print .noprint, #cf-print .cf-del { display: none !important; }
   #cf-print .edt { background: none !important; outline: none !important; padding: 0 !important; }
   @page { size: A4; margin: 14mm 12mm; }
+  /* 集計表を印刷するとき（色分けをそのまま紙に出す） */
+  #cf-print.pr-sheet, #cf-print.pr-sheet * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  #cf-print.pr-sheet .monthly-wrap { overflow: visible !important; border: none !important; }
+  #cf-print.pr-sheet .monthly-tbl { width: 100% !important; min-width: 0 !important; font-size: 9px; }
+  #cf-print.pr-sheet .monthly-tbl th, #cf-print.pr-sheet .monthly-tbl td { padding: 3px 2px; }
+  #cf-print.pr-sheet .monthly-tbl th.dv-clickable::after { content: none !important; }
+  #cf-print.pr-sheet .site-diary { display: block !important; break-before: page; page-break-before: always; }
+  #cf-print.pr-sheet .site-diary .tbl-section-title { margin-top: 0 !important; }
+  #cf-print.pr-sheet .diary-day { break-inside: avoid; page-break-inside: avoid; }
+  #cf-print.pr-sheet .hint, #cf-print.pr-sheet .dv-clickable { cursor: default; }
+  #cf-print.pr-sheet .pr-hd { margin-bottom: 10px; }
+  #cf-print.pr-sheet .pr-hd .pr-t { font-size: 15px; font-weight: 900; }
+  #cf-print.pr-sheet .pr-hd .pr-s { font-size: 11px; color: #555; margin-top: 3px; }
+  html, body, #cf-print.pr-sheet { background: #fff !important; }
 }
+.pr-opt { display: block; font-size: 13px; font-weight: 700; margin-bottom: 12px; cursor: pointer; }
+.pr-opt input { margin-right: 6px; }
 
 .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
 @media(max-width:480px) { .stats-grid { grid-template-columns: 1fr 1fr; } }
@@ -560,9 +576,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
     </details>
   </div>
 
-  <!-- STEP 1: ファイル読み込み -->
-  <div class="card">
-    <div class="card-title">📂 STEP 1　データファイルを読み込む</div>
+  <!-- STEP 1: ファイル読み込み（Googleドライブ取り込みに一本化したため画面からは外した。
+       画像・JSONを読む仕組みはそのまま残してあるので、必要になったら hidden を外せば戻る） -->
+  <div class="card hidden" id="upload-card">
+    <div class="card-title">📂 データファイルを読み込む（通常は不要）</div>
     <div class="upload-zone" id="upload-zone">
       <input type="file" id="file-input" accept="image/*,.png,.jpg,.jpeg,.json,.JSON,application/json" multiple onchange="handleFiles(event)">
       <div class="icon">📂</div>
@@ -605,7 +622,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
 
   <!-- STEP 2: 日報種別タブ + 集計 -->
   <div class="card hidden" id="step2-card">
-    <div class="card-title blue">📊 STEP 2　日報の種類・お客様・現場・期間を選んで集計表を確認</div>
+    <div class="card-title blue">📊 STEP 1　日報の種類・お客様・現場・期間を選んで集計表を確認</div>
 
     <!-- 日報種別タブ -->
     <div class="type-tabs" id="type-tabs"></div>
@@ -691,10 +708,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
     </div>
   </div>
 
-  <!-- STEP 3: Excel出力 -->
-  <div id="step3-card" class="hidden">
-    <button class="btn btn-green" onclick="downloadExcel()">⬇️ STEP 3　Excelファイルをダウンロード</button>
-    <button class="btn btn-outline" id="nohinsho-btn" style="display:none;" onclick="downloadNohinsho()">📄 納品書をダウンロード</button>
+  <!-- STEP 3（現 STEP 2）: 集計表をそのまま出力 -->
+  <div id="step3-card" class="card hidden">
+    <div class="card-title green">⬇️ STEP 2　集計表を出す</div>
+    <label class="pr-opt"><input type="checkbox" id="pr-diary" checked> 現場日誌（日ごと・作業員ごとの階／部位）も一緒に出す</label>
+    <div class="cf-btnrow">
+      <button class="btn btn-green" onclick="printSheet()">🖨️ PDFで保存／印刷</button>
+      <button class="btn btn-outline" onclick="downloadExcel()">⬇️ Excelファイル</button>
+      <button class="btn btn-outline" id="nohinsho-btn" style="display:none;" onclick="downloadNohinsho()">📄 納品書</button>
+    </div>
+    <div class="hint">「PDFで保存／印刷」は画面の集計表をそのまま出します。用紙は横向きで出ますが、色分けを紙にも出すには印刷画面の「背景のグラフィック」を<strong>オン</strong>にしてください。メールに付けるときは、印刷先を「PDFとして保存」にします。</div>
   </div>
 
   <div id="reset-area" class="hidden" style="margin-top:8px;">
@@ -742,8 +765,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "shukei";
-const APP_VERSION   = "1.6.3";
-const APP_BUILD     = "2026-11-03";
+const APP_VERSION   = "1.7.0";
+const APP_BUILD     = "2026-11-13";
 
 (function(){
   const b = document.getElementById("verBadge");
@@ -2239,6 +2262,49 @@ function getJapaneseHolidays(year) {
 }
 
 // ===== Excel出力（種別ごとに振り分け） =====
+/* ===== 集計表をそのまま印刷／PDF保存する =====
+   画面（STEP 2の表）のHTMLをそのまま印刷用の入れ物に移して印刷する。
+   Excelのように作り直さないので、色分けや並びが画面と必ず一致する。 */
+function printSheet(){
+  const area = document.getElementById("table-area");
+  if(!area || !area.innerHTML.trim()){ showToast("⚠️ 先に集計表を表示してください"); return; }
+
+  const p = document.getElementById("cf-print");
+  const withDiary = document.getElementById("pr-diary")?.checked;
+
+  // 表題（お客様・現場・期間）を頭に付ける
+  const client = document.getElementById("sel-client")?.value || "";
+  const site   = document.getElementById("sel-site")?.value || "";
+  const period = document.getElementById("client-label")?.textContent || "";
+  const typeNm = activeType === "core" ? "コア・探査" : activeType === "joyou" ? "常用" : "";
+  const head = `<div class="pr-hd"><div class="pr-t">${esc(site)}　集計表${typeNm ? "（" + typeNm + "）" : ""}</div>` +
+               `<div class="pr-s">${esc(client ? client + " 様　" : "")}${esc(period.replace(/^お客様：.*?　/, ""))}</div></div>`;
+
+  p.innerHTML = head + area.innerHTML;
+  p.classList.add("pr-sheet");
+  if(!withDiary) p.querySelectorAll(".site-diary").forEach(el => el.remove());
+  p.querySelectorAll(".hint").forEach(el => el.remove());          // 画面用の案内文は印刷しない
+  p.querySelectorAll("[onclick]").forEach(el => el.removeAttribute("onclick"));
+  // 日誌は次のページに出るので、そこにも同じ表題を付ける
+  p.querySelectorAll(".site-diary").forEach(el => {
+    const t = el.querySelector(".tbl-section-title");
+    if(t) t.textContent = t.textContent.replace("（タップで日報を表示）", "");
+    el.insertAdjacentHTML("afterbegin", head);
+  });
+
+  // 用紙を横向きにする（日付が31列あるため）
+  let st = document.getElementById("pr-page");
+  if(!st){ st = document.createElement("style"); st.id = "pr-page"; document.head.appendChild(st); }
+  st.textContent = "@page { size: A4 landscape; margin: 10mm; }";
+
+  window.print();
+  setTimeout(() => {
+    p.innerHTML = "";
+    p.classList.remove("pr-sheet");
+    st.textContent = "";
+  }, 1000);
+}
+
 async function downloadExcel() {
   if (activeType === "core") await downloadExcelCore();
   else if (activeType === "joyou") await downloadExcelJoyou();
