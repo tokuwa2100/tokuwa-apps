@@ -275,8 +275,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   #cf-print.pr-sheet .monthly-tbl { width: 100% !important; min-width: 0 !important; font-size: 9px; }
   #cf-print.pr-sheet .monthly-tbl th, #cf-print.pr-sheet .monthly-tbl td { padding: 3px 2px; }
   #cf-print.pr-sheet .monthly-tbl th.dv-clickable::after { content: none !important; }
-  #cf-print.pr-sheet .site-diary { display: block !important; break-before: page; page-break-before: always; }
-  #cf-print.pr-sheet .site-diary .tbl-section-title { margin-top: 0 !important; }
+  /* 現場日誌は集計表の下にそのまま続ける（量が少なければ1枚で収まる）。
+     収まらないときだけ自然に次のページへ送る */
+  #cf-print.pr-sheet .site-diary { display: block !important; margin-top: 14px; }
+  #cf-print.pr-sheet .site-diary .tbl-section-title { margin-top: 0 !important; break-after: avoid; page-break-after: avoid; }
   #cf-print.pr-sheet .diary-day { break-inside: avoid; page-break-inside: avoid; }
   #cf-print.pr-sheet .hint, #cf-print.pr-sheet .dv-clickable { cursor: default; }
   #cf-print.pr-sheet .pr-hd { margin-bottom: 10px; }
@@ -765,7 +767,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "shukei";
-const APP_VERSION   = "1.7.0";
+const APP_VERSION   = "1.7.1";
 const APP_BUILD     = "2026-11-13";
 
 (function(){
@@ -2285,11 +2287,9 @@ function printSheet(){
   if(!withDiary) p.querySelectorAll(".site-diary").forEach(el => el.remove());
   p.querySelectorAll(".hint").forEach(el => el.remove());          // 画面用の案内文は印刷しない
   p.querySelectorAll("[onclick]").forEach(el => el.removeAttribute("onclick"));
-  // 日誌は次のページに出るので、そこにも同じ表題を付ける
-  p.querySelectorAll(".site-diary").forEach(el => {
-    const t = el.querySelector(".tbl-section-title");
-    if(t) t.textContent = t.textContent.replace("（タップで日報を表示）", "");
-    el.insertAdjacentHTML("afterbegin", head);
+  // 画面用の文言だけ落とす（表題は一番上の1つだけ。集計表の下にそのまま続ける）
+  p.querySelectorAll(".site-diary .tbl-section-title").forEach(t => {
+    t.textContent = t.textContent.replace("（タップで日報を表示）", "");
   });
 
   // 用紙を横向きにする（日付が31列あるため）
