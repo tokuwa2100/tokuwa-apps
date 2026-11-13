@@ -501,8 +501,8 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "core";
-const APP_VERSION   = "1.10.0";
-const APP_BUILD     = "2026-11-01";
+const APP_VERSION   = "1.11.0";
+const APP_BUILD     = "2026-11-13";
 
 (function(){
   const tv = document.getElementById("titleVer");
@@ -721,13 +721,22 @@ function addWorker(){
       実働：<span class="w-hours">0.0</span> h（昼休憩控除後）
     </div>
 
-    <div class="coreHeader">
-      <h3>コア入力（追加式）</h3>
+    <div class="coreHeader" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <h3 style="margin:0;">コア入力（追加式）</h3>
+      <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:normal;cursor:pointer;">
+        <input type="checkbox" class="w-temoto-chk" onchange="toggleTemoto(this)" style="width:16px;height:16px;">
+        手元作業のみ
+      </label>
+    </div>
+
+    <div class="w-temoto-area hidden" style="margin-top:8px;">
+      <div class="smallLabel">作業内容</div>
+      <input class="w-temoto-note" type="text" placeholder="例：水処理相番・搬入・片付けなど" style="width:100%;box-sizing:border-box;" />
     </div>
 
     <div class="coreRows"></div>
 
-    <div style="margin-top:8px;">
+    <div class="w-core-add-wrap" style="margin-top:8px;">
       <button class="btn btn-outline" type="button" onclick="addCoreRow(this)">＋ 明細追加</button>
     </div>
   `;
@@ -740,6 +749,15 @@ function addWorker(){
   calcOneWorker(wrap.querySelector(".w-start"));
 
   addCoreRow(wrap.querySelector(".btn-outline"));
+}
+
+function toggleTemoto(chk){
+  const card = chk.closest(".workerCard");
+  if(!card) return;
+  const isTemoto = chk.checked;
+  card.querySelector(".w-temoto-area").classList.toggle("hidden", !isTemoto);
+  card.querySelector(".coreRows").classList.toggle("hidden", isTemoto);
+  card.querySelector(".w-core-add-wrap").classList.toggle("hidden", isTemoto);
 }
 
 function toggleOutsource(sel){
@@ -854,6 +872,14 @@ function addCoreRow(btn){
 
   rows.appendChild(row);
   renumberCoreRows(card);
+
+  // 直前の明細と同じ作業階を引き継ぐ
+  const allRows = card.querySelectorAll(".coreRow");
+  if(allRows.length >= 2){
+    const prevRow = allRows[allRows.length - 2];
+    const prevFloor = prevRow.querySelector(".c-floor").value;
+    if(prevFloor) row.querySelector(".c-floor").value = prevFloor;
+  }
 }
 
 /* デッキは穿孔長不要 */
@@ -975,7 +1001,11 @@ function collectData(){
     const company = isOut ? (card.querySelector(".w-company").value || "").trim() : "";
     const person  = isOut ? (card.querySelector(".w-person").value  || "").trim() : "";
 
-    workers.push({ name, outsource: isOut, company, person, start:s, end:e, hours, cores });
+    const isTemoto = card.querySelector(".w-temoto-chk").checked;
+    const temotoNote = isTemoto ? (card.querySelector(".w-temoto-note").value || "").trim() : "";
+
+    workers.push({ name, outsource: isOut, company, person, start:s, end:e, hours,
+                   temoto: isTemoto, temotoNote, cores });
   });
 
   // 調査（レントゲン・鉄筋探査）
@@ -2461,7 +2491,9 @@ function renderReportBody(p){
     h += `<table class="rp-t"><thead><tr><th>作業員</th><th class="rp-nw">時間</th><th class="rp-nw">実働</th></tr></thead><tbody>`;
     ws.forEach(w => {
       const s = fmtTimeHalf(w.start), t = fmtTimeHalf(w.end);
-      h += `<tr><td>${e(workerLabel(w))}</td><td class="rp-nw">${s && t ? `${s}〜${t}` : "（未入力）"}</td>`
+      const temotoTag = w.temoto ? ` <span style="font-size:11px;background:#e8f5e9;color:#2e7d32;border-radius:4px;padding:1px 5px;font-weight:700;">手元</span>` : "";
+      h += `<tr><td>${e(workerLabel(w))}${temotoTag}${w.temoto && w.temotoNote ? `<br><span style="font-size:12px;color:#555;">（${e(w.temotoNote)}）</span>` : ""}</td>`
+        +  `<td class="rp-nw">${s && t ? `${s}〜${t}` : "（未入力）"}</td>`
         +  `<td class="rp-r">${Number(w.hours || 0).toFixed(1)} h</td></tr>`;
     });
     h += `</tbody></table>`;
@@ -2473,6 +2505,7 @@ function renderReportBody(p){
   if(!agg.length){
     h += `<div class="rp-muted">（コア入力なし）</div>`;
   }else{
+    const grandTotal = agg.reduce((s, a) => s + (a.total || 0), 0);
     h += `<table class="rp-t"><thead><tr><th class="rp-nw">穿孔径</th><th class="rp-nw">穿孔長</th><th>適用</th><th class="rp-nw">合計本数</th></tr></thead><tbody>`;
     let cur = null;
     agg.forEach(a => {
@@ -2482,7 +2515,28 @@ function renderReportBody(p){
       h += `<tr><td class="rp-nw">φ${e(a.diam)}</td><td class="rp-nw">${a.lenMm ? "L=" + e(a.lenMm) + "㎜" : "—"}</td>`
         +  `<td>${e(apply)}</td><td class="rp-r"><b>${e(a.total)}</b> 本</td></tr>`;
     });
+    h += `<tr style="border-top:2px solid #ccc;"><td colspan="3" style="text-align:right;font-weight:700;">合計</td>`
+       + `<td class="rp-r" style="font-weight:700;font-size:1.05em;"><b>${grandTotal}</b> 本</td></tr>`;
     h += `</tbody></table>`;
+  }
+
+  // コア明細（作業員別・メモあり行を表示）
+  const memoWorkers = ws.filter(w => (w.cores || []).some(c => c.memo));
+  if(memoWorkers.length){
+    h += `<div class="rp-sec">コアメモ（明細ごと）</div>`;
+    memoWorkers.forEach(w => {
+      const memoCores = (w.cores || []).filter(c => c.memo);
+      if(!memoCores.length) return;
+      h += `<div style="font-weight:700;margin:6px 0 2px;">${e(workerLabel(w))}</div>`;
+      h += `<table class="rp-t"><thead><tr><th class="rp-nw">穿孔径</th><th class="rp-nw">穿孔長</th><th class="rp-nw">数量</th><th>メモ</th></tr></thead><tbody>`;
+      memoCores.forEach((c, i) => {
+        h += `<tr><td class="rp-nw">φ${e(c.diam)}</td>`
+           + `<td class="rp-nw">${c.lenMm ? "L=" + e(c.lenMm) + "㎜" : "—"}</td>`
+           + `<td class="rp-r">${e(c.qty)} 本</td>`
+           + `<td>${e(c.memo)}</td></tr>`;
+      });
+      h += `</tbody></table>`;
+    });
   }
 
   // 調査
