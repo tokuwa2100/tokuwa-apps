@@ -767,8 +767,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "shukei";
-const APP_VERSION   = "1.7.1";
-const APP_BUILD     = "2026-11-13";
+const APP_VERSION   = "1.8.0";
+const APP_BUILD     = "2026-11-20";
 
 (function(){
   const b = document.getElementById("verBadge");
@@ -1606,6 +1606,20 @@ function aggregateSurvey(records) {
   }).filter(x => x.total > 0);
 }
 
+function aggregateHatsuri(records) {
+  const byDate = {};
+  let total = 0;
+  records.forEach(r => {
+    const x = r.hatsuri;
+    if(!x || x.on !== true) return;
+    const q = Number(x.hours);
+    if(!(q > 0)) return;
+    byDate[r.date] = (byDate[r.date] || 0) + q;
+    total += q;
+  });
+  return { byDate, total };
+}
+
 function getRowLabel(key) {
   const parts = key.split("_");
   const phi = parts[0];
@@ -1703,6 +1717,13 @@ function renderCoreTable(records, site, month, range, statsGrid, tableArea) {
     cols.forEach(dt=>{const v=sv.byDate[dt.key]||null;html+=`<td class="${dCls(dt)}">${v?`<span class="val" style="color:var(--primary);">${v}</span>`:""}</td>`;});
     html+=`<td class="total-col">${sv.total}</td></tr>`;
   });
+  // ハツリ作業（時間）を日付ごとに表示
+  const htRow = aggregateHatsuri(records);
+  if(htRow.total > 0){
+    html+=`<tr><td class="row-hd" colspan="2" style="background:#fff3e0;color:#b45309;">ハツリ作業</td><td style="font-size:10px;color:#b45309;background:#fff3e0;">h</td>`;
+    cols.forEach(dt=>{const v=htRow.byDate[dt.key]||null;html+=`<td class="${dCls(dt)}">${v?`<span class="val" style="color:#b45309;">${v.toFixed(1)}</span>`:""}</td>`;});
+    html+=`<td class="total-col">${htRow.total.toFixed(1)}</td></tr>`;
+  }
   html+=`<tr class="total-row"><td colspan="3">小計（コア本数）</td>`;
   let grand=0;
   cols.forEach(dt=>{const t=rowKeys.reduce((s,k)=>s+(gridByDate[k][dt.key]||0),0);grand+=t;html+=`<td>${t||""}</td>`;});
@@ -1865,6 +1886,17 @@ function buildDiaryHTML(records, range) {
       if (p.length) svParts.push(p.join("・"));
     });
 
+    // ハツリ作業
+    const htParts = [];
+    dayRecs.forEach(r => {
+      const x = r.hatsuri;
+      if (!x || x.on !== true) return;
+      const p = [];
+      if (x.note) p.push(esc(x.note));
+      if (x.hours != null) p.push(`${Number(x.hours).toFixed(1)}h`);
+      htParts.push(p.length ? p.join("　") : "あり");
+    });
+
     // 作業員ごとにまとめる（同日同名は合算）
     const wkMap = {};
     // 工具はレコード（日）単位の数量なので日単位で1回だけ集計する
@@ -1919,6 +1951,9 @@ function buildDiaryHTML(records, range) {
 
     if (svParts.length) {
       html += `<div class="diary-note" style="background:#e8f0fe;border-left-color:#1a56db;color:#1a3f8f;">🔍 調査：${svParts.join(' / ')}</div>`;
+    }
+    if (htParts.length) {
+      html += `<div class="diary-note" style="background:#fff3e0;border-left-color:#f59e0b;color:#92400e;">🔨 ハツリ：${htParts.join(' / ')}</div>`;
     }
     if (notes.length) {
       html += `<div class="diary-note">⚠️ 特記：${notes.map(esc).join(' / ')}</div>`;
@@ -3530,7 +3565,7 @@ function dvPrint(){
 /* ---- 本体の組み立て ---- */
 // 明示的に表示済みのキー（これ以外は「その他の記入項目」に自動で出す）
 const DV_KNOWN = new Set(["id","date","app","type","client","customer","site",
-  "workers","tools","survey","otherNote","waste","workDesc","needConfirm",
+  "workers","tools","survey","hatsuri","otherNote","waste","workDesc","needConfirm",
   "highway","useHighway","recordId","createdAt","appVersion","appBuild","version","_rev","_editCount",
   "revision","revisedAt","revisedBy","driveSent","driveSentAt","driveSkip","sent","sentAt"]);
 
@@ -3700,6 +3735,17 @@ function dvDetailHtml(r){
   if(r.workDesc){
     h += `<div class="dv-sec"><div class="dv-sec-t">📝 作業内容</div>` +
          `<div class="dv-note plain">${esc(r.workDesc)}</div></div>`;
+  }
+
+  /* ハツリ作業 */
+  const hatsuriR = r.hatsuri;
+  if(hatsuriR && hatsuriR.on === true){
+    const hp = [];
+    if(hatsuriR.note) hp.push(esc(hatsuriR.note));
+    if(hatsuriR.hours != null) hp.push(`${Number(hatsuriR.hours).toFixed(1)}h`);
+    h += `<div class="dv-sec"><div class="dv-sec-t">🔨 ハツリ作業</div>` +
+         (hp.length ? hp.map(x => `<span class="dv-chip">${x}</span>`).join("") : `<span class="dv-chip">あり</span>`) +
+         `</div>`;
   }
 
   /* 高速道路 */
@@ -4733,6 +4779,12 @@ function edFormHtml(type, d){
     h += `<button class="ed-add" onclick="edAdd('tools','tool')">＋ 工具を追加</button></div>`;
   }
 
+  h += `<div class="ed-sec"><div class="ed-sec-t">ハツリ作業</div><div class="ed-row">`
+    + edIn("ハツリあり", "hatsuri.on", "check")
+    + edIn("内容", "hatsuri.note", "text", { wide: true })
+    + edIn("所要時間(h)", "hatsuri.hours", "num", { mini: true })
+    + `</div></div>`;
+
   h += `<div class="ed-sec"><div class="ed-sec-t">高速道路</div><div class="ed-row">` + edIn("使用", "useHighway", "sel", { vals: [[true, "使用あり"], [false, "使用なし"], [null, "未選択"]] }) + `</div>`;
   (d.highway || []).forEach((x, i) => {
     h += `<div class="ed-row ed-line">` + edIn("入口IC", `highway.${i}.from`, "text") + edIn("出口IC", `highway.${i}.to`, "text")
@@ -4747,7 +4799,7 @@ function edFormHtml(type, d){
 /* ---------------- 変更点の書き出し（履歴用） ---------------- */
 const ED_KEYS = {
   date: "作業日", client: "お客様名", customer: "お客様名", site: "現場名", needConfirm: "作業確認書", waste: "廃棄処分",
-  otherNote: "その他・備考", workDesc: "作業内容", useHighway: "高速道路の使用",
+  otherNote: "その他・備考", workDesc: "作業内容", useHighway: "高速道路の使用", hatsuri: "ハツリ作業",
   name: "氏名", company: "外注会社", person: "外注担当", outsource: "外注", start: "開始", end: "終了", hours: "実働",
   floor: "階", diam: "穿孔径", lenMm: "穿孔長", qty: "数量", mat: "素材", part: "部位",
   tenjo: "天井裏", kosha: "高車", vac: "真空パッド", yojo: "養生", memo: "メモ",
@@ -4766,6 +4818,7 @@ function edLabel(path){
       out.push(k === "overtime" ? "残業" : ED_LISTS[k] + (Number(ks[i + 1]) + 1));
       i++;
     }else if(k === "survey"){ /* 「調査」は項目名で分かるので省く */ }
+    else if(ks[i - 1] === "hatsuri"){ out.push({ on: "有無", note: "内容", hours: "所要時間" }[k] || ED_KEYS[k] || k); }
     else if(!(k === "hours" && ks[i - 2] === "overtime")) out.push(ED_KEYS[k] || k);
   }
   return out.join(" ");
@@ -4906,6 +4959,15 @@ function rpBody(type, p){
       tl.forEach(t => { h += `<tr><td>${esc(t.name)}</td><td class="rp-r"><b>${esc(t.qty)}</b></td></tr>`; });
       h += `</tbody></table>`;
     }
+  }
+  const rpHt = p.hatsuri;
+  h += `<div class="rp-sec">ハツリ作業</div>`;
+  if(!rpHt || rpHt.on !== true){
+    h += `<div class="rp-muted">（なし）</div>`;
+  }else{
+    h += `<table class="rp-t"><thead><tr><th>内容</th><th class="rp-nw">所要時間</th></tr></thead><tbody>`
+      +  `<tr><td>${esc(rpHt.note || "—")}</td><td class="rp-r"><b>${rpHt.hours != null ? esc(Number(rpHt.hours).toFixed(1)) : "—"}</b> h</td></tr>`
+      +  `</tbody></table>`;
   }
   return h + rpHighway(p);
 }
