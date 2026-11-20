@@ -338,6 +338,40 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
         <div class="hint">※作業時間は30分刻み。12:00〜13:00は昼休憩として自動で差し引きます。</div>
       </div>
 
+      <!-- ハツリ作業 -->
+      <div class="section">
+        <h2>ハツリ作業</h2>
+        <div class="pillrow" id="hatsuriUseRow">
+          <div class="pill orange" id="hatsuriNo"  onclick="setHatsuri(false)">なし</div>
+          <div class="pill orange" id="hatsuriYes" onclick="setHatsuri(true)">あり</div>
+        </div>
+        <div id="hatsuriArea" class="hidden">
+          <label style="margin-top:12px;">内容</label>
+          <input id="hatsuriNote" type="text" placeholder="例：配管廻りハツリ、溝ハツリ など" />
+          <label style="margin-top:12px;">所要時間（0.5h刻み）</label>
+          <select id="hatsuriHours">
+            <option value="">選択してください</option>
+            <option value="0.5">0.5 h</option>
+            <option value="1.0">1.0 h</option>
+            <option value="1.5">1.5 h</option>
+            <option value="2.0">2.0 h</option>
+            <option value="2.5">2.5 h</option>
+            <option value="3.0">3.0 h</option>
+            <option value="3.5">3.5 h</option>
+            <option value="4.0">4.0 h</option>
+            <option value="4.5">4.5 h</option>
+            <option value="5.0">5.0 h</option>
+            <option value="5.5">5.5 h</option>
+            <option value="6.0">6.0 h</option>
+            <option value="6.5">6.5 h</option>
+            <option value="7.0">7.0 h</option>
+            <option value="7.5">7.5 h</option>
+            <option value="8.0">8.0 h</option>
+          </select>
+        </div>
+        <div class="hint">※ハツリがあった場合は、内容と所要時間を入力してください。</div>
+      </div>
+
       <div class="section">
         <h2>高速道路</h2>
         <div class="pillrow" id="hwUseRow">
@@ -428,6 +462,15 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       </div>
 
       <div class="card">
+        <h2 style="margin:0 0 10px;font-size:16px;border-left:5px solid var(--orange);padding-left:8px">ハツリ作業</h2>
+        <div id="c-hatsuriNone" class="muted">（なし）</div>
+        <div id="c-hatsuriWrap" class="hidden">
+          <div class="item">内容：<span id="c-hatsuriBody"></span></div>
+          <div class="item">所要時間：<span id="c-hatsuriHours"></span></div>
+        </div>
+      </div>
+
+      <div class="card">
         <h2 style="margin:0 0 10px;font-size:16px;border-left:5px solid var(--orange);padding-left:8px">高速道路</h2>
         <div id="c-hwNone" class="muted">（使用なし）</div>
         <div id="c-hwWrap" class="hidden" style="overflow:auto">
@@ -501,8 +544,8 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "core";
-const APP_VERSION   = "1.11.0";
-const APP_BUILD     = "2026-11-13";
+const APP_VERSION   = "1.12.0";
+const APP_BUILD     = "2026-11-20";
 
 (function(){
   const tv = document.getElementById("titleVer");
@@ -1035,6 +1078,7 @@ function collectData(){
     waste: wasteFlag,
     otherNote,
     survey,
+    hatsuri: collectHatsuri(),
     useHighway,
     highway: collectHighway(),
     workers
@@ -1088,6 +1132,43 @@ function aggregateCores(data){
 /* =============================
   画面遷移
 ============================= */
+/* =============================
+  ハツリ作業
+============================= */
+let hatsuriOn = null; // null/true/false
+function setHatsuri(v){
+  hatsuriOn = v;
+  document.getElementById("hatsuriNo").classList.toggle("active", v===false);
+  document.getElementById("hatsuriYes").classList.toggle("active", v===true);
+  document.getElementById("hatsuriUseRow").classList.remove("err");
+  document.getElementById("hatsuriArea").classList.toggle("hidden", v!==true);
+  if(v!==true) clearHatsuriInputs();
+}
+function clearHatsuriInputs(){
+  const note = document.getElementById("hatsuriNote");
+  const hrs  = document.getElementById("hatsuriHours");
+  note.value = ""; note.classList.remove("err");
+  hrs.value = "";  hrs.classList.remove("err");
+}
+function resetHatsuri(){
+  clearHatsuriInputs();
+  setHatsuri(false);
+}
+function collectHatsuri(){
+  if(hatsuriOn !== true) return { on:false, note:"", hours:null };
+  const h = parseFloat(document.getElementById("hatsuriHours").value);
+  return {
+    on: true,
+    note: (document.getElementById("hatsuriNote").value || "").trim(),
+    hours: (!Number.isNaN(h) && h > 0) ? h : null
+  };
+}
+// 内容を1行の文字列にする（確認画面・日報画像の共通処理）
+function hatsuriBodyText(ht){
+  if(!ht || ht.on !== true) return "";
+  return (ht.note || "").trim();
+}
+
 /* =============================
   高速道路
 ============================= */
@@ -1206,6 +1287,14 @@ function goConfirm(){
       if(!(c.value || "").trim()) mark(c);
     }
   });
+
+  // ハツリ作業：ありなら内容と所要時間が必須
+  if(hatsuriOn === true){
+    const noteEl = document.getElementById("hatsuriNote");
+    if(!(noteEl.value || "").trim()) mark(noteEl);
+    const hrsEl = document.getElementById("hatsuriHours");
+    if(!(parseFloat(hrsEl.value) > 0)) mark(hrsEl);
+  }
 
   // 高速道路：使用有無は必須、使用ありなら区間必須
   if(useHighway === null) mark(document.getElementById("hwUseRow"));
@@ -1329,6 +1418,21 @@ function goConfirm(){
     svCard.classList.remove("hidden");
   }else{
     svCard.classList.add("hidden");
+  }
+
+  // ハツリ作業
+  const ht = data.hatsuri || null;
+  const htNone = document.getElementById("c-hatsuriNone");
+  const htWrap = document.getElementById("c-hatsuriWrap");
+  if(!ht || ht.on !== true){
+    htNone.classList.remove("hidden");
+    htWrap.classList.add("hidden");
+  }else{
+    htNone.classList.add("hidden");
+    htWrap.classList.remove("hidden");
+    document.getElementById("c-hatsuriBody").innerText = hatsuriBodyText(ht) || "（内容未記入）";
+    document.getElementById("c-hatsuriHours").innerText =
+      ht.hours != null ? Number(ht.hours).toFixed(1) + " h" : "（未入力）";
   }
 
   // 高速道路
@@ -2204,6 +2308,7 @@ function newReport(){
   document.getElementById("workers").innerHTML = "";
   addWorker();
   resetHighway();
+  resetHatsuri();
 
   // 署名クリア
   ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -2241,6 +2346,7 @@ function escapeHtml(s){
   初期化
 ============================= */
 setWaste(false);  // デフォルト「無」
+setHatsuri(false); // ハツリ作業のデフォルトは「なし」
 document.getElementById("date").value = todayStr(); // 日付は今日を初期値に
 addWorker();
 
@@ -2551,6 +2657,18 @@ function renderReportBody(p){
   }
   if(sv.note) sl.push(`・メモ：${e(sv.note)}`);
   if(sl.length) h += `<div class="rp-sec">調査（レントゲン・鉄筋探査）</div><div>${sl.join("<br>")}</div>`;
+
+  // ハツリ作業
+  const ht = p.hatsuri || null;
+  h += `<div class="rp-sec">ハツリ作業</div>`;
+  if(!ht || ht.on !== true){
+    h += `<div class="rp-muted">（なし）</div>`;
+  }else{
+    const body = hatsuriBodyText(ht) || "—";
+    h += `<table class="rp-t"><thead><tr><th>内容</th><th class="rp-nw">所要時間</th></tr></thead><tbody>`
+      +  `<tr><td>${e(body)}</td><td class="rp-r"><b>${ht.hours != null ? e(Number(ht.hours).toFixed(1)) : "—"}</b> h</td></tr>`
+      +  `</tbody></table>`;
+  }
 
   h += renderReportHighway(p);
   return h;
