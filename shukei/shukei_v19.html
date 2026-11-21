@@ -5439,7 +5439,7 @@ const NB_CL_KEY = "TOKUWA_SHUKEI_TORIHIKI_V1";
 const NB_IT_KEY = "TOKUWA_SHUKEI_HINMOKU_V1";
 const NB_MT_KEY = "TOKUWA_SHUKEI_TMPLMETA_V1";
 const NB_HEAD = ["お客様コード","得意先名","敬称","フリガナ","郵便番号","住所1","住所2",
-                 "部署","担当者","TEL","FAX","締日","有効","備考","日報での表記","請求書の単位"];
+                 "部署","担当者","TEL","FAX","締日","有効","備考","日報での表記","請求書の単位","請求不要"];
 const NB_CLOSING = ["末","5","10","15","20","25"];
 
 let nbClients = [];
@@ -5691,6 +5691,10 @@ function nbRowHtml(c, i){
         ${tx("TEL","電話","025-523-2100")}
         ${tx("FAX","FAX")}
         ${tx("備考","備考")}
+        <label style="font-size:12px;display:block;padding:6px;background:#f5f5f5;border-radius:8px;">
+          <input type="checkbox" ${String(c["請求不要"]||"")==="○"?"checked":""} onchange="nbEdit(${i},'請求不要',this.checked?'○':'')">
+          この取引先には請求書を出さない（請求もれチェックから外す）
+        </label>
         <div style="margin-top:4px;">
           <button class="btn btn-outline" style="color:#c62828;border-color:#ef9a9a;" onclick="nbDelete(${i})">🗑 この取引先を削除する</button>
         </div>
@@ -5815,9 +5819,15 @@ function nbRenderAlert(){
               ${NB_CLOSING.map(v => `<option value="${v}">${v==="末"?"月末":v+"日"}</option>`).join("")}
             </select>
           </label>
-          <button class="btn btn-primary" onclick="nbFix(${k}, ${JSON.stringify(n).replace(/"/g,'&quot;')})">登録する</button>
+          <button class="btn btn-primary" onclick="nbFix(${k}, ${JSON.stringify(n).replace(/"/g,'&quot;')})">マスタ側で受ける</button>
+          <button class="btn btn-outline" onclick="nbFixReports(${k}, ${JSON.stringify(n).replace(/"/g,'&quot;')})">日報の会社名を直す</button>
+          <button class="btn btn-outline" onclick="nbShowReports(${JSON.stringify(n).replace(/"/g,'&quot;')})">日報を1件ずつ見る</button>
         </div>
-        <div class="hint" style="margin-top:6px;">すでにマスタにある会社の書き方違いなら、結びつけ先でその会社を選んでください（日報での表記に足されます）。</div>
+        <div class="hint" style="margin-top:6px;">
+          <b>マスタ側で受ける</b>…日報の書き方が正しいとき。結びつけ先の「日報での表記」に足す（新しい会社なら新規登録）。<br>
+          <b>日報の会社名を直す</b>…日報が書き間違いのとき。結びつけ先に選んだ会社名で、この期間の日報をまとめて書き換えます（修正履歴に残ります）。<br>
+          <b>日報を1件ずつ見る</b>…中身を見てから決めたいとき。
+        </div>
       </div>`).join("");
   }
   if(noClose.length){
@@ -5847,6 +5857,67 @@ function nbFix(k, reportName){
     showToast(`✅ ${c["得意先名"]} に結びつけました`);
   }
   nbRenderAlert(); nbRenderCard();
+}
+
+/* ---------- 日報の会社名を直す ---------- */
+function nbReportsWithClient(name){
+  const out = [];
+  try{
+    TK.reports.forEach((w, id) => {
+      if(w.deleted) return;
+      const cur = w.current || {};
+      if(String(getClientName(cur) || "") === String(name)) out.push({ id, w, cur });
+    });
+  }catch(e){}
+  return out;
+}
+
+async function nbFixReports(k, reportName){
+  const sel = document.getElementById(`nb-fix-sel-${k}`);
+  if(!sel) return;
+  if(sel.value === "new"){
+    showToast("直す先の会社を「結びつけ先」で選んでください");
+    return;
+  }
+  const target = nbClients[Number(sel.value)];
+  if(!target){ showToast("❌ 直す先が見つかりません"); return; }
+  const list = nbReportsWithClient(reportName);
+  if(!list.length){ showToast("対象の日報が見つかりません"); return; }
+  if(typeof TK !== "undefined" && TK.mode === "cloud" && !navigator.onLine){
+    showToast("⚠️ インターネットにつながっていないため日報を直せません");
+    return;
+  }
+  const to = target["得意先名"];
+  if(!confirm(`日報の会社名「${reportName}」を「${to}」に書き換えます。\n対象：${list.length}件\n\n日報の原本が変わります（修正履歴に残ります）。よろしいですか？`)) return;
+
+  let ok = 0, ng = 0;
+  for(const it of list){
+    try{
+      const type = detectType(it.cur);
+      const field = (REPORT_TYPES[type] && REPORT_TYPES[type].clientField) || "client";
+      const draft = JSON.parse(JSON.stringify(it.cur));
+      draft[field] = to;
+      const changes = (typeof edDiff === "function") ? edDiff(it.cur, draft) : [];
+      const edits = changes.length ? changes
+        : [{ path: field, label: "お客様名", before: reportName, after: to }];
+      await tkUpdate(it.id, draft, edits, "取引先マスタに合わせて会社名を修正", it.w.rev);
+      ok++;
+    }catch(e){ console.error(e); ng++; }
+  }
+  nbRenderAlert(); nbRenderCheck();
+  showToast(ng ? `⚠️ ${ok}件を直し、${ng}件は失敗しました` : `✅ ${ok}件の日報の会社名を直しました`);
+}
+
+function nbShowReports(name){
+  const el = document.getElementById("sr-client");
+  if(!el){ showToast("日報を探すカードが見つかりません"); return; }
+  el.value = name;
+  const period = document.getElementById("sr-from");
+  if(period) { /* 期間は触らない */ }
+  try{ if(typeof srSetPeriod === "function") srSetPeriod("all"); }catch(e){}
+  try{ srRender(); }catch(e){}
+  document.getElementById("sr-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  showToast("日報を探すカードに出しました。各日報の「修正」から会社名を直せます");
 }
 
 /* ---------- 明細づくり ---------- */
@@ -5923,7 +5994,16 @@ function nbSyncMasterInto(wb){
     const v = nbCellText(tk.getCell(1, j));
     if(v) colOf[v] = j;
   }
-  NB_HEAD.forEach((h, i) => { if(!colOf[h]) colOf[h] = i + 1; });
+  // 読み込んだ雛形に無い見出しは、右端に足して見出しも書く
+  let maxCol = 0;
+  Object.keys(colOf).forEach(k => { if(colOf[k] > maxCol) maxCol = colOf[k]; });
+  NB_HEAD.forEach(h => {
+    if(!colOf[h]){
+      maxCol += 1;
+      colOf[h] = maxCol;
+      tk.getCell(1, maxCol).value = h;
+    }
+  });
   const last = Math.max(tk.rowCount, nbClients.length + 1);
   for(let r = 2; r <= last; r++){
     const c = nbClients[r - 2];
@@ -5982,7 +6062,7 @@ async function nbMakeNouhin(){
     if(k === 0) ws.getCell(`I${20}`).value = site;
   });
   await nbSaveWb(wb, `納品書_${c["得意先名"]}_${site}_${range.start}〜${range.end}.xlsx`);
-  nbMark(client, site, range, "nouhin", {});
+  nbMark(c["得意先名"], site, range, "nouhin", {});
   try{ nbRenderCheck(); }catch(e){}
   if(lines.length > MAX){
     showToast(`⚠️ 明細が${lines.length}行あり、納品書に載るのは${MAX}行までです。残り${lines.length-MAX}行は手で足してください`);
@@ -6050,11 +6130,12 @@ async function nbMakeSeikyu(){
   });
   const tail = unit === "現場ごと" ? `_${site}` : "";
   await nbSaveWb(wb, `請求書_${c["得意先名"]}${tail}_${range.start}〜${range.end}.xlsx`);
+  const mn = c["得意先名"];
   if(unit === "現場ごと"){
-    nbMark(client, site, range, "seikyu", {});
+    nbMark(mn, site, range, "seikyu", {});
   }else{
-    nbMark(client, null, range, "seikyu", {});
-    sites.forEach(s => nbMark(client, s, range, "seikyu", {}));
+    nbMark(mn, null, range, "seikyu", {});
+    sites.forEach(s => nbMark(mn, s, range, "seikyu", {}));
   }
   try{ nbRenderCheck(); }catch(e){}
   if(rows.length > MAX){
@@ -6135,10 +6216,14 @@ function nbCheckData(month){
   let recs = [];
   try{ recs = getEffectiveRecords(); }catch(e){ return { rows: [], quiet: [] }; }
   const byClient = {};
+  const rawNames = {};
   recs.forEach(r => {
     const cl = getClientName(r);
     if(!cl) return;
-    (byClient[cl] = byClient[cl] || []).push(r);
+    const m = nbFindClient(cl);
+    const key = m ? m["得意先名"] : cl;
+    (byClient[key] = byClient[key] || []).push(r);
+    (rawNames[key] = rawNames[key] || new Set()).add(cl);
   });
 
   const rows = [];
@@ -6156,6 +6241,7 @@ function nbCheckData(month){
     const unit = String((m && m["請求書の単位"]) || "").trim() || "取引先ごと";
     rows.push({
       client: cl,
+      raws: [...(rawNames[cl] || new Set([cl]))],
       master: m,
       cutoffLabel: cutoff === 0 ? "月末" : cutoff + "日",
       range, unit,
@@ -6186,6 +6272,7 @@ function nbCheckData(month){
 }
 
 function nbCheckState(row){
+  if(row.master && String(row.master["請求不要"] || "") === "○") return "none";
   if(row.issued.skip) return "skip";
   if(row.unit === "現場ごと"){
     const done = row.sites.every(s => s.issued.seikyu);
@@ -6242,8 +6329,12 @@ function nbRenderCheck(){
       const nouhinHtml = r.sites.map(s =>
         s.issued.nouhin ? `<div style="color:var(--green)">済 ${nbFmt(s.issued.nouhin.at)}</div>` : `<div style="color:#e65100">未</div>`).join("");
       let seikyuHtml;
-      if(st === "skip"){
-        seikyuHtml = `<span style="color:#666">対象外${r.issued.skip.note ? "：" + esc(r.issued.skip.note) : ""}</span>`;
+      const BTN = 'class="btn btn-outline" style="font-size:11px;padding:4px 8px;"';
+      if(st === "none"){
+        seikyuHtml = `<span style="color:#666">請求不要</span>`;
+      }else if(st === "skip"){
+        const sk = r.issued.skip;
+        seikyuHtml = `<span style="color:#666">確認済み<br>${esc(sk.reason || "")}${sk.note ? "<br>" + esc(sk.note) : ""}<br>${nbFmt(sk.at)}</span>`;
       }else if(r.unit === "現場ごと"){
         seikyuHtml = r.sites.map(s =>
           s.issued.seikyu ? `<div style="color:var(--green)">済 ${nbFmt(s.issued.seikyu.at)}</div>` : `<div style="color:#e65100;font-weight:800">未請求</div>`).join("");
@@ -6252,11 +6343,27 @@ function nbRenderCheck(){
           ? `<span style="color:var(--green)">済 ${nbFmt(r.issued.seikyu.at)}${r.issued.seikyu.manual ? "（手入力）" : ""}</span>`
           : `<span style="color:#e65100;font-weight:800">未請求</span>`;
       }
-      const ops = st === "skip"
-        ? `<button class="btn btn-outline" style="font-size:11px;padding:4px 8px;" onclick="nbCheckUnskip(${idx})">対象外をやめる</button>`
-        : `<button class="btn btn-outline" style="font-size:11px;padding:4px 8px;" onclick="nbCheckGo(${idx})">この取引先を集計</button>
-           <button class="btn btn-outline" style="font-size:11px;padding:4px 8px;" onclick="nbCheckManual(${idx})">請求済みにする</button>
-           <button class="btn btn-outline" style="font-size:11px;padding:4px 8px;" onclick="nbCheckSkip(${idx})">対象外</button>`;
+      let ops;
+      if(st === "none"){
+        ops = `<button ${BTN} onclick="nbCheckNeedBill(${idx})">請求するに戻す</button>`;
+      }else if(st === "skip"){
+        ops = `<button ${BTN} onclick="nbCheckUnskip(${idx})">未請求に戻す</button>`;
+      }else{
+        ops = `<button ${BTN} onclick="nbCheckGo(${idx})">この取引先を集計</button>
+          <button ${BTN} onclick="nbCheckClearOpen(${idx})">確認して消す</button>
+          <button ${BTN} onclick="nbCheckNoBill(${idx})">今後ずっと請求不要</button>
+          <div id="nb-clr-${idx}" style="display:none;margin-top:6px;padding:6px;background:#fff;border:1.5px solid var(--border);border-radius:8px;">
+            <select id="nb-clr-r-${idx}" style="font-size:11px;width:100%;">
+              <option value="別枠で請求済み">別枠で請求済み（急ぎで先に出した）</option>
+              <option value="請求先が変わった">請求先が変わった（別の取引先に請求）</option>
+              <option value="今回は請求しない">今回は請求しない（来月まとめるなど）</option>
+              <option value="この客は請求書不要">この客は請求書が不要</option>
+              <option value="その他">その他</option>
+            </select>
+            <input id="nb-clr-m-${idx}" placeholder="メモ（任意）" style="font-size:11px;width:100%;margin-top:4px;padding:4px;border:1px solid var(--border);border-radius:6px;">
+            <button ${BTN} style="margin-top:4px;" onclick="nbCheckClearDo(${idx})">この期間の知らせを消す</button>
+          </div>`;
+      }
       html += `<tr style="background:${bg};">
         <td style="border:1px solid #ddd;padding:6px;font-weight:800;">${esc(r.client)}${r.master ? "" : ' <span style="color:#c62828;font-weight:400;">※マスタ未登録</span>'}</td>
         <td style="border:1px solid #ddd;padding:6px;white-space:nowrap;text-align:center;">${esc(r.cutoffLabel)}</td>
@@ -6289,9 +6396,10 @@ function nbCheckGo(i){
   if(!r) return;
   const sel = document.getElementById("sel-client");
   if(sel){
-    const hit = [...sel.options].find(o => o.value === r.client);
+    const cand = [r.client, ...(r.raws || [])];
+    const hit = [...sel.options].find(o => cand.includes(o.value));
     if(hit){
-      sel.value = r.client;
+      sel.value = hit.value;
       updateSites(); updateMonths(); renderTable();
       document.getElementById("step2-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
@@ -6316,6 +6424,37 @@ function nbCheckSkip(i){
   nbMark(r.client, null, r.range, "skip", { note: String(note || "").trim() });
   nbRenderCheck();
   showToast("対象外にしました");
+}
+function nbCheckClearOpen(i){
+  const el = document.getElementById(`nb-clr-${i}`);
+  if(el) el.style.display = (el.style.display === "none" ? "block" : "none");
+}
+function nbCheckClearDo(i){
+  const r = nbCheckRows[i];
+  if(!r) return;
+  const reason = document.getElementById(`nb-clr-r-${i}`)?.value || "その他";
+  const note   = (document.getElementById(`nb-clr-m-${i}`)?.value || "").trim();
+  nbMark(r.client, null, r.range, "skip", { reason, note });
+  nbRenderCheck();
+  showToast("✅ この期間の知らせを消しました");
+}
+function nbCheckNoBill(i){
+  const r = nbCheckRows[i];
+  if(!r) return;
+  if(!r.master){ showToast("この取引先はマスタに無いので設定できません"); return; }
+  if(!confirm(`「${r.master["得意先名"]}」には今後ずっと請求書を出さない設定にします。\n毎月の請求もれチェックから外れます。\n\nよろしいですか？`)) return;
+  r.master["請求不要"] = "○";
+  nbSave();
+  nbRenderCheck(); nbRenderCard();
+  showToast("請求不要にしました");
+}
+function nbCheckNeedBill(i){
+  const r = nbCheckRows[i];
+  if(!r || !r.master) return;
+  r.master["請求不要"] = "";
+  nbSave();
+  nbRenderCheck(); nbRenderCard();
+  showToast("請求するに戻しました");
 }
 function nbCheckUnskip(i){
   const r = nbCheckRows[i];
