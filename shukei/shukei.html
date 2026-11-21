@@ -578,6 +578,30 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
     </details>
   </div>
 
+  <!-- 未登録の取引先のお知らせ -->
+  <div class="card hidden" id="nb-alert" style="border:2px solid #ef6c00;background:#fff3e0;">
+    <div id="nb-alert-body"></div>
+  </div>
+
+  <!-- 納品書・請求書（Excel雛形） -->
+  <div class="card" id="nb-card">
+    <div class="card-title blue" style="display:flex;align-items:center;gap:8px;">📗 納品書・請求書 <span id="nb-status" class="tk-badge"></span></div>
+    <p class="tk-p" id="nb-info"></p>
+    <label class="btn btn-primary" style="display:inline-block;cursor:pointer;">
+      雛形を読み込む
+      <input type="file" accept=".xlsx" style="display:none;" onchange="nbPickTemplate(event)">
+    </label>
+    <span id="nb-msg" style="font-size:12px;color:var(--text2);margin-left:8px;"></span>
+    <details style="margin-top:10px;">
+      <summary>取引先マスタを見る・直す</summary>
+      <label class="tk-lb">会社名で探す</label>
+      <input id="nb-search" class="tk-in" placeholder="例：武江組" oninput="nbRenderList()">
+      <div id="nb-list" style="margin-top:10px;"></div>
+      <button class="btn btn-outline" onclick="nbExportMaster()">⬇️ 取引先マスタをExcelに書き出す</button>
+      <div class="hint">アプリで直した取引先は、納品書・請求書を出すときにも反映されます。Excelに書き出すと、直したあとのマスタが入ったファイルになります。</div>
+    </details>
+  </div>
+
   <!-- STEP 1: ファイル読み込み（Googleドライブ取り込みに一本化したため画面からは外した。
        画像・JSONを読む仕組みはそのまま残してあるので、必要になったら hidden を外せば戻る） -->
   <div class="card hidden" id="upload-card">
@@ -719,7 +743,43 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
       <button class="btn btn-outline" onclick="downloadExcel()">⬇️ Excelファイル</button>
       <button class="btn btn-outline" id="nohinsho-btn" style="display:none;" onclick="downloadNohinsho()">📄 納品書</button>
     </div>
+    <div id="nb-out" class="hidden" style="margin-top:10px;border-top:1.5px dashed var(--border);padding-top:10px;">
+      <div style="font-size:13px;font-weight:800;margin-bottom:6px;">雛形で出す</div>
+      <div class="cf-btnrow" style="align-items:center;">
+        <button class="btn btn-green" onclick="nbMakeNouhin()">📄 納品書</button>
+        <button class="btn btn-green" onclick="nbMakeSeikyu()">📑 請求書</button>
+        <label style="font-size:12px;">請求書の単位
+          <select id="nb-seikyu-unit">
+            <option value="">取引先マスタのとおり</option>
+            <option value="取引先ごと">取引先ごと</option>
+            <option value="現場ごと">現場ごと</option>
+          </select>
+        </label>
+        <label style="font-size:12px;">単価
+          <select id="nb-price-mode">
+            <option value="master">品目マスタから入れる</option>
+            <option value="blank">空欄にする（手入力）</option>
+          </select>
+        </label>
+      </div>
+      <div class="hint">読み込んだ「納品書・請求書.xlsx」の体裁で出します。単価を「空欄にする」と、数量だけ入った状態で出るので、Excel側で単価を打てば金額・消費税・合計が計算されます。条件で変わる分や一式も同じようにExcel側で直してください。</div>
+    </div>
     <div class="hint">「PDFで保存／印刷」は画面の集計表をそのまま出します。用紙は横向きで出ますが、色分けを紙にも出すには印刷画面の「背景のグラフィック」を<strong>オン</strong>にしてください。メールに付けるときは、印刷先を「PDFとして保存」にします。</div>
+  </div>
+
+  <!-- 請求もれチェック -->
+  <div class="card hidden" id="nb-check">
+    <div class="card-title amber" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">🧾 請求もれチェック <span id="nb-check-badge" class="tk-badge"></span></div>
+    <p class="tk-p">取引先ごとの締日で期間を区切って、日報がある現場に納品書・請求書を出したかを一覧にします。出した記録はこのPCに残ります。</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+      <label style="font-size:12px;">対象月
+        <input type="month" id="nb-check-month" onchange="nbRenderCheck()">
+      </label>
+      <label style="font-size:12px;"><input type="checkbox" id="nb-check-onlymiss" onchange="nbRenderCheck()"> 未請求だけ表示</label>
+      <button class="btn btn-outline" onclick="nbRenderCheck()">更新</button>
+      <button class="btn btn-outline" onclick="nbPrintCheck()">🖨 印刷／PDF</button>
+    </div>
+    <div id="nb-check-body"></div>
   </div>
 
   <div id="reset-area" class="hidden" style="margin-top:8px;">
@@ -767,8 +827,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "shukei";
-const APP_VERSION   = "1.8.0";
-const APP_BUILD     = "2026-11-20";
+const APP_VERSION   = "1.9.0";
+const APP_BUILD     = "2026-11-21";
 
 (function(){
   const b = document.getElementById("verBadge");
@@ -1389,6 +1449,8 @@ function populateClients() {
     : '<option value="">（データなし）</option>';
   if (prev && clients.includes(prev)) sel.value = prev;
   updateSites();
+  try{ if(typeof nbRenderAlert === "function") nbRenderAlert(); }catch(e){ console.error(e); }
+  try{ if(typeof nbRenderCheck === "function") nbRenderCheck(); }catch(e){ console.error(e); }
 }
 
 function updateSites() {
@@ -1519,6 +1581,7 @@ function renderTable() {
   step3.classList.remove("hidden");
   const nb = document.getElementById("nohinsho-btn");
   if(nb) nb.style.display = activeType === "core" ? "" : "none";
+  try{ if(typeof nbUpdateButtons === "function") nbUpdateButtons(); }catch(e){ console.error(e); }
 }
 
 // ===== コア日報集計 =====
@@ -5364,6 +5427,1062 @@ setInterval(() => { drPull(false); }, DR_INTERVAL);
     if((TK.ready && TK.mode !== "cloud-wait") || n > 120){ clearInterval(t); if(TK.ready && TK.mode !== "cloud-wait") drPull(false); }
   }, 1000);
 })();
+</script>
+
+<script>
+
+/* =========================================================
+   納品書・請求書（Excel雛形との連携）＋ 取引先マスタ
+   既存の集計表の処理には手を入れていない追加分
+   ========================================================= */
+const NB_CL_KEY = "TOKUWA_SHUKEI_TORIHIKI_V1";
+const NB_IT_KEY = "TOKUWA_SHUKEI_HINMOKU_V1";
+const NB_MT_KEY = "TOKUWA_SHUKEI_TMPLMETA_V1";
+const NB_HEAD = ["お客様コード","得意先名","敬称","フリガナ","郵便番号","住所1","住所2",
+                 "部署","担当者","TEL","FAX","締日","有効","備考","日報での表記","請求書の単位","請求不要"];
+const NB_CLOSING = ["末","5","10","15","20","25"];
+
+let nbClients = [];
+let nbItems   = [];
+let nbMeta    = null;
+let nbTmplBuf = null;
+
+/* ---------- このPCへの保存（雛形の中身はIndexedDB、取引先はlocalStorage） ---------- */
+function nbIdb(){
+  return new Promise((res,rej)=>{
+    const q = indexedDB.open("tokuwa_shukei_files", 1);
+    q.onupgradeneeded = () => { try{ q.result.createObjectStore("files"); }catch(e){} };
+    q.onsuccess = () => res(q.result);
+    q.onerror   = () => rej(q.error);
+  });
+}
+async function nbIdbPut(key, val){
+  const db = await nbIdb();
+  return new Promise((res,rej)=>{
+    const t = db.transaction("files","readwrite");
+    t.objectStore("files").put(val, key);
+    t.oncomplete = () => res(); t.onerror = () => rej(t.error);
+  });
+}
+async function nbIdbGet(key){
+  const db = await nbIdb();
+  return new Promise((res,rej)=>{
+    const t = db.transaction("files","readonly");
+    const r = t.objectStore("files").get(key);
+    r.onsuccess = () => res(r.result || null); r.onerror = () => rej(r.error);
+  });
+}
+function nbSave(){
+  try{
+    localStorage.setItem(NB_CL_KEY, JSON.stringify(nbClients));
+    localStorage.setItem(NB_IT_KEY, JSON.stringify(nbItems));
+    localStorage.setItem(NB_MT_KEY, JSON.stringify(nbMeta));
+  }catch(e){ showToast("⚠️ 取引先を保存できませんでした（容量不足）"); }
+}
+function nbLoadLocal(){
+  try{ nbClients = JSON.parse(localStorage.getItem(NB_CL_KEY) || "[]"); }catch(e){ nbClients = []; }
+  try{ nbItems   = JSON.parse(localStorage.getItem(NB_IT_KEY) || "[]"); }catch(e){ nbItems = []; }
+  try{ nbMeta    = JSON.parse(localStorage.getItem(NB_MT_KEY) || "null"); }catch(e){ nbMeta = null; }
+}
+
+/* ---------- 会社名の照合 ---------- */
+function nbNorm(s){
+  let t = String(s == null ? "" : s).normalize("NFKC").replace(/[\s　]/g, "");
+  t = t.replace(/(株式会社|有限会社|合同会社|合名会社|合資会社|一般社団法人|㈱|㈲|\(株\)|\(有\))/g, "");
+  return t.toLowerCase();
+}
+function nbAliases(c){
+  return String((c && c["日報での表記"]) || "").split(/[／\/,、|]/).map(s => s.trim()).filter(Boolean);
+}
+function nbFindClient(name){
+  const n = nbNorm(name);
+  if(!n) return null;
+  for(const c of nbClients){ if(nbNorm(c["得意先名"]) === n) return c; }
+  for(const c of nbClients){ if(nbAliases(c).some(a => nbNorm(a) === n)) return c; }
+  return null;
+}
+function nbCellText(c){
+  if(!c) return "";
+  let v = c.value;
+  if(v == null) return "";
+  if(v instanceof Date) return `${v.getFullYear()}-${String(v.getMonth()+1).padStart(2,"0")}-${String(v.getDate()).padStart(2,"0")}`;
+  if(typeof v === "object"){
+    if(v.richText) v = v.richText.map(t => t.text).join("");
+    else if("result" in v) v = v.result;
+    else if("text" in v) v = v.text;
+    else v = "";
+  }
+  return String(v == null ? "" : v).trim();
+}
+function nbCellNum(c){
+  const t = nbCellText(c).replace(/,/g, "");
+  const n = Number(t);
+  return t !== "" && isFinite(n) ? n : null;
+}
+
+/* ---------- 雛形の読み込み ---------- */
+async function nbPickTemplate(ev){
+  const file = ev.target.files && ev.target.files[0];
+  ev.target.value = "";
+  if(!file) return;
+  if(typeof ExcelJS === "undefined"){ showToast("❌ Excelの部品が読み込めていません"); return; }
+  const msg = document.getElementById("nb-msg");
+  if(msg) msg.textContent = "読み込んでいます…";
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buf);
+    const tk = wb.getWorksheet("得意先マスタ");
+    const hm = wb.getWorksheet("品目マスタ");
+    if(!tk || !hm || !wb.getWorksheet("納品書") || !wb.getWorksheet("請求書")){
+      if(msg) msg.textContent = "";
+      showToast("❌ 納品書・請求書・得意先マスタ・品目マスタのシートが必要です");
+      return;
+    }
+    const colOf = {};
+    for(let j = 1; j <= 60; j++){
+      const v = nbCellText(tk.getCell(1, j));
+      if(v) colOf[v] = j;
+    }
+    if(!colOf["得意先名"]){
+      if(msg) msg.textContent = "";
+      showToast("❌ 得意先マスタの1行目に見出しがありません");
+      return;
+    }
+    const cl = [];
+    const last = Math.max(tk.rowCount, tk.actualRowCount || 0);
+    for(let r = 2; r <= last; r++){
+      const name = nbCellText(tk.getCell(r, colOf["得意先名"]));
+      if(!name) continue;
+      const o = {};
+      NB_HEAD.forEach(h => { o[h] = colOf[h] ? nbCellText(tk.getCell(r, colOf[h])) : ""; });
+      cl.push(o);
+    }
+    const it = [];
+    const lastI = Math.max(hm.rowCount, hm.actualRowCount || 0);
+    for(let r = 2; r <= lastI; r++){
+      const nm = nbCellText(hm.getCell(r, 2));
+      if(!nm) continue;
+      it.push({ 品番: nbCellText(hm.getCell(r,1)), 品名: nm, 単位: nbCellText(hm.getCell(r,3)),
+                標準単価: nbCellNum(hm.getCell(r,4)), 備考: nbCellText(hm.getCell(r,5)) });
+    }
+    nbClients = cl; nbItems = it; nbTmplBuf = buf;
+    nbMeta = { fileName: file.name, loadedAt: new Date().toISOString() };
+    try{ await nbIdbPut("template", buf); }
+    catch(e){ showToast("⚠️ 雛形をこのPCに残せませんでした。次に開いたら読み込み直してください"); }
+    nbSave();
+    if(msg) msg.textContent = "";
+    nbRenderCard(); nbRenderAlert(); nbUpdateButtons();
+    showToast(`✅ 雛形を読み込みました（取引先${cl.length}件・品目${it.length}件）`);
+  }catch(e){
+    console.error(e);
+    if(msg) msg.textContent = "";
+    showToast("❌ 雛形を読めませんでした：" + (e.message || e));
+  }
+}
+
+/* ---------- 画面：取引先マスタのカード ---------- */
+function nbRenderCard(){
+  const card = document.getElementById("nb-card");
+  if(!card) return;
+  const st = document.getElementById("nb-status");
+  const info = document.getElementById("nb-info");
+  const has = !!nbTmplBuf;
+  if(st){
+    st.textContent = has ? `取引先 ${nbClients.length}件` : "未読み込み";
+    st.style.background = has ? "var(--green-light)" : "#eee";
+    st.style.color = has ? "var(--green)" : "#777";
+  }
+  if(info){
+    if(!has){
+      info.innerHTML = "「納品書・請求書.xlsx」を読み込むと、ここから納品書と請求書が出せるようになります。得意先マスタと品目マスタもそのファイルから読みます。";
+    }else{
+      const d = nbMeta && nbMeta.loadedAt ? new Date(nbMeta.loadedAt) : null;
+      const noClose = nbClients.filter(c => !String(c["締日"]||"").trim()).length;
+      info.innerHTML =
+        `雛形：<b>${esc((nbMeta && nbMeta.fileName) || "")}</b>` +
+        (d ? `（${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} 読み込み）` : "") +
+        `<br>取引先 <b>${nbClients.length}</b>件／品目 <b>${nbItems.length}</b>件` +
+        (noClose ? `<br><span style="color:#c62828">締日が空の取引先が ${noClose}件あります</span>` : "");
+    }
+  }
+  nbRenderList();
+}
+
+function nbRenderList(){
+  const box = document.getElementById("nb-list");
+  if(!box) return;
+  const q = nbNorm(document.getElementById("nb-search")?.value || "");
+  if(!nbClients.length){ box.innerHTML = ""; return; }
+  const addBtn = `<div style="margin-bottom:10px;"><button class="btn btn-outline" onclick="nbAddNew()">＋ 新しく登録する</button></div>`;
+  if(!q){
+    box.innerHTML = addBtn + `<p class="tk-p">会社名を入れて探してください（${nbClients.length}件）。探した会社の中で、会社名・住所・連絡先の修正と削除ができます。</p>`;
+    return;
+  }
+  const all = nbClients
+    .map((c, i) => ({ c, i }))
+    .filter(x => nbNorm(x.c["得意先名"]).includes(q) || nbAliases(x.c).some(a => nbNorm(a).includes(q)));
+  const hits = all.slice(0, 40);
+  if(!hits.length){
+    box.innerHTML = addBtn + `<p class="tk-p">「${esc(document.getElementById("nb-search")?.value || "")}」は見つかりません。</p>`;
+    return;
+  }
+  box.innerHTML = addBtn
+    + `<p class="tk-p">${all.length}件見つかりました${all.length > 40 ? "（40件まで表示）" : ""}</p>`
+    + hits.map(x => nbRowHtml(x.c, x.i)).join("");
+}
+
+function nbRowHtml(c, i){
+  const close = String(c["締日"] || "");
+  const unit  = String(c["請求書の単位"] || "");
+  const kei   = String(c["敬称"] || "");
+  const yuko  = String(c["有効"] || "");
+  const tx = (key, label, ph) =>
+    `<label style="font-size:12px;">${label}
+      <input class="tk-in" value="${esc(c[key]||"")}" placeholder="${ph||""}" oninput="nbEdit(${i},'${key}',this.value)">
+    </label>`;
+  return `<div style="border:1.5px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px;" id="nb-row-${i}">
+    <div style="font-weight:800;font-size:14px;" id="nb-name-${i}">${esc(c["得意先名"])} <span style="font-weight:400;color:var(--text2);font-size:12px;">${esc(kei)}</span></div>
+    <div style="font-size:12px;color:var(--text2);margin:2px 0 8px;" id="nb-addr-${i}">${esc(c["郵便番号"]||"")} ${esc(c["住所1"]||"")} ${esc(c["住所2"]||"")}</div>
+    <div style="display:grid;gap:6px;">
+      <label style="font-size:12px;">日報での表記（複数は「／」区切り）
+        <input class="tk-in" value="${esc(c["日報での表記"]||"")}" oninput="nbEdit(${i},'日報での表記',this.value)">
+      </label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px;">
+        <label>締日
+          <select onchange="nbEdit(${i},'締日',this.value)">
+            <option value="">（未設定）</option>
+            ${NB_CLOSING.map(v => `<option value="${v}" ${v===close?"selected":""}>${v==="末"?"月末":v+"日"}</option>`).join("")}
+          </select>
+        </label>
+        <label>請求書
+          <select onchange="nbEdit(${i},'請求書の単位',this.value)">
+            <option value="" ${unit===""?"selected":""}>取引先ごと</option>
+            <option value="取引先ごと" ${unit==="取引先ごと"?"selected":""}>取引先ごと</option>
+            <option value="現場ごと" ${unit==="現場ごと"?"selected":""}>現場ごと</option>
+          </select>
+        </label>
+      </div>
+    </div>
+    <details style="margin-top:8px;">
+      <summary style="font-size:12px;">会社名・住所・連絡先を直す</summary>
+      <div style="display:grid;gap:6px;margin-top:8px;">
+        ${tx("得意先名","会社名（納品書・請求書に出る名前）")}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px;">
+          <label>敬称
+            <select onchange="nbEdit(${i},'敬称',this.value)">
+              ${["御中","様","なし"].map(v=>`<option value="${v}" ${v===kei?"selected":""}>${v}</option>`).join("")}
+            </select>
+          </label>
+          <label>取引
+            <select onchange="nbEdit(${i},'有効',this.value)">
+              <option value="○" ${yuko==="○"?"selected":""}>あり</option>
+              <option value="" ${yuko!=="○"?"selected":""}>なし（休止）</option>
+            </select>
+          </label>
+        </div>
+        ${tx("お客様コード","お客様コード")}
+        ${tx("フリガナ","フリガナ")}
+        ${tx("郵便番号","郵便番号","943-0165")}
+        ${tx("住所1","住所1")}
+        ${tx("住所2","住所2（ビル名・階など）")}
+        ${tx("部署","部署")}
+        ${tx("担当者","担当者")}
+        ${tx("TEL","電話","025-523-2100")}
+        ${tx("FAX","FAX")}
+        ${tx("備考","備考")}
+        <label style="font-size:12px;display:block;padding:6px;background:#f5f5f5;border-radius:8px;">
+          <input type="checkbox" ${String(c["請求不要"]||"")==="○"?"checked":""} onchange="nbEdit(${i},'請求不要',this.checked?'○':'')">
+          この取引先には請求書を出さない（請求もれチェックから外す）
+        </label>
+        <div style="margin-top:4px;">
+          <button class="btn btn-outline" style="color:#c62828;border-color:#ef9a9a;" onclick="nbDelete(${i})">🗑 この取引先を削除する</button>
+        </div>
+      </div>
+    </details>
+  </div>`;
+}
+
+function nbEdit(i, key, val){
+  if(!nbClients[i]) return;
+  const v = String(val || "").trim();
+  if(key === "得意先名" && !v){
+    showToast("⚠️ 会社名は空にできません");
+    return;
+  }
+  nbClients[i][key] = v;
+  nbSave();
+  // 見出しと住所の表示を追いかける（打っている途中で作り直すと入力が切れるため、ここだけ書き換える）
+  if(key === "得意先名" || key === "敬称"){
+    const el = document.getElementById(`nb-name-${i}`);
+    if(el) el.innerHTML = `${esc(nbClients[i]["得意先名"])} <span style="font-weight:400;color:var(--text2);font-size:12px;">${esc(nbClients[i]["敬称"]||"")}</span>`;
+  }
+  if(key === "郵便番号" || key === "住所1" || key === "住所2"){
+    const el = document.getElementById(`nb-addr-${i}`);
+    const c = nbClients[i];
+    if(el) el.textContent = `${c["郵便番号"]||""} ${c["住所1"]||""} ${c["住所2"]||""}`;
+  }
+  nbRenderAlert();
+  const st = document.getElementById("nb-status");
+  if(st) st.textContent = `取引先 ${nbClients.length}件`;
+}
+
+function nbDelete(i){
+  const c = nbClients[i];
+  if(!c) return;
+  const name = c["得意先名"];
+  if(!confirm(`「${name}」を取引先マスタから削除します。\nこの取引先の納品書・請求書は出せなくなります。\n\nよろしいですか？`)) return;
+  nbClients.splice(i, 1);
+  nbSave();
+  nbRenderCard();
+  nbRenderAlert();
+  showToast(`🗑 ${name} を削除しました`);
+}
+
+function nbAddNew(){
+  const name = (document.getElementById("nb-search")?.value || "").trim();
+  const nm = name || prompt("新しく登録する会社名を入れてください") || "";
+  if(!String(nm).trim()){ showToast("会社名を入れてください"); return; }
+  if(nbFindClient(nm)){
+    showToast("⚠️ 同じ会社がすでに登録されています");
+  }else{
+    nbAddClient(String(nm).trim(), String(nm).trim(), "", "");
+    showToast("✅ 登録しました。締日と住所を入れてください");
+  }
+  const s = document.getElementById("nb-search");
+  if(s) s.value = String(nm).trim();
+  nbRenderList();
+}
+function nbAddClient(name, alias, closing, unit){
+  const o = {};
+  NB_HEAD.forEach(h => { o[h] = ""; });
+  o["得意先名"] = String(name || "").trim();
+  o["敬称"] = "御中";
+  o["有効"] = "○";
+  o["日報での表記"] = String(alias || "").trim();
+  o["締日"] = String(closing || "");
+  o["請求書の単位"] = String(unit || "");
+  nbClients.push(o);
+  nbSave();
+  return o;
+}
+
+/* ---------- 画面：未登録の取引先のお知らせ ---------- */
+function nbUnregistered(){
+  if(!nbClients.length) return [];
+  let names = [];
+  try{ names = [...new Set(getEffectiveRecords().map(r => getClientName(r)).filter(Boolean))]; }
+  catch(e){ return []; }
+  return names.filter(n => !nbFindClient(n)).sort();
+}
+
+function nbRenderAlert(){
+  const card = document.getElementById("nb-alert");
+  if(!card) return;
+  if(!nbClients.length){ card.classList.add("hidden"); return; }
+  const miss = nbUnregistered();
+  const noClose = [...new Set((function(){
+    let out = [];
+    try{
+      [...new Set(getEffectiveRecords().map(r => getClientName(r)).filter(Boolean))].forEach(n => {
+        const c = nbFindClient(n);
+        if(c && !String(c["締日"]||"").trim()) out.push(c["得意先名"]);
+      });
+    }catch(e){}
+    return out;
+  })())].sort();
+
+  if(!miss.length && !noClose.length){ card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+
+  const opts = nbClients
+    .map((c, i) => `<option value="${i}">${esc(c["得意先名"])}</option>`)
+    .join("");
+
+  let html = "";
+  if(miss.length){
+    html += `<div style="font-weight:800;color:#e65100;font-size:15px;margin-bottom:6px;">⚠️ 取引先マスタに無い会社が ${miss.length}件あります</div>
+      <p class="tk-p">日報の会社名がマスタと結びついていません。登録するまで、この会社の納品書・請求書は出せません。</p>`;
+    html += miss.map((n, k) => `
+      <div style="border:1.5px solid #ffcc80;background:#fff8e1;border-radius:10px;padding:10px;margin-bottom:8px;">
+        <div style="font-weight:800;font-size:14px;margin-bottom:6px;">日報の会社名：${esc(n)}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px;">
+          <label>結びつけ先
+            <select id="nb-fix-sel-${k}">
+              <option value="new">（この名前で新しく登録）</option>
+              ${opts}
+            </select>
+          </label>
+          <label>締日
+            <select id="nb-fix-cl-${k}">
+              <option value="">（未設定）</option>
+              ${NB_CLOSING.map(v => `<option value="${v}">${v==="末"?"月末":v+"日"}</option>`).join("")}
+            </select>
+          </label>
+          <button class="btn btn-primary" onclick="nbFix(${k}, ${JSON.stringify(n).replace(/"/g,'&quot;')})">マスタ側で受ける</button>
+          <button class="btn btn-outline" onclick="nbFixReports(${k}, ${JSON.stringify(n).replace(/"/g,'&quot;')})">日報の会社名を直す</button>
+          <button class="btn btn-outline" onclick="nbShowReports(${JSON.stringify(n).replace(/"/g,'&quot;')})">日報を1件ずつ見る</button>
+        </div>
+        <div class="hint" style="margin-top:6px;">
+          <b>マスタ側で受ける</b>…日報の書き方が正しいとき。結びつけ先の「日報での表記」に足す（新しい会社なら新規登録）。<br>
+          <b>日報の会社名を直す</b>…日報が書き間違いのとき。結びつけ先に選んだ会社名で、この期間の日報をまとめて書き換えます（修正履歴に残ります）。<br>
+          <b>日報を1件ずつ見る</b>…中身を見てから決めたいとき。
+        </div>
+      </div>`).join("");
+  }
+  if(noClose.length){
+    html += `<div style="font-weight:800;color:#e65100;font-size:14px;margin:10px 0 4px;">締日が未設定の取引先が ${noClose.length}件あります</div>
+      <p class="tk-p">${noClose.map(esc).join("／")}<br>「📗 納品書・請求書」の取引先マスタから締日を入れてください。</p>`;
+  }
+  const body = document.getElementById("nb-alert-body");
+  if(body) body.innerHTML = html;
+}
+
+function nbFix(k, reportName){
+  const sel = document.getElementById(`nb-fix-sel-${k}`);
+  const cl  = document.getElementById(`nb-fix-cl-${k}`);
+  if(!sel) return;
+  const closing = cl ? cl.value : "";
+  if(sel.value === "new"){
+    nbAddClient(reportName, reportName, closing, "");
+    showToast(`✅ ${reportName} を登録しました`);
+  }else{
+    const c = nbClients[Number(sel.value)];
+    if(!c){ showToast("❌ 結びつけ先が見つかりません"); return; }
+    const al = nbAliases(c);
+    if(!al.some(a => nbNorm(a) === nbNorm(reportName))) al.push(reportName);
+    c["日報での表記"] = al.join("／");
+    if(closing) c["締日"] = closing;
+    nbSave();
+    showToast(`✅ ${c["得意先名"]} に結びつけました`);
+  }
+  nbRenderAlert(); nbRenderCard();
+}
+
+/* ---------- 日報の会社名を直す ---------- */
+function nbReportsWithClient(name){
+  const out = [];
+  try{
+    TK.reports.forEach((w, id) => {
+      if(w.deleted) return;
+      const cur = w.current || {};
+      if(String(getClientName(cur) || "") === String(name)) out.push({ id, w, cur });
+    });
+  }catch(e){}
+  return out;
+}
+
+async function nbFixReports(k, reportName){
+  const sel = document.getElementById(`nb-fix-sel-${k}`);
+  if(!sel) return;
+  if(sel.value === "new"){
+    showToast("直す先の会社を「結びつけ先」で選んでください");
+    return;
+  }
+  const target = nbClients[Number(sel.value)];
+  if(!target){ showToast("❌ 直す先が見つかりません"); return; }
+  const list = nbReportsWithClient(reportName);
+  if(!list.length){ showToast("対象の日報が見つかりません"); return; }
+  if(typeof TK !== "undefined" && TK.mode === "cloud" && !navigator.onLine){
+    showToast("⚠️ インターネットにつながっていないため日報を直せません");
+    return;
+  }
+  const to = target["得意先名"];
+  if(!confirm(`日報の会社名「${reportName}」を「${to}」に書き換えます。\n対象：${list.length}件\n\n日報の原本が変わります（修正履歴に残ります）。よろしいですか？`)) return;
+
+  let ok = 0, ng = 0;
+  for(const it of list){
+    try{
+      const type = detectType(it.cur);
+      const field = (REPORT_TYPES[type] && REPORT_TYPES[type].clientField) || "client";
+      const draft = JSON.parse(JSON.stringify(it.cur));
+      draft[field] = to;
+      const changes = (typeof edDiff === "function") ? edDiff(it.cur, draft) : [];
+      const edits = changes.length ? changes
+        : [{ path: field, label: "お客様名", before: reportName, after: to }];
+      await tkUpdate(it.id, draft, edits, "取引先マスタに合わせて会社名を修正", it.w.rev);
+      ok++;
+    }catch(e){ console.error(e); ng++; }
+  }
+  nbRenderAlert(); nbRenderCheck();
+  showToast(ng ? `⚠️ ${ok}件を直し、${ng}件は失敗しました` : `✅ ${ok}件の日報の会社名を直しました`);
+}
+
+function nbShowReports(name){
+  const el = document.getElementById("sr-client");
+  if(!el){ showToast("日報を探すカードが見つかりません"); return; }
+  el.value = name;
+  const period = document.getElementById("sr-from");
+  if(period) { /* 期間は触らない */ }
+  try{ if(typeof srSetPeriod === "function") srSetPeriod("all"); }catch(e){}
+  try{ srRender(); }catch(e){}
+  document.getElementById("sr-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  showToast("日報を探すカードに出しました。各日報の「修正」から会社名を直せます");
+}
+
+/* ---------- 明細づくり ---------- */
+function nbCoreName(phi, L){
+  if(L === "デッキ") return `コア穿孔 ${phi} デッキ`;
+  const n = String(L).replace("L=", "");
+  return `コア穿孔 ${phi} ${n === "150" ? "L150まで" : "L" + n}`;
+}
+function nbCoreLines(records){
+  const totals = {}, order = [];
+  const opt = { 天井裏: 0, 高車: 0, 真空パッド: 0 };
+  records.forEach(r => aggregateCores(r).forEach(c => {
+    const phi = `φ${c.diamNum || 0}`;
+    const L = getL(c);
+    const key = `${c.diamNum || 0}|${L}`;
+    if(!(key in totals)){ totals[key] = { phi, L, qty: 0 }; order.push(key); }
+    totals[key].qty += (c.qty || 0);
+    if(c.tenjo) opt.天井裏 += (c.qty || 0);
+    if(c.kosha) opt.高車   += (c.qty || 0);
+    if(c.vac)   opt.真空パッド += (c.qty || 0);
+  }));
+  order.sort((a, b) => {
+    const A = totals[a], B = totals[b];
+    const pa = parseInt(A.phi.replace("φ","")), pb = parseInt(B.phi.replace("φ",""));
+    if(pa !== pb) return pa - pb;
+    if(A.L === "デッキ") return 1;
+    if(B.L === "デッキ") return -1;
+    return Number(A.L) - Number(B.L);
+  });
+  const lines = order.map(k => ({ name: nbCoreName(totals[k].phi, totals[k].L), qty: totals[k].qty }));
+  Object.keys(opt).forEach(k => { if(opt[k] > 0) lines.push({ name: k + "加算", qty: opt[k] }); });
+  try{ aggregateSurvey(records).forEach(s => lines.push({ name: s.label, qty: s.total })); }catch(e){}
+  try{
+    const h = aggregateHatsuri(records);
+    if(h.total > 0) lines.push({ name: "ハツリ作業", qty: Math.round(h.total * 10) / 10 });
+  }catch(e){}
+  return lines;
+}
+function nbJoyouLines(records){
+  let ninku = 0, ot = 0;
+  records.forEach(r => (r.workers || []).forEach(w => {
+    ninku += Math.round((w.hours || 0) / 8 * 100) / 100;
+    ot += (w.overtime || []).reduce((s, o) => s + (o.hours || 0), 0);
+  }));
+  const lines = [];
+  if(ninku > 0) lines.push({ name: "常用", qty: Math.round(ninku * 100) / 100 });
+  if(ot > 0)    lines.push({ name: "残業", qty: Math.round(ot * 10) / 10 });
+  try{
+    const h = aggregateHatsuri(records);
+    if(h.total > 0) lines.push({ name: "ハツリ作業", qty: Math.round(h.total * 10) / 10 });
+  }catch(e){}
+  return lines;
+}
+function nbLinesFor(records){
+  return activeType === "joyou" ? nbJoyouLines(records) : nbCoreLines(records);
+}
+
+/* ---------- 雛形に書き込む ---------- */
+async function nbOpenWb(){
+  if(!nbTmplBuf){
+    try{ nbTmplBuf = await nbIdbGet("template"); }catch(e){}
+  }
+  if(!nbTmplBuf){ showToast("❌ 先に雛形（納品書・請求書.xlsx）を読み込んでください"); return null; }
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(nbTmplBuf);
+  nbSyncMasterInto(wb);
+  return wb;
+}
+function nbSyncMasterInto(wb){
+  const tk = wb.getWorksheet("得意先マスタ");
+  if(!tk) return;
+  const colOf = {};
+  for(let j = 1; j <= 60; j++){
+    const v = nbCellText(tk.getCell(1, j));
+    if(v) colOf[v] = j;
+  }
+  // 読み込んだ雛形に無い見出しは、右端に足して見出しも書く
+  let maxCol = 0;
+  Object.keys(colOf).forEach(k => { if(colOf[k] > maxCol) maxCol = colOf[k]; });
+  NB_HEAD.forEach(h => {
+    if(!colOf[h]){
+      maxCol += 1;
+      colOf[h] = maxCol;
+      tk.getCell(1, maxCol).value = h;
+    }
+  });
+  const last = Math.max(tk.rowCount, nbClients.length + 1);
+  for(let r = 2; r <= last; r++){
+    const c = nbClients[r - 2];
+    NB_HEAD.forEach(h => {
+      const cell = tk.getCell(r, colOf[h]);
+      const v = c ? c[h] : "";
+      cell.value = (v === "" || v === undefined) ? null : v;
+    });
+  }
+}
+function nbSaveWb(wb, filename){
+  return wb.xlsx.writeBuffer().then(buf => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    a.download = filename;
+    a.click();
+  });
+}
+function nbToday(){ const d=new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+function nbStamp(){
+  const d = new Date();
+  return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
+}
+
+function nbPriceMode(){
+  const el = document.getElementById("nb-price-mode");
+  return el ? el.value : "master";
+}
+
+/* ---------- 納品書 ---------- */
+async function nbMakeNouhin(){
+  const site   = document.getElementById("sel-site").value;
+  const client = document.getElementById("sel-client").value;
+  const month  = document.getElementById("sel-month").value;
+  if(!site || !month){ showToast("❌ 現場と期間を選んでください"); return; }
+  const c = nbFindClient(client);
+  if(!c){ showToast(`❌ ${client} が取引先マスタにありません。上のお知らせから登録してください`); nbRenderAlert(); return; }
+  const cutoff = parseInt(document.getElementById("sel-cutoff").value);
+  const range  = getPeriodRange(month, cutoff);
+  const records = getRecordsInPeriod(site, month);
+  if(!records.length){ showToast("❌ この期間のデータがありません"); return; }
+  const lines = nbLinesFor(records).filter(l => l.qty > 0);
+  if(!lines.length){ showToast("❌ 出せる明細がありません"); return; }
+
+  const wb = await nbOpenWb();
+  if(!wb) return;
+  const ws = wb.getWorksheet("納品書");
+  ws.getCell("A8").value = c["得意先名"];
+  ws.getCell("H4").value = nbToday();
+  const MAX = 15;
+  const blank = nbPriceMode() === "blank";
+  lines.slice(0, MAX).forEach((ln, k) => {
+    ws.getCell(`A${21 + 2 * k}`).value = ln.name;
+    ws.getCell(`D${20 + 2 * k}`).value = ln.qty;
+    if(blank) ws.getCell(`F${20 + 2 * k}`).value = null;
+    if(k === 0) ws.getCell(`I${20}`).value = site;
+  });
+  await nbSaveWb(wb, `納品書_${c["得意先名"]}_${site}_${range.start}〜${range.end}.xlsx`);
+  nbMark(c["得意先名"], site, range, "nouhin", {});
+  try{ nbRenderCheck(); }catch(e){}
+  if(lines.length > MAX){
+    showToast(`⚠️ 明細が${lines.length}行あり、納品書に載るのは${MAX}行までです。残り${lines.length-MAX}行は手で足してください`);
+  }else{
+    showToast("📄 納品書を出しました（雛形の体裁）");
+  }
+}
+
+/* ---------- 請求書 ---------- */
+async function nbMakeSeikyu(){
+  const client = document.getElementById("sel-client").value;
+  const month  = document.getElementById("sel-month").value;
+  const site   = document.getElementById("sel-site").value;
+  if(!month){ showToast("❌ 期間を選んでください"); return; }
+  const c = nbFindClient(client);
+  if(!c){ showToast(`❌ ${client} が取引先マスタにありません。上のお知らせから登録してください`); nbRenderAlert(); return; }
+
+  const sel = document.getElementById("nb-seikyu-unit");
+  let unit = sel ? sel.value : "";
+  if(!unit) unit = String(c["請求書の単位"] || "").trim() || "取引先ごと";
+
+  const cutoff = parseInt(document.getElementById("sel-cutoff").value);
+  const range  = getPeriodRange(month, cutoff);
+
+  // 現場ごと＝選んでいる現場のみ／取引先ごと＝この取引先の全現場
+  let sites;
+  if(unit === "現場ごと"){
+    if(!site){ showToast("❌ 現場を選んでください"); return; }
+    sites = [site];
+  }else{
+    sites = [...new Set(getEffectiveRecords()
+      .filter(r => detectType(r) === activeType && getClientName(r) === client
+                && r.date >= range.start && r.date <= range.end)
+      .map(r => getEffectiveSite(r.site)).filter(Boolean))].sort();
+  }
+  if(!sites.length){ showToast("❌ この期間のデータがありません"); return; }
+
+  // 1行＝1行。現場名の見出し行＋品名行
+  const rows = [];
+  sites.forEach(s => {
+    const recs = getRecordsInPeriod(s, month);
+    const lines = nbLinesFor(recs).filter(l => l.qty > 0);
+    if(!lines.length) return;
+    if(sites.length > 1 || unit !== "現場ごと") rows.push({ head: `【${s}】` });
+    lines.forEach(ln => rows.push({ name: ln.name, qty: ln.qty }));
+  });
+  if(!rows.length){ showToast("❌ 出せる明細がありません"); return; }
+
+  const wb = await nbOpenWb();
+  if(!wb) return;
+  const ws = wb.getWorksheet("請求書");
+  ws.getCell("A6").value = c["得意先名"];
+  ws.getCell("H4").value = new Date(range.end + "T00:00:00");
+  const MAX = 40;
+  const blank = nbPriceMode() === "blank";
+  rows.slice(0, MAX).forEach((rw, i) => {
+    const r = 22 + i;
+    if(rw.head){
+      ws.getCell(`D${r}`).value = rw.head;
+    }else{
+      ws.getCell(`D${r}`).value = rw.name;
+      ws.getCell(`G${r}`).value = rw.qty;
+      if(blank) ws.getCell(`J${r}`).value = null;
+    }
+  });
+  const tail = unit === "現場ごと" ? `_${site}` : "";
+  await nbSaveWb(wb, `請求書_${c["得意先名"]}${tail}_${range.start}〜${range.end}.xlsx`);
+  const mn = c["得意先名"];
+  if(unit === "現場ごと"){
+    nbMark(mn, site, range, "seikyu", {});
+  }else{
+    nbMark(mn, null, range, "seikyu", {});
+    sites.forEach(s => nbMark(mn, s, range, "seikyu", {}));
+  }
+  try{ nbRenderCheck(); }catch(e){}
+  if(rows.length > MAX){
+    showToast(`⚠️ 明細が${rows.length}行あり、請求書に載るのは${MAX}行までです。残り${rows.length-MAX}行は手で足してください`);
+  }else{
+    showToast(`📑 請求書を出しました（${unit}）`);
+  }
+}
+
+/* ---------- 取引先マスタの書き出し ---------- */
+async function nbExportMaster(){
+  const wb = await nbOpenWb();
+  if(!wb) return;
+  await nbSaveWb(wb, `納品書・請求書_${nbStamp()}.xlsx`);
+  showToast("⬇️ 取引先マスタを書き出しました");
+}
+
+/* ---------- ボタンの出し入れ ---------- */
+function nbUpdateButtons(){
+  const has = !!nbTmplBuf;
+  const wrap = document.getElementById("nb-out");
+  if(wrap) wrap.classList.toggle("hidden", !has);
+  // 雛形が入ったら、雛形を使わない旧い納品書ボタンは隠す
+  const old = document.getElementById("nohinsho-btn");
+  if(old && has) old.style.display = "none";
+}
+
+/* ---------- 起動 ---------- */
+async function nbInit(){
+  nbLoadLocal();
+  nbIssuedLoad();
+  try{ nbTmplBuf = await nbIdbGet("template"); }catch(e){ nbTmplBuf = null; }
+  nbRenderCard(); nbRenderAlert(); nbUpdateButtons();
+  try{ nbRenderCheck(); }catch(e){}
+}
+/* =========================================================
+   請求もれチェック ＋ 単価の有無
+   ========================================================= */
+const NB_ISSUED_KEY = "TOKUWA_SHUKEI_SEIKYU_LOG_V1";
+let nbIssued = {};
+
+function nbIssuedLoad(){
+  try{ nbIssued = JSON.parse(localStorage.getItem(NB_ISSUED_KEY) || "{}"); }catch(e){ nbIssued = {}; }
+}
+function nbIssuedSave(){
+  try{ localStorage.setItem(NB_ISSUED_KEY, JSON.stringify(nbIssued)); }
+  catch(e){ showToast("⚠️ 発行の記録を保存できませんでした"); }
+}
+function nbKey(client, site, range){
+  return [client, site || "*", range.start, range.end].join("\u0001");
+}
+function nbMark(client, site, range, kind, extra){
+  const k = nbKey(client, site, range);
+  const cur = nbIssued[k] || {};
+  cur[kind] = Object.assign({ at: new Date().toISOString() }, extra || {});
+  nbIssued[k] = cur;
+  nbIssuedSave();
+}
+function nbGet(client, site, range){
+  return nbIssued[nbKey(client, site, range)] || {};
+}
+
+/* 締日の文字（末・20 など）を getPeriodRange の cutoff に直す */
+function nbCutoffOf(c){
+  const v = String((c && c["締日"]) || "").trim();
+  if(!v || v === "末" || v === "月末") return 0;
+  const n = parseInt(v.replace(/[^0-9]/g, ""), 10);
+  return isFinite(n) && n > 0 && n < 31 ? n : 0;
+}
+function nbFmt(d){
+  if(!d) return "";
+  const x = new Date(d);
+  return `${x.getMonth()+1}/${x.getDate()}`;
+}
+
+/* ---------- 一覧をつくる ---------- */
+function nbCheckData(month){
+  let recs = [];
+  try{ recs = getEffectiveRecords(); }catch(e){ return { rows: [], quiet: [] }; }
+  const byClient = {};
+  const rawNames = {};
+  recs.forEach(r => {
+    const cl = getClientName(r);
+    if(!cl) return;
+    const m = nbFindClient(cl);
+    const key = m ? m["得意先名"] : cl;
+    (byClient[key] = byClient[key] || []).push(r);
+    (rawNames[key] = rawNames[key] || new Set()).add(cl);
+  });
+
+  const rows = [];
+  Object.keys(byClient).sort().forEach(cl => {
+    const m = nbFindClient(cl);
+    const cutoff = nbCutoffOf(m);
+    const range = getPeriodRange(month, cutoff);
+    const inP = byClient[cl].filter(r => r.date >= range.start && r.date <= range.end);
+    if(!inP.length) return;
+    const sites = {};
+    inP.forEach(r => {
+      const s = getEffectiveSite(r.site) || "（現場名なし）";
+      (sites[s] = sites[s] || []).push(r);
+    });
+    const unit = String((m && m["請求書の単位"]) || "").trim() || "取引先ごと";
+    rows.push({
+      client: cl,
+      raws: [...(rawNames[cl] || new Set([cl]))],
+      master: m,
+      cutoffLabel: cutoff === 0 ? "月末" : cutoff + "日",
+      range, unit,
+      sites: Object.keys(sites).sort().map(s => ({
+        site: s,
+        count: sites[s].length,
+        issued: nbGet(cl, s, range),
+      })),
+      issued: nbGet(cl, null, range),
+    });
+  });
+
+  // 先月は日報があったのに、今月まだ無い取引先（現場ごと忘れの早期発見）
+  const quiet = [];
+  Object.keys(byClient).sort().forEach(cl => {
+    const m = nbFindClient(cl);
+    const cutoff = nbCutoffOf(m);
+    const cur = getPeriodRange(month, cutoff);
+    const [y, mo] = month.split("-").map(Number);
+    const pm = mo === 1 ? `${y-1}-12` : `${y}-${String(mo-1).padStart(2,"0")}`;
+    const prev = getPeriodRange(pm, cutoff);
+    const nowN = byClient[cl].filter(r => r.date >= cur.start && r.date <= cur.end).length;
+    const prevN = byClient[cl].filter(r => r.date >= prev.start && r.date <= prev.end).length;
+    if(nowN === 0 && prevN > 0) quiet.push({ client: cl, prevN, prev });
+  });
+
+  return { rows, quiet };
+}
+
+function nbCheckState(row){
+  if(row.master && String(row.master["請求不要"] || "") === "○") return "none";
+  if(row.issued.skip) return "skip";
+  if(row.unit === "現場ごと"){
+    const done = row.sites.every(s => s.issued.seikyu);
+    if(done) return "done";
+    return row.sites.some(s => s.issued.seikyu) ? "part" : "miss";
+  }
+  return row.issued.seikyu ? "done" : "miss";
+}
+
+/* ---------- 画面 ---------- */
+function nbRenderCheck(){
+  const card = document.getElementById("nb-check");
+  if(!card) return;
+  if(!nbClients.length || !(typeof allRecords !== "undefined" && allRecords.length)){
+    card.classList.add("hidden");
+    return;
+  }
+  card.classList.remove("hidden");
+  const mEl = document.getElementById("nb-check-month");
+  if(mEl && !mEl.value){
+    const sm = document.getElementById("sel-month");
+    const d = new Date();
+    mEl.value = (sm && sm.value) ? sm.value : `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+  }
+  const month = mEl ? mEl.value : "";
+  if(!month) return;
+  const onlyMiss = !!document.getElementById("nb-check-onlymiss")?.checked;
+  const { rows, quiet } = nbCheckData(month);
+
+  const miss = rows.filter(r => nbCheckState(r) === "miss" || nbCheckState(r) === "part");
+  const badge = document.getElementById("nb-check-badge");
+  if(badge){
+    badge.textContent = miss.length ? `未請求 ${miss.length}件` : "未請求なし";
+    badge.style.background = miss.length ? "#ffe0b2" : "var(--green-light)";
+    badge.style.color = miss.length ? "#e65100" : "var(--green)";
+  }
+
+  const shown = onlyMiss ? miss : rows;
+  let html = "";
+  if(!rows.length){
+    html = `<p class="tk-p">この月に日報のある取引先がありません。</p>`;
+  }else{
+    html += `<div style="overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr style="background:#f5f5f5;">
+        ${["取引先","締日","期間","現場（日報件数）","納品書","請求書","操作"]
+          .map(h => `<th style="border:1px solid #ddd;padding:6px;white-space:nowrap;">${h}</th>`).join("")}
+      </tr></thead><tbody>`;
+    shown.forEach(r => {
+      const st = nbCheckState(r);
+      const bg = st === "done" ? "#f1f8e9" : st === "skip" ? "#eeeeee" : st === "part" ? "#fff8e1" : "#fff3e0";
+      const idx = rows.indexOf(r);
+      const sitesHtml = r.sites.map(s =>
+        `<div>${esc(s.site)} <span style="color:var(--text2)">(${s.count})</span></div>`).join("");
+      const nouhinHtml = r.sites.map(s =>
+        s.issued.nouhin ? `<div style="color:var(--green)">済 ${nbFmt(s.issued.nouhin.at)}</div>` : `<div style="color:#e65100">未</div>`).join("");
+      let seikyuHtml;
+      const BTN = 'class="btn btn-outline" style="font-size:11px;padding:4px 8px;"';
+      if(st === "none"){
+        seikyuHtml = `<span style="color:#666">請求不要</span>`;
+      }else if(st === "skip"){
+        const sk = r.issued.skip;
+        seikyuHtml = `<span style="color:#666">確認済み<br>${esc(sk.reason || "")}${sk.note ? "<br>" + esc(sk.note) : ""}<br>${nbFmt(sk.at)}</span>`;
+      }else if(r.unit === "現場ごと"){
+        seikyuHtml = r.sites.map(s =>
+          s.issued.seikyu ? `<div style="color:var(--green)">済 ${nbFmt(s.issued.seikyu.at)}</div>` : `<div style="color:#e65100;font-weight:800">未請求</div>`).join("");
+      }else{
+        seikyuHtml = r.issued.seikyu
+          ? `<span style="color:var(--green)">済 ${nbFmt(r.issued.seikyu.at)}${r.issued.seikyu.manual ? "（手入力）" : ""}</span>`
+          : `<span style="color:#e65100;font-weight:800">未請求</span>`;
+      }
+      let ops;
+      if(st === "none"){
+        ops = `<button ${BTN} onclick="nbCheckNeedBill(${idx})">請求するに戻す</button>`;
+      }else if(st === "skip"){
+        ops = `<button ${BTN} onclick="nbCheckUnskip(${idx})">未請求に戻す</button>`;
+      }else{
+        ops = `<button ${BTN} onclick="nbCheckGo(${idx})">この取引先を集計</button>
+          <button ${BTN} onclick="nbCheckClearOpen(${idx})">確認して消す</button>
+          <button ${BTN} onclick="nbCheckNoBill(${idx})">今後ずっと請求不要</button>
+          <div id="nb-clr-${idx}" style="display:none;margin-top:6px;padding:6px;background:#fff;border:1.5px solid var(--border);border-radius:8px;">
+            <select id="nb-clr-r-${idx}" style="font-size:11px;width:100%;">
+              <option value="別枠で請求済み">別枠で請求済み（急ぎで先に出した）</option>
+              <option value="請求先が変わった">請求先が変わった（別の取引先に請求）</option>
+              <option value="今回は請求しない">今回は請求しない（来月まとめるなど）</option>
+              <option value="この客は請求書不要">この客は請求書が不要</option>
+              <option value="その他">その他</option>
+            </select>
+            <input id="nb-clr-m-${idx}" placeholder="メモ（任意）" style="font-size:11px;width:100%;margin-top:4px;padding:4px;border:1px solid var(--border);border-radius:6px;">
+            <button ${BTN} style="margin-top:4px;" onclick="nbCheckClearDo(${idx})">この期間の知らせを消す</button>
+          </div>`;
+      }
+      html += `<tr style="background:${bg};">
+        <td style="border:1px solid #ddd;padding:6px;font-weight:800;">${esc(r.client)}${r.master ? "" : ' <span style="color:#c62828;font-weight:400;">※マスタ未登録</span>'}</td>
+        <td style="border:1px solid #ddd;padding:6px;white-space:nowrap;text-align:center;">${esc(r.cutoffLabel)}</td>
+        <td style="border:1px solid #ddd;padding:6px;white-space:nowrap;">${r.range.start.slice(5)}〜${r.range.end.slice(5)}</td>
+        <td style="border:1px solid #ddd;padding:6px;">${sitesHtml}</td>
+        <td style="border:1px solid #ddd;padding:6px;text-align:center;">${nouhinHtml}</td>
+        <td style="border:1px solid #ddd;padding:6px;text-align:center;">${seikyuHtml}</td>
+        <td style="border:1px solid #ddd;padding:6px;white-space:nowrap;">${ops}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+    if(onlyMiss && !shown.length) html += `<p class="tk-p" style="color:var(--green);font-weight:800;">未請求はありません。</p>`;
+  }
+
+  if(quiet.length){
+    html += `<div style="margin-top:14px;border:1.5px solid #ffcc80;background:#fff8e1;border-radius:10px;padding:10px;">
+      <div style="font-weight:800;color:#e65100;font-size:13px;">先月は日報があったのに、今月まだ日報が無い取引先が ${quiet.length}件あります</div>
+      <p class="tk-p">現場が丸ごと抜けていないか確認してください。日報が来ていないだけのこともあります。</p>
+      <div style="font-size:12px;">${quiet.map(q => `${esc(q.client)}（先月 ${q.prevN}件）`).join("／")}</div>
+    </div>`;
+  }
+  const body = document.getElementById("nb-check-body");
+  if(body) body.innerHTML = html;
+  nbCheckRows = rows;
+}
+let nbCheckRows = [];
+
+function nbCheckGo(i){
+  const r = nbCheckRows[i];
+  if(!r) return;
+  const sel = document.getElementById("sel-client");
+  if(sel){
+    const cand = [r.client, ...(r.raws || [])];
+    const hit = [...sel.options].find(o => cand.includes(o.value));
+    if(hit){
+      sel.value = hit.value;
+      updateSites(); updateMonths(); renderTable();
+      document.getElementById("step2-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+  }
+  showToast("この取引先は今のタブ（日報の種類）にありません。タブを切り替えてください");
+}
+function nbCheckManual(i){
+  const r = nbCheckRows[i];
+  if(!r) return;
+  if(!confirm(`${r.client}（${r.range.start}〜${r.range.end}）を請求済みにします。\nよろしいですか？`)) return;
+  if(r.unit === "現場ごと") r.sites.forEach(s => nbMark(r.client, s.site, r.range, "seikyu", { manual: true }));
+  else nbMark(r.client, null, r.range, "seikyu", { manual: true });
+  nbRenderCheck();
+  showToast("✅ 請求済みにしました");
+}
+function nbCheckSkip(i){
+  const r = nbCheckRows[i];
+  if(!r) return;
+  const note = prompt(`${r.client} をこの期間の請求対象外にします。理由があれば書いてください（空欄でも可）`, "");
+  if(note === null) return;
+  nbMark(r.client, null, r.range, "skip", { note: String(note || "").trim() });
+  nbRenderCheck();
+  showToast("対象外にしました");
+}
+function nbCheckClearOpen(i){
+  const el = document.getElementById(`nb-clr-${i}`);
+  if(el) el.style.display = (el.style.display === "none" ? "block" : "none");
+}
+function nbCheckClearDo(i){
+  const r = nbCheckRows[i];
+  if(!r) return;
+  const reason = document.getElementById(`nb-clr-r-${i}`)?.value || "その他";
+  const note   = (document.getElementById(`nb-clr-m-${i}`)?.value || "").trim();
+  nbMark(r.client, null, r.range, "skip", { reason, note });
+  nbRenderCheck();
+  showToast("✅ この期間の知らせを消しました");
+}
+function nbCheckNoBill(i){
+  const r = nbCheckRows[i];
+  if(!r) return;
+  if(!r.master){ showToast("この取引先はマスタに無いので設定できません"); return; }
+  if(!confirm(`「${r.master["得意先名"]}」には今後ずっと請求書を出さない設定にします。\n毎月の請求もれチェックから外れます。\n\nよろしいですか？`)) return;
+  r.master["請求不要"] = "○";
+  nbSave();
+  nbRenderCheck(); nbRenderCard();
+  showToast("請求不要にしました");
+}
+function nbCheckNeedBill(i){
+  const r = nbCheckRows[i];
+  if(!r || !r.master) return;
+  r.master["請求不要"] = "";
+  nbSave();
+  nbRenderCheck(); nbRenderCard();
+  showToast("請求するに戻しました");
+}
+function nbCheckUnskip(i){
+  const r = nbCheckRows[i];
+  if(!r) return;
+  const k = nbKey(r.client, null, r.range);
+  if(nbIssued[k]) { delete nbIssued[k].skip; nbIssuedSave(); }
+  nbRenderCheck();
+}
+function nbPrintCheck(){
+  const body = document.getElementById("nb-check-body");
+  if(!body) return;
+  const m = document.getElementById("nb-check-month")?.value || "";
+  const w = window.open("", "_blank");
+  if(!w){ showToast("印刷用の画面を開けませんでした"); return; }
+  w.document.write(`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>請求もれチェック ${m}</title>
+    <style>body{font-family:"MS PGothic",sans-serif;padding:16px;}
+    h1{font-size:16px;} table{width:100%;border-collapse:collapse;font-size:11px;}
+    th,td{border:1px solid #999;padding:4px;} th{background:#eee;}
+    button{display:none;}</style></head><body>
+    <h1>請求もれチェック　${m}　（株式会社徳和工業）</h1>
+    ${body.innerHTML}</body></html>`);
+  w.document.close();
+  setTimeout(() => { try{ w.print(); }catch(e){} }, 400);
+}
+
+if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", nbInit);
+else nbInit();
+
 </script>
 </body>
 </html>
