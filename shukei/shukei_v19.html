@@ -827,7 +827,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "shukei";
-const APP_VERSION   = "1.9.0";
+const APP_VERSION   = "1.9.1";
 const APP_BUILD     = "2026-11-21";
 
 (function(){
@@ -5491,6 +5491,47 @@ function nbNorm(s){
   t = t.replace(/(株式会社|有限会社|合同会社|合名会社|合資会社|一般社団法人|㈱|㈲|\(株\)|\(有\))/g, "");
   return t.toLowerCase();
 }
+/* 「株式会社」などを小さいグレーで出す */
+const NB_CORP = ["株式会社","有限会社","合同会社","合名会社","合資会社","（株）","(株)","（有）","(有)","㈱","㈲"];
+function nbNameHtml(name){
+  let h = esc(String(name || ""));
+  NB_CORP.forEach(w => {
+    h = h.split(w).join(`<span style="font-weight:400;color:#999;font-size:11px;">${w}</span>`);
+  });
+  return h;
+}
+/* 法人格を外した部分（並べ替え・検索用） */
+function nbBareName(name){
+  let s = String(name || "");
+  NB_CORP.forEach(w => { s = s.split(w).join(""); });
+  return s.replace(/\s+/g, " ").trim();
+}
+/* ア行・カ行…のどれか */
+const NB_ROWS = [
+  ["ア","アイウエオ"], ["カ","カキクケコガギグゲゴ"], ["サ","サシスセソザジズゼゾ"],
+  ["タ","タチツテトダヂヅデド"], ["ナ","ナニヌネノ"], ["ハ","ハヒフヘホバビブベボパピプペポ"],
+  ["マ","マミムメモ"], ["ヤ","ヤユヨ"], ["ラ","ラリルレロ"], ["ワ","ワヰヱヲン"],
+];
+const NB_ROW_ORDER = ["ア","カ","サ","タ","ナ","ハ","マ","ヤ","ラ","ワ","ABC","他"];
+function nbKanaRow(c){
+  let src = String(c["フリガナ"] || "").trim() || nbBareName(c["得意先名"]);
+  src = src.normalize("NFKC").trim();
+  if(!src) return "他";
+  let ch = src[0];
+  const small = "ァィゥェォッャュョヮ", big = "アイウエオツヤユヨワ";
+  const si = small.indexOf(ch);
+  if(si >= 0) ch = big[si];
+  // ひらがなはカタカナに寄せる
+  if(ch >= "ぁ" && ch <= "ゖ") ch = String.fromCharCode(ch.charCodeAt(0) + 0x60);
+  for(const [label, chars] of NB_ROWS){ if(chars.includes(ch)) return label; }
+  if(/[A-Za-z0-9]/.test(ch)) return "ABC";
+  return "他";
+}
+function nbSortKey(c){
+  const kana = String(c["フリガナ"] || "").trim();
+  return (kana || nbBareName(c["得意先名"])).normalize("NFKC");
+}
+
 function nbAliases(c){
   return String((c && c["日報での表記"]) || "").split(/[／\/,、|]/).map(s => s.trim()).filter(Boolean);
 }
@@ -5609,26 +5650,51 @@ function nbRenderCard(){
   nbRenderList();
 }
 
+let nbRowPick = "";
+function nbPickRow(k){
+  nbRowPick = k;
+  const s = document.getElementById("nb-search");
+  if(s) s.value = "";
+  nbRenderList();
+}
 function nbRenderList(){
   const box = document.getElementById("nb-list");
   if(!box) return;
   const q = nbNorm(document.getElementById("nb-search")?.value || "");
   if(!nbClients.length){ box.innerHTML = ""; return; }
   const addBtn = `<div style="margin-bottom:10px;"><button class="btn btn-outline" onclick="nbAddNew()">＋ 新しく登録する</button></div>`;
-  if(!q){
-    box.innerHTML = addBtn + `<p class="tk-p">会社名を入れて探してください（${nbClients.length}件）。探した会社の中で、会社名・住所・連絡先の修正と削除ができます。</p>`;
+
+  // ア行・カ行のタブ
+  const counts = {};
+  nbClients.forEach(c => { const k = nbKanaRow(c); counts[k] = (counts[k] || 0) + 1; });
+  const tabs = `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px;">`
+    + `<button class="btn ${nbRowPick ? "btn-outline" : "btn-primary"}" style="font-size:12px;padding:5px 10px;" onclick="nbPickRow('')">全部</button>`
+    + NB_ROW_ORDER.filter(k => counts[k]).map(k =>
+        `<button class="btn ${nbRowPick === k ? "btn-primary" : "btn-outline"}" style="font-size:12px;padding:5px 10px;" onclick="nbPickRow('${k}')">${k === "ABC" ? "ABC" : k === "他" ? "その他" : k + "行"}<span style="color:#999;font-size:10px;"> ${counts[k]}</span></button>`
+      ).join("")
+    + `</div>`;
+
+  let all = nbClients.map((c, i) => ({ c, i }));
+  if(q){
+    all = all.filter(x =>
+      nbNorm(x.c["得意先名"]).includes(q) ||
+      nbNorm(x.c["フリガナ"]).includes(q) ||
+      nbAliases(x.c).some(a => nbNorm(a).includes(q)));
+  }else if(nbRowPick){
+    all = all.filter(x => nbKanaRow(x.c) === nbRowPick);
+  }else{
+    box.innerHTML = addBtn + tabs + `<p class="tk-p">会社名で探すか、上の行から選んでください（${nbClients.length}件）。会社名・住所・連絡先の修正と削除もできます。</p>`;
     return;
   }
-  const all = nbClients
-    .map((c, i) => ({ c, i }))
-    .filter(x => nbNorm(x.c["得意先名"]).includes(q) || nbAliases(x.c).some(a => nbNorm(a).includes(q)));
-  const hits = all.slice(0, 40);
+  all.sort((a, b) => nbSortKey(a.c).localeCompare(nbSortKey(b.c), "ja"));
+  const LIM = 60;
+  const hits = all.slice(0, LIM);
   if(!hits.length){
-    box.innerHTML = addBtn + `<p class="tk-p">「${esc(document.getElementById("nb-search")?.value || "")}」は見つかりません。</p>`;
+    box.innerHTML = addBtn + tabs + `<p class="tk-p">「${esc(document.getElementById("nb-search")?.value || "")}」は見つかりません。</p>`;
     return;
   }
-  box.innerHTML = addBtn
-    + `<p class="tk-p">${all.length}件見つかりました${all.length > 40 ? "（40件まで表示）" : ""}</p>`
+  box.innerHTML = addBtn + tabs
+    + `<p class="tk-p">${all.length}件${all.length > LIM ? `（${LIM}件まで表示）` : ""}</p>`
     + hits.map(x => nbRowHtml(x.c, x.i)).join("");
 }
 
@@ -5642,7 +5708,8 @@ function nbRowHtml(c, i){
       <input class="tk-in" value="${esc(c[key]||"")}" placeholder="${ph||""}" oninput="nbEdit(${i},'${key}',this.value)">
     </label>`;
   return `<div style="border:1.5px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px;" id="nb-row-${i}">
-    <div style="font-weight:800;font-size:14px;" id="nb-name-${i}">${esc(c["得意先名"])} <span style="font-weight:400;color:var(--text2);font-size:12px;">${esc(kei)}</span></div>
+    <div style="font-weight:800;font-size:14px;" id="nb-name-${i}">${nbNameHtml(c["得意先名"])} <span style="font-weight:400;color:var(--text2);font-size:12px;">${esc(kei)}</span></div>
+    <div style="font-size:11px;color:#aaa;">${esc(c["フリガナ"] || "")}</div>
     <div style="font-size:12px;color:var(--text2);margin:2px 0 8px;" id="nb-addr-${i}">${esc(c["郵便番号"]||"")} ${esc(c["住所1"]||"")} ${esc(c["住所2"]||"")}</div>
     <div style="display:grid;gap:6px;">
       <label style="font-size:12px;">日報での表記（複数は「／」区切り）
@@ -5682,7 +5749,7 @@ function nbRowHtml(c, i){
           </label>
         </div>
         ${tx("お客様コード","お客様コード")}
-        ${tx("フリガナ","フリガナ")}
+        ${tx("フリガナ","フリガナ（あいうえお順・ア行タブに使う）")}
         ${tx("郵便番号","郵便番号","943-0165")}
         ${tx("住所1","住所1")}
         ${tx("住所2","住所2（ビル名・階など）")}
@@ -5715,7 +5782,7 @@ function nbEdit(i, key, val){
   // 見出しと住所の表示を追いかける（打っている途中で作り直すと入力が切れるため、ここだけ書き換える）
   if(key === "得意先名" || key === "敬称"){
     const el = document.getElementById(`nb-name-${i}`);
-    if(el) el.innerHTML = `${esc(nbClients[i]["得意先名"])} <span style="font-weight:400;color:var(--text2);font-size:12px;">${esc(nbClients[i]["敬称"]||"")}</span>`;
+    if(el) el.innerHTML = `${nbNameHtml(nbClients[i]["得意先名"])} <span style="font-weight:400;color:var(--text2);font-size:12px;">${esc(nbClients[i]["敬称"]||"")}</span>`;
   }
   if(key === "郵便番号" || key === "住所1" || key === "住所2"){
     const el = document.getElementById(`nb-addr-${i}`);
@@ -5795,9 +5862,17 @@ function nbRenderAlert(){
   if(!miss.length && !noClose.length){ card.classList.add("hidden"); return; }
   card.classList.remove("hidden");
 
+  // あいうえお順。法人格は後ろに回して読みやすくする
   const opts = nbClients
-    .map((c, i) => `<option value="${i}">${esc(c["得意先名"])}</option>`)
-    .join("");
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => nbSortKey(a.c).localeCompare(nbSortKey(b.c), "ja"))
+    .map(x => {
+      const full = String(x.c["得意先名"] || "");
+      const bare = nbBareName(full);
+      const kaku = NB_CORP.find(w => full.includes(w));
+      const label = (bare && kaku) ? `${bare}（${kaku}）` : full;
+      return `<option value="${x.i}">${esc(label)}</option>`;
+    }).join("");
 
   let html = "";
   if(miss.length){
