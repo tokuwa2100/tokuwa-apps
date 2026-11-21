@@ -36,11 +36,10 @@
 <div id="tb-login" hidden>
   <form class="tb-card" id="tb-form" autocomplete="on">
     <h1>TOKUWAボード</h1>
-    <p>集計表と同じ、会社のアカウントでログインしてください。</p>
-    <label for="tb-email">メールアドレス</label>
-    <input id="tb-email" type="email" autocomplete="username" required>
+    <p>パスワードを入れてください。一度入れたスマホ・パソコンでは、次から聞かれません。</p>
+    <input id="tb-email" type="hidden" autocomplete="username" value="board@tokuwa.local">
     <label for="tb-pass">パスワード</label>
-    <input id="tb-pass" type="password" autocomplete="current-password" required>
+    <input id="tb-pass" type="password" inputmode="numeric" autocomplete="current-password" required>
     <button id="tb-btn" type="submit">ログイン</button>
     <div id="tb-err"></div>
   </form>
@@ -121,7 +120,7 @@
     auth.signInWithEmailAndPassword(document.getElementById("tb-email").value.trim(), document.getElementById("tb-pass").value)
       .catch(function(x){
         var c = x && x.code || "";
-        err.textContent = /invalid|wrong-password|user-not-found/.test(c) ? "メールアドレスかパスワードが違います"
+        err.textContent = /invalid|wrong-password|user-not-found/.test(c) ? "パスワードが違います"
           : c === "auth/too-many-requests" ? "失敗が続いたので少し待ってからお試しください"
           : c === "auth/network-request-failed" ? "インターネットにつながっていません" : "ログインできませんでした（" + c + "）";
       })
