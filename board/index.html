@@ -45,7 +45,7 @@
   </form>
 </div>
 <div id="root"></div>
-<script>window.__tbVer = "4.9.3";</script>
+<script>window.__tbVer = "4.9.4";</script>
 <script>
 /* 新しい版が出ていたら自動で読み直す（ホーム画面のアイコンが古い画面を覚えたままにならないように） */
 (function(){
@@ -161,7 +161,7 @@ const {
    定数
 ══════════════════════════════════════════════════════════ */
 const APP_NAME = "TOKUWAボード";
-const APP_VERSION = "4.9.3";
+const APP_VERSION = "4.9.4";
 const APP_UPDATED = "2026-11-22";
 /* 外部アプリ（日報）の初期リンク。設定から変更できる */
 const EXT_DEFAULT = {
@@ -5054,6 +5054,156 @@ function App() {
       more: Math.max(0, lines.length - 12)
     });
   };
+
+  /* ── 日報を書く日を選ぶと、その日・その人の現場日報を受け口から取ってきて、下書きとして入れる ── */
+  const siteRowsOf = (recs, m) => {
+    const rows = [];
+    (recs || []).forEach(r => {
+      if (!r || !r.date || !Array.isArray(r.workers)) return;
+      const isCore = r.app === "core-nippo" || r.workers.some(w => Array.isArray(w.cores));
+      const client = r.client || r.customer || "",
+        site = r.site || "";
+      const srcId = String(r.recordId || r.id || r.date + "|" + client + "|" + site);
+      r.workers.forEach(w => {
+        if (!w || w.outsource || w.name === "外注" || String(w.name || "").trim() !== m.name) return;
+        const st = Number(w.start),
+          en = Number(w.end);
+        const span = !Number.isNaN(st) && !Number.isNaN(en) && en > st ? (en - st) * 60 : 0;
+        const rest = Math.max(0, Math.round(span - (Number(w.hours) || 0) * 60));
+        const ot = (w.overtime || []).reduce((a, o) => a + (Number(o.hours) || 0), 0);
+        const work = (isCore ? coreWorkText(w, r) : r.workDesc || "") + (ot ? `${isCore || r.workDesc ? "\n" : ""}残業 ${ot}時間` : "");
+        rows.push({
+          id: nid(),
+          client,
+          siteName: site,
+          from: numToHm(w.start),
+          to: numToHm(w.end),
+          rest,
+          work,
+          src: srcId,
+          srcApp: isCore ? "コア日報" : "常用日報"
+        });
+      });
+    });
+    return rows.sort((a, b) => (a.from || "").localeCompare(b.from || ""));
+  };
+  const siteSig = rows => JSON.stringify((rows || []).map(x => [x.src, x.client, x.siteName, x.from, x.to, x.rest, x.work]).sort());
+  const rowsFromSite = rows => rows.map(r => ({
+    ...newNippoRow(),
+    client: r.client,
+    siteName: r.siteName,
+    from: r.from,
+    to: r.to,
+    rest: r.rest,
+    work: r.work
+  }));
+  const nippoFormRef = useRef(null);
+  nippoFormRef.current = nippoForm;
+  const siteMapRef = useRef({});
+  siteMapRef.current = siteMap;
+  const [siteFetch, setSiteFetch] = useState(null); // { key, state:"loading"|"ok"|"none"|"err"|"off", n, msg, filled }
+  const [siteFetchTick, setSiteFetchTick] = useState(0);
+  const nfKey = nippoForm && nippoForm.by ? nippoForm.by + "_" + nippoForm.date : null;
+  useEffect(() => {
+    if (!nfKey) {
+      setSiteFetch(null);
+      return;
+    }
+    const [by] = nfKey.split("_"),
+      date = nfKey.slice(by.length + 1);
+    const m = members.find(x => x.id === by);
+    if (!m) return;
+    const isEmpty = f => !(f.rows || []).some(r => (r.siteName || "").trim() || (r.client || "").trim() || (r.work || "").trim());
+    /* 下書きとして入れる：まだ何も書いていないときだけ（書いたものは上書きしない） */
+    const apply = rows => {
+      const f = nippoFormRef.current;
+      if (!f || f.by + "_" + f.date !== nfKey) return false;
+      const fill = rows.length > 0 && isEmpty(f);
+      setNippoForm({
+        ...f,
+        siteRows: rows,
+        ...(fill ? {
+          rows: rowsFromSite(rows),
+          fromSite: true
+        } : {})
+      });
+      return fill;
+    };
+    const local = (siteMapRef.current[nfKey] || {}).siteRows || [];
+    let filled = local.length ? apply(local) : false;
+    if (!window.__tbHost || !window.__tbIdToken || !kintaiUrl) {
+      setSiteFetch(local.length ? {
+        key: nfKey,
+        state: "ok",
+        n: local.length,
+        filled
+      } : {
+        key: nfKey,
+        state: "off"
+      });
+      return;
+    }
+    let dead = false;
+    setSiteFetch({
+      key: nfKey,
+      state: "loading",
+      n: local.length,
+      filled
+    });
+    (async () => {
+      try {
+        const idToken = await window.__tbIdToken();
+        const res = await fetch(kintaiUrl, {
+          method: "POST",
+          body: JSON.stringify({
+            action: "siteDay",
+            idToken,
+            date,
+            name: m.name
+          })
+        });
+        const j = await res.json();
+        if (dead) return;
+        if (!j.ok) {
+          setSiteFetch({
+            key: nfKey,
+            state: "err",
+            n: local.length,
+            filled,
+            msg: j.error === "not_configured" ? "現場日報の読み込みは、まだ準備ができていません（受け口に合言葉が登録されていません）。" : /知らない操作/.test(j.error || "") ? "現場日報の読み込みは、まだ準備ができていません（受け口が古いままです）。" : "現場日報を読み込めませんでした（" + j.error + "）"
+          });
+          return;
+        }
+        const rows = siteRowsOf(j.records, m);
+        if (siteSig(rows) !== siteSig(local)) {
+          if (rows.length || local.length) persistSite({
+            by,
+            date,
+            siteRows: rows,
+            ts: new Date().toISOString()
+          });
+          filled = apply(rows) || filled;
+        }
+        setSiteFetch({
+          key: nfKey,
+          state: rows.length ? "ok" : "none",
+          n: rows.length,
+          filled
+        });
+      } catch (e) {
+        if (!dead) setSiteFetch({
+          key: nfKey,
+          state: "err",
+          n: local.length,
+          filled,
+          msg: "現場日報を読み込めませんでした（インターネットを確認してください）"
+        });
+      }
+    })();
+    return () => {
+      dead = true;
+    };
+  }, [nfKey, siteFetchTick]);
 
   /* ── 点検・報告 ── */
   const lastCheck = (kind, targetId, type) => checks.filter(c => c.kind === kind && c.targetId === targetId && (!type || c.type === type)).sort((a, b) => (b.ts || "").localeCompare(a.ts || ""))[0];
@@ -15761,7 +15911,7 @@ function App() {
     const total = sumMin(f.rows);
     const ot = f.holiday ? 0 : Math.max(0, total - STD_MIN);
     const night = nightOf(f.rows);
-    const siteRows = (saved ? saved.siteRows : f.siteRows) || [];
+    const siteRows = (f.siteRows && f.siteRows.length ? f.siteRows : saved ? saved.siteRows : f.siteRows) || [];
     const siteTotal = sumMin(siteRows);
     const diff = siteRows.length ? total - siteTotal : 0;
     const setRow = (i, patch) => setNippoForm({
@@ -16001,10 +16151,20 @@ function App() {
       value: f.date,
       onChange: e => {
         const v = e.target.value || f.date;
+        /* その日にもう日報があるなら、それを開く（書きかけがなければ）。現場日報から入れただけの下書きは、書きかけに数えない */
+        if (f.by && nippoFind(f.by, v) && (!filled || f.fromSite)) {
+          openNippo(f.by, v);
+          return;
+        }
         setNippoForm({
           ...f,
           date: v,
-          holiday: isOffDay(v)
+          holiday: isOffDay(v),
+          ...(f.fromSite ? {
+            rows: [newNippoRow()],
+            siteRows: [],
+            fromSite: false
+          } : {})
         });
       },
       style: DATEIN
@@ -16037,7 +16197,37 @@ function App() {
         holiday: true
       }),
       color: "#b91c1c"
-    }, "休日出勤"))), f.rows.map((r, i) => /*#__PURE__*/React.createElement("div", {
+    }, "休日出勤"))), siteFetch && siteFetch.key === f.by + "_" + f.date && siteFetch.state !== "off" && (() => {
+      const sf = siteFetch;
+      const tone = sf.state === "ok" ? ["#eff6ff", "#93c5fd", "#1d4ed8"] : sf.state === "err" ? ["#fef2f2", "#fca5a5", "#b91c1c"] : ["#f9fafb", "#e5e7eb", "#555"];
+      return /*#__PURE__*/React.createElement("div", {
+        style: {
+          background: tone[0],
+          border: `1.5px solid ${tone[1]}`,
+          borderRadius: 14,
+          padding: "12px 14px",
+          marginBottom: 12,
+          fontSize: 13,
+          color: tone[2],
+          lineHeight: 1.7
+        }
+      }, sf.state === "loading" && /*#__PURE__*/React.createElement("b", null, "📋 この日の現場日報を確認しています…"), sf.state === "ok" && (sf.filled ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("b", null, "📋 現場日報の内容を入れました（", sf.n, "現場）"), /*#__PURE__*/React.createElement("br", null), "ちがうところを直し、足りないところを書き足して、提出してください。") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("b", null, "📋 この日の現場日報があります（", sf.n, "現場）"), /*#__PURE__*/React.createElement("br", null), "下に出ています。すでに書いてある内容は、そのままにしています。")), sf.state === "none" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("b", null, "📋 この日の現場日報は、まだ届いていません"), /*#__PURE__*/React.createElement("br", null), "現場日報を送ったあとなら「もう一度確認」を押してください。届いていなければ、自分で書いて提出できます。"), sf.state === "err" && /*#__PURE__*/React.createElement("b", null, sf.msg), (sf.state === "none" || sf.state === "err") && /*#__PURE__*/React.createElement("button", {
+        onClick: () => setSiteFetchTick(t => t + 1),
+        style: {
+          display: "block",
+          marginTop: 8,
+          padding: "9px 16px",
+          borderRadius: 10,
+          border: `1.5px solid ${tone[2]}`,
+          background: "#fff",
+          color: tone[2],
+          fontSize: 14,
+          fontWeight: 800,
+          cursor: "pointer",
+          minHeight: 44
+        }
+      }, "もう一度確認"));
+    })(), f.rows.map((r, i) => /*#__PURE__*/React.createElement("div", {
       key: r.id,
       style: BOX
     }, /*#__PURE__*/React.createElement("div", {
@@ -16360,15 +16550,8 @@ function App() {
     }, "⚠ 本人の日報と", hmText(Math.abs(diff)), "ちがいます（本人が", diff > 0 ? "長い" : "短い", "）"), !filled && /*#__PURE__*/React.createElement("button", {
       onClick: () => setNippoForm({
         ...f,
-        rows: siteRows.map(r => ({
-          ...newNippoRow(),
-          client: r.client,
-          siteName: r.siteName,
-          from: r.from,
-          to: r.to,
-          rest: r.rest,
-          work: r.work
-        }))
+        rows: rowsFromSite(siteRows),
+        fromSite: true
       }),
       style: {
         width: "100%",
