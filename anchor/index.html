@@ -560,7 +560,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "anchor";
-const APP_VERSION   = "1.3.0";
+const APP_VERSION   = "1.4.0";
 const APP_BUILD     = "2026-11-22";
 
 (function(){
@@ -664,11 +664,11 @@ const ANCHOR_TYPES = [
   {v:"METAL", label:"金属系打込み",                cls:"金属系　打込み式"},
   {v:"OTHER", label:"その他（手入力）",            cls:""}
 ];
-const METAL_SERIES = ["オールアンカー（C）","ボルトアンカー（BA）","グリップアンカー（GA）","その他"];
+const METAL_SERIES = ["オールアンカー（C）","ボルトアンカー（BA）","グリップアンカー（GA）","差筋アンカー","その他"];
 
 /* 呼び */
 const SIZES = ["M6","M8","M10","M12","M16","M20","M22","M24",
-               "W3/8","W1/2","W5/8","W3/4","W7/8","W1",
+               "W1/4","W5/16","W3/8","W1/2","W5/8","W3/4","W7/8","W1",
                "D10","D13","D16","D19","D22","D25"];
 function sizeKind(sz){
   if(!sz) return "";
@@ -695,10 +695,17 @@ const AP_SPEC = Object.assign({}, INJ_SPEC, {
    ・オールアンカーC：穿孔深さは 埋込＋呼び径（M10なら50以上）
    ・ボルトアンカーBA：M16は BA-1610 のみ埋込50
    ・グリップアンカーGA：本体を全部埋めるので 埋込長＝全長 */
-const METAL_C_SPEC  = { "M6":[6.4,30], "M8":[8.5,35], "M10":[10.5,40], "M12":[12.7,50], "M16":[17.0,60], "M20":[21.5,80] };
-const METAL_BA_SPEC = { "M6":[10.0,30], "M8":[12.5,35], "M10":[14.5,40], "M12":[18.0,50], "M16":[22.5,60], "M20":[26.0,80] };
+const METAL_C_SPEC  = { "M6":[6.4,30], "M8":[8.5,35], "M10":[10.5,40], "M12":[12.7,50], "M16":[17.0,60], "M20":[21.5,80],
+                        "W5/16":[8.5,35], "W3/8":[10.0,40], "W1/2":[13.5,50] };
+const METAL_BA_SPEC = { "M6":[10.0,30], "M8":[12.5,35], "M10":[14.5,40], "M12":[18.0,50], "M16":[22.5,60], "M20":[26.0,80],
+                        "W3/8":[14.5,40], "W1/2":[18.0,50] };
 const METAL_GA_SPEC = { "M6":[11.0,30], "M8":[12.5,35], "M10":[14.5,40], "M12":[18.0,50], "M16":[22.0,60],
-                        "M20":[26.0,80], "M22":[29.0,90], "M24":[33.0,110] };
+                        "M20":[26.0,80], "M22":[29.0,90], "M24":[33.0,110],
+                        "W1/4":[11.0,30], "W5/16":[12.5,35], "W3/8":[14.5,40], "W1/2":[18.0,50],
+                        "W5/8":[22.0,60], "W3/4":[26.0,80] };
+/* 差筋アンカー（スリーブ打込み式のD筋）。埋込長は穿孔長。
+   メーカーで多少違う（D10は45〜50、D13は55〜65、D16は68〜76） */
+const METAL_SASHI_SPEC = { "D10":[14.5,45], "D13":[18.0,55], "D16":[22.0,68] };
 const SPEC_DEFAULT = {
   AP:       JSON.parse(JSON.stringify(AP_SPEC)),
   EA500:    JSON.parse(JSON.stringify(INJ_SPEC)),
@@ -706,6 +713,7 @@ const SPEC_DEFAULT = {
   METAL_C:  JSON.parse(JSON.stringify(METAL_C_SPEC)),
   METAL_BA: JSON.parse(JSON.stringify(METAL_BA_SPEC)),
   METAL_GA: JSON.parse(JSON.stringify(METAL_GA_SPEC)),
+  METAL_SASHI: JSON.parse(JSON.stringify(METAL_SASHI_SPEC)),
   OTHER: {}
 };
 /* 金属系は選んだ種類（シリーズ）で規格表を切り替える */
@@ -714,6 +722,7 @@ function metalKey(series){
   if(series.indexOf("オール") === 0) return "METAL_C";
   if(series.indexOf("ボルト") === 0) return "METAL_BA";
   if(series.indexOf("グリップ") === 0) return "METAL_GA";
+  if(series.indexOf("差筋") === 0) return "METAL_SASHI";
   return "";
 }
 function specKey(type, series){
@@ -757,7 +766,8 @@ function renderSpecTable(){
       {v:"EL360",    label:"EL360（注入・デコラックス）"},
       {v:"METAL_C",  label:"金属系：オールアンカー（C）"},
       {v:"METAL_BA", label:"金属系：ボルトアンカー（BA）"},
-      {v:"METAL_GA", label:"金属系：グリップアンカー（GA）"}
+      {v:"METAL_GA", label:"金属系：グリップアンカー（GA）"},
+      {v:"METAL_SASHI", label:"金属系：差筋アンカー"}
     ].map(t=>`<option value="${t.v}">${t.label}</option>`).join("");
   }
   const t = sel.value || "AP";
