@@ -45,6 +45,26 @@
   </form>
 </div>
 <div id="root"></div>
+<script>window.__tbVer = "4.8.4";</script>
+<script>
+/* 新しい版が出ていたら自動で読み直す（ホーム画面のアイコンが古い画面を覚えたままにならないように） */
+(function(){
+  var MY = window.__tbVer, K = '__tb' + 'Ver = ' + String.fromCharCode(34);
+  function busy(){ var a = document.activeElement; return a && /INPUT|TEXTAREA|SELECT/.test(a.tagName); }
+  function check(){
+    if (busy()) return;
+    fetch(location.pathname + "?check=" + Date.now(), { cache: "no-store" }).then(function(r){ return r.text(); }).then(function(t){
+      var i = t.indexOf(K); if (i < 0) return;
+      var v = t.slice(i + K.length, t.indexOf(String.fromCharCode(34), i + K.length));
+      if (!v || v === MY) return;
+      try { if (sessionStorage.getItem("tb-up-" + v)) return; sessionStorage.setItem("tb-up-" + v, "1"); } catch (e) {}
+      location.replace(location.pathname + "?v=" + v);
+    }).catch(function(){});
+  }
+  check();
+  document.addEventListener("visibilitychange", function(){ if (!document.hidden) check(); });
+})();
+</script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -141,7 +161,7 @@ const {
    定数
 ══════════════════════════════════════════════════════════ */
 const APP_NAME = "TOKUWAボード";
-const APP_VERSION = "4.8.3";
+const APP_VERSION = "4.8.4";
 const APP_UPDATED = "2026-11-22";
 /* 外部アプリ（日報）の初期リンク。設定から変更できる */
 const EXT_DEFAULT = {
