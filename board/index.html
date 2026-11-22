@@ -45,7 +45,7 @@
   </form>
 </div>
 <div id="root"></div>
-<script>window.__tbVer = "4.10.1";</script>
+<script>window.__tbVer = "4.10.2";</script>
 <script>
 /* 新しい版が出ていたら自動で読み直す（ホーム画面のアイコンが古い画面を覚えたままにならないように） */
 (function(){
@@ -161,7 +161,7 @@ const {
    定数
 ══════════════════════════════════════════════════════════ */
 const APP_NAME = "TOKUWAボード";
-const APP_VERSION = "4.10.1";
+const APP_VERSION = "4.10.2";
 const APP_UPDATED = "2026-11-22";
 /* 外部アプリ（日報）の初期リンク。設定から変更できる */
 const EXT_DEFAULT = {
@@ -8017,7 +8017,7 @@ function App() {
           fontSize: 11,
           color: HOLS[n.date] || dw === 0 ? "#ef4444" : dw === 6 ? "#2563eb" : "#aaa"
         }
-      }, "（", DOW[dw], "）", n.holiday && n.rows.length ? "休出" : "")), /*#__PURE__*/React.createElement("span", {
+      }, "（", DOW[dw], "）")), /*#__PURE__*/React.createElement("span", {
         style: {
           flex: 1,
           minWidth: 0
@@ -16119,7 +16119,7 @@ function App() {
         color: "#555",
         marginTop: 2
       }
-    }, m ? m.name : "名前なし", n.holiday ? "　休日出勤" : "", /*#__PURE__*/React.createElement("span", {
+    }, m ? m.name : "名前なし", /*#__PURE__*/React.createElement("span", {
       style: {
         marginLeft: 8,
         fontSize: 11,
@@ -16460,8 +16460,7 @@ function App() {
       style: {
         display: "flex",
         alignItems: "center",
-        gap: 10,
-        marginBottom: 12
+        gap: 10
       }
     }, /*#__PURE__*/React.createElement("span", {
       style: {
@@ -16494,34 +16493,7 @@ function App() {
       style: DATEIN
     }), /*#__PURE__*/React.createElement(DowTag, {
       k: f.date
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        flexWrap: "wrap"
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 13,
-        color: "#777",
-        fontWeight: 700,
-        minWidth: 40
-      }
-    }, "区分"), /*#__PURE__*/React.createElement(Chip, {
-      on: !f.holiday,
-      onClick: () => setNippoForm({
-        ...f,
-        holiday: false
-      })
-    }, "出勤"), /*#__PURE__*/React.createElement(Chip, {
-      on: !!f.holiday,
-      onClick: () => setNippoForm({
-        ...f,
-        holiday: true
-      }),
-      color: "#b91c1c"
-    }, "休日出勤"))), siteFetch && siteFetch.key === f.by + "_" + f.date && siteFetch.state !== "off" && (() => {
+    }))), siteFetch && siteFetch.key === f.by + "_" + f.date && siteFetch.state !== "off" && (() => {
       const sf = siteFetch;
       const tone = sf.state === "ok" ? ["#eff6ff", "#93c5fd", "#1d4ed8"] : sf.state === "err" ? ["#fef2f2", "#fca5a5", "#b91c1c"] : ["#f9fafb", "#e5e7eb", "#555"];
       return /*#__PURE__*/React.createElement("div", {
@@ -16593,13 +16565,99 @@ function App() {
         color: "#888",
         marginTop: 2
       }
-    }, "時間の順にならびます。直したい行を押すと、その場で直せます。")), f.rows.map((r, i) => ({
-      r,
-      i
-    })).sort((a, b) => (toMin(a.r.from) || 0) - (toMin(b.r.from) || 0) || a.i - b.i).map(({
-      r,
-      i
-    }, k) => {
+    }, "時間を変えると、すぐに並びが変わります。行を押すと直せます。空いている時間は「空き」と出るので、押すとそこに足せます。")), (() => {
+      const srt = f.rows.map((r, i) => ({
+        r,
+        i
+      })).sort((a, b) => (toMin(a.r.from) || 0) - (toMin(b.r.from) || 0) || a.i - b.i);
+      const anyIn = f.rows.some(r => r.siteName.trim() || r.client.trim() || r.work.trim());
+      const out = [];
+      let cur = toMin(WORK_FROM);
+      const gap = (a, b) => out.push({
+        gap: true,
+        from: minToHm(a),
+        to: minToHm(b)
+      });
+      srt.forEach((x, k) => {
+        const a = toMin(x.r.from) || 0,
+          b = toMin(x.r.to) || 0;
+        if (anyIn && a > cur) gap(cur, a);
+        out.push({
+          ...x,
+          k
+        });
+        cur = Math.max(cur, b);
+      });
+      if (anyIn && cur < toMin(WORK_TO)) gap(cur, toMin(WORK_TO));
+      return out;
+    })().map((it, oi) => {
+      if (it.gap) {
+        const h2 = t => {
+          const [h, m] = t.split(":");
+          return pad(Number(h)) + ":" + m;
+        };
+        return /*#__PURE__*/React.createElement("div", {
+          key: "g" + it.from,
+          onClick: () => {
+            const from = h2(it.from),
+              to = h2(it.to);
+            const nr = {
+              ...newNippoRow(),
+              from,
+              to,
+              rest: autoRest(from, to)
+            };
+            setNippoOpenRow(nr.id);
+            setNippoForm({
+              ...f,
+              rows: [...f.rows, nr]
+            });
+          },
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "10px 12px",
+            cursor: "pointer",
+            minHeight: 50,
+            borderTop: oi ? "1px solid #e5e7eb" : "none",
+            borderLeft: "6px dashed #d1d5db",
+            background: "#f9fafb"
+          }
+        }, /*#__PURE__*/React.createElement("span", {
+          style: {
+            width: 92,
+            flexShrink: 0,
+            fontSize: 13,
+            fontWeight: 700,
+            color: "#999",
+            whiteSpace: "nowrap"
+          }
+        }, h2(it.from), "〜", h2(it.to)), /*#__PURE__*/React.createElement("span", {
+          style: {
+            flex: 1,
+            fontSize: 14,
+            fontWeight: 700,
+            color: "#aaa"
+          }
+        }, "空き"), /*#__PURE__*/React.createElement("span", {
+          style: {
+            flexShrink: 0,
+            fontSize: 13,
+            fontWeight: 800,
+            padding: "7px 11px",
+            borderRadius: 10,
+            border: "1.5px dashed #9ca3af",
+            color: "#666",
+            background: "#fff"
+          }
+        }, "＋ ここに足す"));
+      }
+      const {
+        r,
+        i,
+        k
+      } = it;
       const QUICK = ["会社での作業", "移動", "打ち合わせ"];
       const COLS = ["#0f766e", "#1d4ed8", "#b45309", "#7c3aed", "#be185d"],
         col = COLS[k % COLS.length];
@@ -16622,7 +16680,7 @@ function App() {
       return /*#__PURE__*/React.createElement("div", {
         key: r.id,
         style: {
-          borderTop: k ? "1px solid #e5e7eb" : "none",
+          borderTop: oi ? "1px solid #e5e7eb" : "none",
           borderLeft: `6px solid ${col}`,
           background: open ? "#fafffb" : "#fff"
         }
