@@ -10,14 +10,13 @@
 const API_KEY = 'AIzaSyB5r7pjt6kHVzQ7NKiQ1wBQxp74j_I4wt0';   // Firebase（tokuwa-apps）の鍵。ログインの確認だけに使う
 const ALLOWED = ['board@tokuwa.local', 'tokuwa2100@if-n.ne.jp'];
 const ROOT_NAME = '勤怠';
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 
-/* ── 現場日報（コア日報・常用日報）を、個人日報の下書きに使うための設定 ──
- * 日報アプリの受け口のアドレス。事務所用の合言葉はここには書きません。
- * 「プロジェクトの設定」→「スクリプト プロパティ」に、
- *     プロパティ：NIPPO_OFFICE_KEY　　値：事務所用の合言葉
- * を1つ追加してください（集計表の「ドライブ連携の設定」に入れているものと同じ）。 */
-const NIPPO_URL = 'https://script.google.com/macros/s/AKfycby3MD8Lj1om5jopPcdJLktTCk4eZ_bI5aRrmbhj9qDv3Cn9GLVfFL9qLfvOvL5tCLT_1A/exec';
+/* ── 現場日報（コア日報・常用日報）を、個人日報の下書きに使う ──
+ * 日報アプリが同じドライブに作っている「日報台帳」（スプレッドシート）を、その日の分だけ直接読みます。
+ * 合言葉はいりません（この受け口は、ボードにログインしている人からしか受け付けないため）。 */
+const NIPPO_SHEET = '日報台帳';
+const NIPPO_COL = { id: 1, date: 3, deleted: 10, dataId: 12, data: 14 };   // 台帳の列（recordId・作業日・削除・データID・データ）
 
 /* 最初に1回、上のメニューでこの関数を選んで「実行」→ 許可すると「勤怠」フォルダができます */
 function setup() {
@@ -33,7 +32,7 @@ function doPost(e) {
     const req = JSON.parse(e.postData.contents);
     const email = verify_(req.idToken);
     if (!email) return out_({ ok: false, error: 'ログインを確認できませんでした' });
-    if (req.action === 'ping') return out_({ ok: true, email: email, folder: rootFolder_().getUrl(), version: VERSION, nippo: !!nippoKey_() });
+    if (req.action === 'ping') return out_({ ok: true, email: email, folder: rootFolder_().getUrl(), version: VERSION });
     if (req.action === 'saveMonth') return out_(saveMonth_(req, email));
     if (req.action === 'siteDay') return out_(siteDay_(req));
     return out_({ ok: false, error: '知らない操作です' });
@@ -111,68 +110,64 @@ function out_(o) {
 
 /* ═══════════ 現場日報 → 個人日報の下書き ═══════════
  * ボードで作業員が日報を書く日を選ぶと、その日・その人の現場日報だけを、その場で読んで返します。
- * 日報の中身は、ここにもドライブにも保存しません（読んで返すだけ）。
- * 毎回最初から全部を読まなくてすむように、「どこまで読んだか」の目印（日ごとに1つの短い文字）だけを覚えます。 */
-function nippoKey_() {
-  return PropertiesService.getScriptProperties().getProperty('NIPPO_OFFICE_KEY') || '';
-}
-
+ * 読んで返すだけで、どこにも保存しません。 */
 function siteDay_(req) {
   const date = String(req.date || ''), name = String(req.name || '').trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !name) return { ok: false, error: '日付か名前がありません' };
-  const key = nippoKey_();
-  if (!key) return { ok: false, error: 'not_configured' };
-  return { ok: true, date: date, records: readDay_(key, date, name) };
+  return { ok: true, date: date, records: readDay_(date, name) };
 }
 
-/* 最初に1回、エディタでこの関数を「実行」すると、つながるかどうかを確かめられます（合言葉を登録したあとで） */
+/* エディタでこの関数を「実行」すると、台帳が読めるかどうかを確かめられます */
 function testNippo() {
-  const key = nippoKey_();
-  if (!key) { Logger.log('スクリプト プロパティ NIPPO_OFFICE_KEY がまだ登録されていません'); return; }
   const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
-  const n = readDay_(key, today, null).length;
-  Logger.log('つながりました。今日（' + today + '）の現場日報：' + n + '件');
+  const sh = nippoSheet_();
+  Logger.log('日報台帳：' + (sh.getLastRow() - 1) + '件。今日（' + today + '）の現場日報：' + readDay_(today, null).length + '件');
+}
+
+/* 日報アプリの「日報台帳」を探す（見つけたら場所を覚えて、次からはすぐ開く） */
+function nippoSheet_() {
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty('NIPPO_SHEET_ID');
+  if (id) { try { return SpreadsheetApp.openById(id).getSheets()[0]; } catch (e) {} }
+  const it = DriveApp.getFilesByName(NIPPO_SHEET);
+  while (it.hasNext()) {
+    const f = it.next();
+    if (f.getMimeType() !== 'application/vnd.google-apps.spreadsheet' || f.isTrashed()) continue;
+    const sh = SpreadsheetApp.openById(f.getId()).getSheets()[0];
+    if (String(sh.getRange(1, 1).getValue()) !== 'recordId') continue;      // 日報アプリの台帳かどうか
+    props.setProperty('NIPPO_SHEET_ID', f.getId());
+    return sh;
+  }
+  throw new Error('日報台帳が見つかりません');
 }
 
 /* その日の現場日報を読む。name があれば、その人が入っているものだけ。
- * 目印：その日より前の日に覚えた「読み終わりの位置」から読み始める（その日の日報は、それより後に届くため）。 */
-function readDay_(key, date, name) {
-  const props = PropertiesService.getScriptProperties();
-  const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
-  let marks = {};
-  try { marks = JSON.parse(props.getProperty('NIPPO_MARKS') || '{}') || {}; } catch (e) { marks = {}; }
-  const before = Object.keys(marks).filter(function (d) { return d < date; }).sort();
-  let since = before.length ? marks[before[before.length - 1]] : '';
-  const found = {};
-  for (let guard = 0; guard < 80; guard++) {
-    const r = UrlFetchApp.fetch(NIPPO_URL, {
-      method: 'post', contentType: 'text/plain;charset=utf-8',
-      payload: JSON.stringify({ action: 'list', key: key, since: since, limit: 200 }), muteHttpExceptions: true
-    });
-    let res = null;
-    try { res = JSON.parse(r.getContentText()); } catch (e) { res = null; }
-    if (!res || !res.ok) throw new Error('nippo:' + (res && res.error ? res.error : 'network'));
-    (res.items || []).forEach(function (it) {
-      if (!it) return;
-      const id = String(it.id);
-      delete found[id];                                   // 直された・消された日報は、新しいほうで置きかえる
-      if (it.deleted || !it.record || it.record.date !== date) return;
-      if (name && !(it.record.workers || []).some(function (w) { return w && String(w.name || '').trim() === name; })) return;
-      const rec = slim_(it.record);
-      rec.recordId = id;
-      found[id] = rec;
-    });
-    since = res.next || since;
-    if (!res.more) break;
+ * まず「作業日」と「削除」の列だけを読み、当てはまる行だけ中身を読む（台帳が大きくなっても遅くならないように）。 */
+function readDay_(date, name) {
+  const sh = nippoSheet_();
+  const last = sh.getLastRow();
+  if (last < 2) return [];
+  const n = last - 1;
+  const days = sh.getRange(2, NIPPO_COL.date, n, 1).getDisplayValues();
+  const dels = sh.getRange(2, NIPPO_COL.deleted, n, 1).getDisplayValues();
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    if (String(days[i][0]).trim() !== date || String(dels[i][0]).trim() === '削除') continue;
+    const row = sh.getRange(i + 2, 1, 1, NIPPO_COL.data).getValues()[0];
+    let rec = null;
+    const cell = String(row[NIPPO_COL.data - 1] || '');
+    try { rec = cell ? JSON.parse(cell) : null; } catch (e) { rec = null; }
+    if (!rec) {
+      try { rec = JSON.parse(DriveApp.getFileById(String(row[NIPPO_COL.dataId - 1])).getBlob().getDataAsString('UTF-8')); } catch (e) { rec = null; }
+    }
+    if (!rec || !Array.isArray(rec.workers)) continue;
+    if (name && !rec.workers.some(function (w) { return w && String(w.name || '').trim() === name; })) continue;
+    rec = slim_(rec);
+    rec.recordId = String(row[NIPPO_COL.id - 1]);
+    if (!rec.date) rec.date = date;
+    out.push(rec);
   }
-  /* 今日の目印がまだなければ、いまの読み終わりの位置を覚える（古い目印は120日で消す） */
-  if (!marks[today] && since) {
-    marks[today] = since;
-    const limit = Utilities.formatDate(new Date(Date.now() - 120 * 86400000), 'Asia/Tokyo', 'yyyy-MM-dd');
-    Object.keys(marks).forEach(function (d) { if (d < limit) delete marks[d]; });
-    props.setProperty('NIPPO_MARKS', JSON.stringify(marks));
-  }
-  return Object.keys(found).map(function (k) { return found[k]; });
+  return out;
 }
 
 /* サインの画像などの長い文字は返さない */
