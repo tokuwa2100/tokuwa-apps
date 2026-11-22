@@ -45,7 +45,7 @@
   </form>
 </div>
 <div id="root"></div>
-<script>window.__tbVer = "4.9.2";</script>
+<script>window.__tbVer = "4.9.3";</script>
 <script>
 /* 新しい版が出ていたら自動で読み直す（ホーム画面のアイコンが古い画面を覚えたままにならないように） */
 (function(){
@@ -161,7 +161,7 @@ const {
    定数
 ══════════════════════════════════════════════════════════ */
 const APP_NAME = "TOKUWAボード";
-const APP_VERSION = "4.9.2";
+const APP_VERSION = "4.9.3";
 const APP_UPDATED = "2026-11-22";
 /* 外部アプリ（日報）の初期リンク。設定から変更できる */
 const EXT_DEFAULT = {
@@ -4839,6 +4839,144 @@ function App() {
         bad++;
       }
     }
+    importNippoRecs(recs, files.length, bad);
+  };
+  /* 日報アプリ（コア日報・常用日報）が会社のドライブに保存した日報を、受け口から読み込む。
+     事務所用の合言葉は、このスマホ・パソコンだけに覚える（共有のデータには入れない） */
+  const NIPPO_DRIVE_URL = "https://script.google.com/macros/s/AKfycby3MD8Lj1om5jopPcdJLktTCk4eZ_bI5aRrmbhj9qDv3Cn9GLVfFL9qLfvOvL5tCLT_1A/exec";
+  const [driveBusy, setDriveBusy] = useState(false);
+  const [driveDlg, setDriveDlg] = useState(null); // { key, msg }
+  const driveKey = () => {
+    try {
+      return localStorage.getItem("tb-nippo-key") || "";
+    } catch (e) {
+      return "";
+    }
+  };
+  const drivePost = async body => {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 120000);
+    try {
+      const r = await fetch(NIPPO_DRIVE_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8"
+        },
+        body: JSON.stringify(body),
+        signal: ctl.signal
+      });
+      return await r.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  const driveErr = e => e === "bad_key" ? "合言葉が違います。" : e === "office_only" ? "作業員用の合言葉です。事務所用の合言葉を入れてください。" : e === "not_configured" ? "受け口に合言葉が登録されていません。" : e === "unknown_action" ? "受け口が古いままです（日報アプリの受け口を新しくしてください）。" : e === "network" ? "ドライブにつながりません（インターネットを確認してください）。" : "エラー：" + e;
+  const saveDriveKey = async key => {
+    const k = (key || "").trim();
+    if (!k) return;
+    setDriveDlg(d => ({
+      ...d,
+      msg: "確認しています…"
+    }));
+    let res = null;
+    try {
+      res = await drivePost({
+        action: "ping",
+        key: k
+      });
+    } catch (e) {
+      res = null;
+    }
+    if (!res) {
+      setDriveDlg(d => ({
+        ...d,
+        msg: "✕ " + driveErr("network")
+      }));
+      return;
+    }
+    if (!res.ok) {
+      setDriveDlg(d => ({
+        ...d,
+        msg: "✕ " + driveErr(res.error)
+      }));
+      return;
+    }
+    if (res.role !== "office") {
+      setDriveDlg(d => ({
+        ...d,
+        msg: "✕ " + driveErr("office_only")
+      }));
+      return;
+    }
+    try {
+      localStorage.setItem("tb-nippo-key", k);
+    } catch (e) {}
+    setDriveDlg(null);
+    pullNippoDrive(k);
+  };
+  const pullNippoDrive = async keyIn => {
+    if (driveBusy) return;
+    const key = keyIn || driveKey();
+    if (!key) {
+      setDriveDlg({
+        key: "",
+        msg: ""
+      });
+      return;
+    }
+    setDriveBusy(true);
+    try {
+      const recs = [];
+      let since = "";
+      for (let guard = 0; guard < 100; guard++) {
+        let res;
+        try {
+          res = await drivePost({
+            action: "list",
+            key,
+            since,
+            limit: 200
+          });
+        } catch (e) {
+          throw new Error("network");
+        }
+        if (!res || !res.ok) throw new Error(res && res.error || "unknown");
+        (res.items || []).forEach(it => {
+          if (!it || !it.record || it.deleted) return;
+          recs.push({
+            ...it.record,
+            recordId: String(it.id)
+          });
+        });
+        since = res.next || since;
+        if (!res.more) break;
+      }
+      importNippoRecs(recs, 0, 0, true);
+    } catch (e) {
+      const code = e.message || "unknown";
+      if (code === "bad_key" || code === "office_only") {
+        try {
+          localStorage.removeItem("tb-nippo-key");
+        } catch (x) {}
+        setDriveDlg({
+          key: "",
+          msg: "✕ " + driveErr(code)
+        });
+      } else setAsk({
+        msg: "ドライブから読み込めませんでした。" + driveErr(code),
+        yes: "OK",
+        single: true,
+        onYes: () => {}
+      });
+    } finally {
+      setDriveBusy(false);
+    }
+  };
+  const importNippoRecs = (recs, nFiles, bad0, fromDrive) => {
+    let bad = bad0 || 0;
+    const files = {
+      length: nFiles
+    };
     const touched = {};
     const unknown = [];
     const lines = [];
@@ -4892,13 +5030,23 @@ function App() {
         lines.push(`${fmtDate(r.date)}　${m.name}　${site || client || "現場名なし"}`);
       });
     });
-    Object.values(touched).forEach(n => persistSite({
-      ...n,
-      ts: new Date().toISOString()
-    }));
-    if (lastYm) setNippoYm(lastYm);
+    /* 中身が変わっていないものは保存し直さない（ドライブからは毎回ぜんぶ届くため） */
+    const sig = n => JSON.stringify((n && n.siteRows || []).map(x => [x.src, x.client, x.siteName, x.from, x.to, x.rest, x.work]).sort());
+    let changed = 0;
+    Object.values(touched).forEach(n => {
+      if (sig(n) === sig(siteMap[n.by + "_" + n.date])) return;
+      changed++;
+      persistSite({
+        ...n,
+        ts: new Date().toISOString()
+      });
+    });
+    if (lastYm && !fromDrive) setNippoYm(lastYm);
     setImportNote({
       files: files.length,
+      drive: !!fromDrive,
+      recs: recs.length,
+      changed,
       rows: rowsIn,
       bad,
       unknown: [...new Set(unknown)],
@@ -5146,6 +5294,29 @@ function App() {
   };
 
   /* 点検の記録一覧（タップで詳細） */
+  /* 機械工具の月点検：次回は「前回の点検日から1か月後」まで。記録がなければ今月末まで */
+  const machDue = mc => {
+    const c = lastCheck("machine", mc.id, "monthly");
+    let due;
+    if (c) {
+      const d = parseKey(c.date);
+      const t = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate());
+      if (t.getDate() !== d.getDate()) t.setDate(0);
+      due = dateToKey(t);
+    } else {
+      const d = parseKey(todayKey);
+      due = dateToKey(new Date(d.getFullYear(), d.getMonth() + 1, 0));
+    }
+    return {
+      c,
+      due,
+      left: daysBetween(todayKey, due)
+    };
+  };
+  const machSoon = machines.map(mc => ({
+    mc,
+    ...machDue(mc)
+  })).filter(x => x.left <= 7).sort((a, b) => a.left - b.left); // 1週間を切った（期限切れも）
   const CheckLog = ({
     kind
   }) => {
@@ -6273,7 +6444,7 @@ function App() {
     label: "お知らせ",
     color: "#b45309",
     color2: "#f59e0b",
-    badge: unreadNotices + troubles.filter(t => t.status !== "done").length,
+    badge: unreadNotices + troubles.filter(t => t.status !== "done").length + machSoon.length,
     onClick: () => setView("notices")
   }), /*#__PURE__*/React.createElement(AppIcon, {
     glyph: "rest",
@@ -6569,7 +6740,51 @@ function App() {
       padding: "14px 16px",
       boxShadow: "0 1px 3px #0001"
     }
-  }, (() => {
+  }, machSoon.length > 0 && /*#__PURE__*/React.createElement("div", {
+    onClick: () => setView("mcheck"),
+    style: {
+      margin: "0 0 14px",
+      border: "1.5px solid #fdba74",
+      borderRadius: 12,
+      overflow: "hidden",
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "9px 12px",
+      background: "#fff7ed",
+      fontSize: 12,
+      fontWeight: 800,
+      color: "#c2410c"
+    }
+  }, "機械工具の月点検\u3000期限が近いもの（", machSoon.length, "台）\u3000押すと機械工具が開きます"), machSoon.map(x => /*#__PURE__*/React.createElement("div", {
+    key: x.mc.id,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      padding: "10px 12px",
+      borderTop: "1px solid #ffedd5"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: 1,
+      minWidth: 0,
+      fontSize: 15,
+      fontWeight: 800,
+      color: "#111",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap"
+    }
+  }, x.mc.name), /*#__PURE__*/React.createElement("span", {
+    style: {
+      flexShrink: 0,
+      fontSize: 13,
+      fontWeight: 800,
+      color: x.left < 0 ? "#b91c1c" : "#c2410c"
+    }
+  }, fmtDate(x.due), "まで", x.left < 0 ? `（${-x.left}日すぎ）` : x.left === 0 ? "（今日）" : `（あと${x.left}日）`)))), (() => {
     const open = troubles.filter(t => t.status !== "done").sort((a, b) => (b.ts || "").localeCompare(a.ts || ""));
     if (!open.length) return null;
     return /*#__PURE__*/React.createElement("div", {
@@ -6765,7 +6980,7 @@ function App() {
       background: ORANGE,
       alignSelf: "flex-end"
     }
-  }, "投稿"))), noticesV.length === 0 && !showComposer && /*#__PURE__*/React.createElement("span", {
+  }, "投稿"))), noticesV.length === 0 && !showComposer && !machSoon.length && /*#__PURE__*/React.createElement("span", {
     style: {
       color: "#bbb",
       fontSize: 13
@@ -7301,21 +7516,62 @@ function App() {
         lineHeight: 1.7
       }
     }, "日付は書く画面で変えられます。書き忘れた日の分も、ここから書けます。"), isEditor && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
-      onClick: () => nippoFileRef.current.click(),
+      onClick: () => pullNippoDrive(),
+      disabled: driveBusy,
       style: {
         width: "100%",
-        marginBottom: 12,
+        marginBottom: 6,
         padding: "13px 0",
         borderRadius: 14,
-        background: "#fff",
-        color: GREEN,
-        border: `1.5px solid ${GREEN}`,
+        background: driveBusy ? "#e5e7eb" : GREEN,
+        color: driveBusy ? "#888" : "#fff",
+        border: "none",
         fontSize: 15,
         fontWeight: 800,
-        cursor: "pointer",
+        cursor: driveBusy ? "default" : "pointer",
         minHeight: 50
       }
-    }, "📥 現場日報（日報アプリ）を読み込む"), window.__tbHost && /*#__PURE__*/React.createElement("button", {
+    }, driveBusy ? "ドライブから読み込んでいます…" : "📥 現場日報をドライブから読み込む"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 14,
+        margin: "0 4px 12px",
+        fontSize: 12
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        flex: 1,
+        color: "#888",
+        lineHeight: 1.6
+      }
+    }, "コア日報・常用日報で送った日報を取り込み、個人日報と見比べられます。"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => nippoFileRef.current.click(),
+      style: {
+        background: "none",
+        border: "none",
+        padding: 0,
+        color: "#666",
+        fontWeight: 700,
+        cursor: "pointer",
+        textDecoration: "underline",
+        flexShrink: 0
+      }
+    }, "ファイルから"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setDriveDlg({
+        key: "",
+        msg: ""
+      }),
+      style: {
+        background: "none",
+        border: "none",
+        padding: 0,
+        color: "#666",
+        fontWeight: 700,
+        cursor: "pointer",
+        textDecoration: "underline",
+        flexShrink: 0
+      }
+    }, "合言葉")), window.__tbHost && /*#__PURE__*/React.createElement("button", {
       onClick: () => saveKintai(nYm),
       disabled: kintaiBusy,
       style: {
@@ -7404,124 +7660,14 @@ function App() {
         fontWeight: 800,
         fontSize: 13
       }
-    }, "今月")), isEditor ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    }, "今月")), /*#__PURE__*/React.createElement("div", {
       style: {
-        display: "flex",
-        flexWrap: "wrap",
-        padding: "4px 6px"
-      }
-    }, /*#__PURE__*/React.createElement(Cell, {
-      label: "出勤",
-      value: `${tot.days}日`
-    }), /*#__PURE__*/React.createElement(Cell, {
-      label: "実働",
-      value: hmText(tot.work)
-    }), /*#__PURE__*/React.createElement(Cell, {
-      label: "残業",
-      value: hmText(tot.ot),
-      color: tot.ot ? ORANGE : undefined
-    }), /*#__PURE__*/React.createElement(Cell, {
-      label: "休日出勤",
-      value: tot.hol ? `${tot.hol}日（${hmText(tot.holMin)}）` : "0日",
-      color: tot.hol ? "#b91c1c" : undefined
-    }), /*#__PURE__*/React.createElement(Cell, {
-      label: "夜間",
-      value: hmText(tot.night),
-      color: tot.night ? "#4338ca" : undefined
-    }), /*#__PURE__*/React.createElement(Cell, {
-      label: "未確認",
-      value: `${tot.wait}件`,
-      color: tot.wait ? "#c2410c" : "#166534"
-    })), isEditor && (tot.none > 0 || tot.diff > 0) && /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: "8px 16px 12px",
+        padding: "9px 16px",
         fontSize: 12,
-        lineHeight: 1.7
-      }
-    }, tot.none > 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        color: "#6b7280",
-        fontWeight: 700
-      }
-    }, "現場日報はあるのに本人の日報がない日：", tot.none, "件"), tot.diff > 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        color: "#b91c1c",
-        fontWeight: 700
-      }
-    }, "⚠ 現場日報と時間が合わない日：", tot.diff, "件")), /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: "0 16px 10px",
-        fontSize: 11,
-        color: "#aaa",
+        color: "#888",
         lineHeight: 1.6
       }
-    }, "残業は1日8時間を超えた分（休日出勤の日は除く）。夜間は「夜間」にした現場の時間。")) : /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: "12px 16px 14px"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        alignItems: "baseline",
-        gap: 8
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 12,
-        color: "#888",
-        fontWeight: 700
-      }
-    }, "この月の出勤"), /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 20,
-        fontWeight: 800,
-        color: "#111"
-      }
-    }, tot.days, "日"), tot.hol > 0 && /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 12,
-        fontWeight: 800,
-        color: "#b91c1c"
-      }
-    }, "（うち休日出勤 ", tot.hol, "日）")), siteSum.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: "#888",
-        fontWeight: 700,
-        margin: "12px 0 4px"
-      }
-    }, "行った現場"), siteSum.map(x => /*#__PURE__*/React.createElement("div", {
-      key: x.name,
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "6px 0",
-        borderTop: "1px solid #f5f5f5"
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        flex: 1,
-        minWidth: 0,
-        fontSize: 14,
-        fontWeight: 700,
-        color: "#222",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        whiteSpace: "nowrap"
-      }
-    }, x.name), /*#__PURE__*/React.createElement("span", {
-      style: {
-        flexShrink: 0,
-        fontSize: 12,
-        color: "#666"
-      }
-    }, x.days.length, "日", /*#__PURE__*/React.createElement("span", {
-      style: {
-        color: "#aaa",
-        marginLeft: 6
-      }
-    }, x.days.map(d => Number(d.slice(8))).join("・"), "日"))))))), list.length === 0 && /*#__PURE__*/React.createElement("div", {
+    }, "「‹」で前の月の日報を見られます。日付を押すと中身が開きます。")), list.length === 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         background: "#fff",
         borderRadius: 12,
@@ -9388,8 +9534,9 @@ function App() {
           margin: "0 4px 8px"
         }
       }, mt.label), list.map(mc => {
-        const c = lastCheck("machine", mc.id, "monthly");
-        const fresh = c && daysBetween(c.date, todayKey) <= 31;
+        const md = machDue(mc),
+          c = md.c;
+        const fresh = md.left > 7;
         const miss = c && c.box && c.total ? c.total - c.done : 0;
         return /*#__PURE__*/React.createElement("div", {
           key: mc.id,
@@ -9426,7 +9573,28 @@ function App() {
             background: fresh ? "#dcfce7" : "#fee2e2",
             color: fresh ? "#166534" : "#b91c1c"
           }
-        }, c ? `前回 ${fmtDate(c.date)}　${c.by && memberOf(c.by) ? memberOf(c.by).name : "名前なし"}${c.hours ? `　${Number(c.hours).toLocaleString()}時間` : ""}` : "点検の記録なし", c && !fresh ? "（1か月以上前）" : ""), miss > 0 && /*#__PURE__*/React.createElement("span", {
+        }, c ? `前回 ${fmtDate(c.date)}　${c.by && memberOf(c.by) ? memberOf(c.by).name : "名前なし"}${c.hours ? `　${Number(c.hours).toLocaleString()}時間` : ""}` : "点検の記録なし"), /*#__PURE__*/React.createElement("span", {
+          style: {
+            display: "block",
+            marginTop: 5,
+            fontSize: 13,
+            fontWeight: 800,
+            color: md.left < 0 ? "#b91c1c" : md.left <= 7 ? "#c2410c" : "#166534"
+          }
+        }, "次回：", fmtDate(md.due), "まで", md.left < 0 ? `（${-md.left}日すぎています）` : md.left === 0 ? "（今日まで）" : `（あと${md.left}日）`), c && /*#__PURE__*/React.createElement("button", {
+          onClick: () => setCheckView(c),
+          style: {
+            marginTop: 6,
+            background: "none",
+            border: "none",
+            padding: "4px 0",
+            color: "#2563eb",
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: "pointer",
+            textDecoration: "underline"
+          }
+        }, "前回の点検を見る"), miss > 0 && /*#__PURE__*/React.createElement("span", {
           style: {
             display: "inline-block",
             marginTop: 4,
@@ -9445,9 +9613,154 @@ function App() {
           }
         }, "点検する"));
       }));
-    }), CheckLog({
-      kind: "machine"
-    }), (faultDone.length > 0 || notesDone.length > 0) && /*#__PURE__*/React.createElement(Card, {
+    }), (() => {
+      const ym = vlist.mym || todayKey.slice(0, 7);
+      const [ly, lm] = ym.split("-").map(Number);
+      const all = checks.filter(c => c.kind === "machine" && (c.date || "").slice(0, 7) === ym).sort((a, b) => (b.ts || "").localeCompare(a.ts || ""));
+      return /*#__PURE__*/React.createElement("div", {
+        style: {
+          background: "#fff",
+          borderRadius: 14,
+          boxShadow: "0 1px 3px #0001",
+          overflow: "hidden",
+          marginTop: 16,
+          marginBottom: 20
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          padding: "13px 16px 4px",
+          fontSize: 13,
+          fontWeight: 800,
+          color: "#333"
+        }
+      }, "終わった点検", /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 11,
+          color: "#999",
+          fontWeight: 600,
+          marginLeft: 8
+        }
+      }, "だれでも見られます。押すと中身が開きます")), /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "6px 10px 8px"
+        }
+      }, /*#__PURE__*/React.createElement("button", {
+        onClick: () => setVlist({
+          ...vlist,
+          mym: shiftYm(ym, -1)
+        }),
+        style: {
+          ...SB,
+          padding: "8px 12px"
+        }
+      }, "‹"), /*#__PURE__*/React.createElement("div", {
+        style: {
+          flex: 1,
+          textAlign: "center",
+          fontSize: 15,
+          fontWeight: 800,
+          color: "#111"
+        }
+      }, ly, "年", lm, "月\u3000", all.length, "件"), /*#__PURE__*/React.createElement("button", {
+        onClick: () => setVlist({
+          ...vlist,
+          mym: shiftYm(ym, 1)
+        }),
+        disabled: ym >= ymNow,
+        style: {
+          ...SB,
+          padding: "8px 12px",
+          opacity: ym >= ymNow ? .3 : 1
+        }
+      }, "›")), machines.map(mc => {
+        const ms = all.filter(c => c.targetId === mc.id);
+        return /*#__PURE__*/React.createElement("div", {
+          key: mc.id,
+          style: {
+            padding: "10px 16px",
+            borderTop: "1px solid #f3f4f6"
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 10
+          }
+        }, /*#__PURE__*/React.createElement("span", {
+          style: {
+            flex: 1,
+            minWidth: 0,
+            fontSize: 15,
+            fontWeight: 800,
+            color: "#111",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap"
+          }
+        }, mc.name), ms.length === 0 && /*#__PURE__*/React.createElement("span", {
+          style: {
+            flexShrink: 0,
+            fontSize: 12,
+            fontWeight: 700,
+            padding: "4px 10px",
+            borderRadius: 12,
+            background: "#f3f4f6",
+            color: "#999"
+          }
+        }, "この月は点検なし")), ms.map(c => {
+          const miss = c.box && c.total ? c.total - c.done : 0;
+          return /*#__PURE__*/React.createElement("div", {
+            key: c.id,
+            onClick: () => setCheckView(c),
+            style: {
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginTop: 6,
+              padding: "10px 10px",
+              borderRadius: 10,
+              background: miss ? "#fff7ed" : "#f0fdf4",
+              cursor: "pointer",
+              minHeight: 46
+            }
+          }, /*#__PURE__*/React.createElement("span", {
+            style: {
+              flex: 1,
+              fontSize: 13,
+              color: "#222"
+            }
+          }, /*#__PURE__*/React.createElement("b", null, fmtDate(c.date)), "\u3000", c.by && memberOf(c.by) ? memberOf(c.by).name : "名前なし", c.hours ? `　${Number(c.hours).toLocaleString()}時間` : ""), /*#__PURE__*/React.createElement("span", {
+            style: {
+              fontSize: 12,
+              fontWeight: 800,
+              color: miss ? "#c2410c" : "#166534"
+            }
+          }, miss ? `チェックなし ${miss}` : "✓ 全項目"), /*#__PURE__*/React.createElement("span", {
+            style: {
+              fontSize: 18,
+              color: "#ccc"
+            }
+          }, "›"));
+        }));
+      }), all.filter(c => !machines.some(m => m.id === c.targetId)).map(c => /*#__PURE__*/React.createElement("div", {
+        key: c.id,
+        onClick: () => setCheckView(c),
+        style: {
+          padding: "11px 16px",
+          borderTop: "1px solid #f3f4f6",
+          cursor: "pointer",
+          fontSize: 13,
+          color: "#444"
+        }
+      }, /*#__PURE__*/React.createElement("b", null, fmtDate(c.date)), "\u3000", c.targetName, "（今は一覧にない機械）\u3000›")), /*#__PURE__*/React.createElement("div", {
+        style: {
+          height: 6
+        }
+      }));
+    })(), (faultDone.length > 0 || notesDone.length > 0) && /*#__PURE__*/React.createElement(Card, {
       title: "終わったもの",
       color: "#777"
     }, [...faultDone, ...notesDone].sort((a, b) => (b.ts || "").localeCompare(a.ts || "")).slice(0, 12).map((t, i) => /*#__PURE__*/React.createElement(Row, {
@@ -18685,7 +18998,104 @@ function App() {
         cursor: ok ? "pointer" : "default"
       }
     }, editing ? "保存する" : fault ? `${mgrLabel}者に報告する` : "みんなに知らせる")));
-  })(), importNote && /*#__PURE__*/React.createElement("div", {
+  })(), driveDlg && /*#__PURE__*/React.createElement("div", {
+    onClick: () => setDriveDlg(null),
+    style: {
+      position: "fixed",
+      inset: 0,
+      background: "#0007",
+      zIndex: 126,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    onClick: e => e.stopPropagation(),
+    style: {
+      background: "#fff",
+      borderRadius: 18,
+      padding: "20px 18px",
+      width: "100%",
+      maxWidth: 360,
+      boxShadow: "0 12px 32px #0003"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      fontWeight: 800,
+      color: "#111",
+      marginBottom: 6
+    }
+  }, "事務所用の合言葉"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "#666",
+      lineHeight: 1.7,
+      marginBottom: 10
+    }
+  }, "集計表の「ドライブ連携の設定」に入れてあるものと同じ、事務所用の合言葉を入れてください。このスマホ・パソコンだけに覚えます（ほかの人には見えません）。"), /*#__PURE__*/React.createElement("input", {
+    type: "password",
+    autoComplete: "off",
+    value: driveDlg.key,
+    onChange: e => setDriveDlg({
+      ...driveDlg,
+      key: e.target.value
+    }),
+    placeholder: "合言葉",
+    style: {
+      width: "100%",
+      border: "1px solid #d1d5db",
+      borderRadius: 10,
+      padding: "12px",
+      fontSize: 16,
+      outline: "none",
+      minHeight: 48,
+      boxSizing: "border-box"
+    }
+  }), driveDlg.msg && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 700,
+      color: driveDlg.msg.startsWith("✕") ? "#b91c1c" : "#666",
+      marginTop: 8,
+      lineHeight: 1.6
+    }
+  }, driveDlg.msg), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10,
+      marginTop: 14
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setDriveDlg(null),
+    style: {
+      flex: 1,
+      padding: "13px 0",
+      borderRadius: 12,
+      border: "1px solid #d1d5db",
+      background: "#fff",
+      fontSize: 15,
+      fontWeight: 700,
+      color: "#555",
+      cursor: "pointer",
+      minHeight: 48
+    }
+  }, "やめる"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => saveDriveKey(driveDlg.key),
+    style: {
+      flex: 1.4,
+      padding: "13px 0",
+      borderRadius: 12,
+      border: "none",
+      background: GREEN,
+      color: "#fff",
+      fontSize: 15,
+      fontWeight: 800,
+      cursor: "pointer",
+      minHeight: 48
+    }
+  }, "保存して読み込む")))), importNote && /*#__PURE__*/React.createElement("div", {
     onClick: () => setImportNote(null),
     style: {
       position: "fixed",
@@ -18716,14 +19126,21 @@ function App() {
       color: importNote.rows ? "#166534" : "#b91c1c",
       marginBottom: 10
     }
-  }, importNote.rows ? `現場日報 ${importNote.rows}件を読み込みました` : "読み込めるデータがありませんでした"), importNote.lines.map((l, i) => /*#__PURE__*/React.createElement("div", {
+  }, importNote.drive ? importNote.rows ? `ドライブの現場日報を読み込みました` : "ドライブに読み込める日報がありませんでした" : importNote.rows ? `現場日報 ${importNote.rows}件を読み込みました` : "読み込めるデータがありませんでした"), importNote.drive && importNote.rows > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "#444",
+      lineHeight: 1.8,
+      marginBottom: 8
+    }
+  }, "ドライブの日報 ", importNote.recs, "件（のべ ", importNote.rows, "人分）を確認し、新しく入った・変わったのは ", importNote.changed, "日分です。"), !importNote.drive && importNote.lines.map((l, i) => /*#__PURE__*/React.createElement("div", {
     key: i,
     style: {
       fontSize: 13,
       color: "#444",
       lineHeight: 1.9
     }
-  }, l)), importNote.more > 0 && /*#__PURE__*/React.createElement("div", {
+  }, l)), !importNote.drive && importNote.more > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12,
       color: "#999",
