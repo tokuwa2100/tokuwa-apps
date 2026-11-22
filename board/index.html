@@ -45,7 +45,7 @@
   </form>
 </div>
 <div id="root"></div>
-<script>window.__tbVer = "4.9.4";</script>
+<script>window.__tbVer = "4.9.5";</script>
 <script>
 /* 新しい版が出ていたら自動で読み直す（ホーム画面のアイコンが古い画面を覚えたままにならないように） */
 (function(){
@@ -161,7 +161,7 @@ const {
    定数
 ══════════════════════════════════════════════════════════ */
 const APP_NAME = "TOKUWAボード";
-const APP_VERSION = "4.9.4";
+const APP_VERSION = "4.9.5";
 const APP_UPDATED = "2026-11-22";
 /* 外部アプリ（日報）の初期リンク。設定から変更できる */
 const EXT_DEFAULT = {
@@ -5097,6 +5097,11 @@ function App() {
     rest: r.rest,
     work: r.work
   }));
+  useEffect(() => {
+    try {
+      localStorage.removeItem("tb-nippo-key");
+    } catch (e) {}
+  }, []); // 前の版で端末に覚えた合言葉は消す（もう使わない）
   const nippoFormRef = useRef(null);
   nippoFormRef.current = nippoForm;
   const siteMapRef = useRef({});
@@ -5175,15 +5180,8 @@ function App() {
           return;
         }
         const rows = siteRowsOf(j.records, m);
-        if (siteSig(rows) !== siteSig(local)) {
-          if (rows.length || local.length) persistSite({
-            by,
-            date,
-            siteRows: rows,
-            ts: new Date().toISOString()
-          });
-          filled = apply(rows) || filled;
-        }
+        /* 読んだ現場日報は保存しない。この画面に出して、下書きに入れるだけ */
+        if (siteSig(rows) !== siteSig(local)) filled = apply(rows) || filled;
         setSiteFetch({
           key: nfKey,
           state: rows.length ? "ok" : "none",
@@ -7665,63 +7663,18 @@ function App() {
         margin: "-6px 4px 12px",
         lineHeight: 1.7
       }
-    }, "日付は書く画面で変えられます。書き忘れた日の分も、ここから書けます。"), isEditor && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
-      onClick: () => pullNippoDrive(),
-      disabled: driveBusy,
+    }, "日付は書く画面で変えられます。書き忘れた日の分も、ここから書けます。"), isEditor && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
       style: {
-        width: "100%",
-        marginBottom: 6,
-        padding: "13px 0",
-        borderRadius: 14,
-        background: driveBusy ? "#e5e7eb" : GREEN,
-        color: driveBusy ? "#888" : "#fff",
-        border: "none",
-        fontSize: 15,
-        fontWeight: 800,
-        cursor: driveBusy ? "default" : "pointer",
-        minHeight: 50
-      }
-    }, driveBusy ? "ドライブから読み込んでいます…" : "📥 現場日報をドライブから読み込む"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 14,
-        margin: "0 4px 12px",
-        fontSize: 12
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        flex: 1,
-        color: "#888",
-        lineHeight: 1.6
-      }
-    }, "コア日報・常用日報で送った日報を取り込み、個人日報と見比べられます。"), /*#__PURE__*/React.createElement("button", {
-      onClick: () => nippoFileRef.current.click(),
-      style: {
-        background: "none",
-        border: "none",
-        padding: 0,
+        fontSize: 12,
         color: "#666",
-        fontWeight: 700,
-        cursor: "pointer",
-        textDecoration: "underline",
-        flexShrink: 0
+        background: "#f0f9ff",
+        border: "1px solid #bae6fd",
+        borderRadius: 12,
+        padding: "10px 12px",
+        marginBottom: 12,
+        lineHeight: 1.7
       }
-    }, "ファイルから"), /*#__PURE__*/React.createElement("button", {
-      onClick: () => setDriveDlg({
-        key: "",
-        msg: ""
-      }),
-      style: {
-        background: "none",
-        border: "none",
-        padding: 0,
-        color: "#666",
-        fontWeight: 700,
-        cursor: "pointer",
-        textDecoration: "underline",
-        flexShrink: 0
-      }
-    }, "合言葉")), window.__tbHost && /*#__PURE__*/React.createElement("button", {
+    }, "📋 現場日報（コア日報・常用日報）は、日報を開いたときに、その日・その人の分だけを読んで表示します。ボードには保存しません。"), window.__tbHost && /*#__PURE__*/React.createElement("button", {
       onClick: () => saveKintai(nYm),
       disabled: kintaiBusy,
       style: {
