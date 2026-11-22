@@ -238,6 +238,11 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   @media (max-width:820px){
     .pillrow.bigpill .pill{ flex:1 1 calc(50% - 10px); }
   }
+  /* 上・横・下は3つ等幅 */
+  .pillrow.dirrow .pill{ flex:1 1 0; min-width:0; }
+  @media (max-width:820px){ .pillrow.dirrow .pill{ flex:1 1 0; } }
+  /* 呼び・本数の2列 */
+  .coreGrid2x{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:start}
   .coreRow input,.coreRow select{max-width:100%}
   .tphotos{display:flex;gap:10px;margin-top:10px}
   .tph{flex:1;border:1px dashed #b9c3cf;border-radius:8px;padding:6px;text-align:center;font-size:12px;color:#555;background:#fafbfc}
@@ -555,7 +560,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "anchor";
-const APP_VERSION   = "1.1.0";
+const APP_VERSION   = "1.2.0";
 const APP_BUILD     = "2026-11-22";
 
 (function(){
@@ -898,28 +903,28 @@ function addCoreRow(btn){
       <span class="rowNo"></span>
       <button class="btn btn-gray btn-sm" type="button" onclick="removeCoreRow(this)">明細削除</button>
     </div>
-    <div class="coreGrid">
-      <div>
-        <div class="smallLabel">部位（施工方向）</div>
-        <div class="pillrow bigpill" style="margin-top:0">
-          ${DIRS.map(d=>`<div class="pill c-dir" data-value="${d}" onclick="toggleOneOfTwo(this)">${d}</div>`).join("")}
-        </div>
-      </div>
+    <div>
+      <div class="smallLabel">アンカー種別</div>
+      <select class="c-type" onchange="onTypeChange(this)">
+        <option value="">（種別を選択）</option>
+        ${ANCHOR_TYPES.map(t=>`<option value="${t.v}">${t.label}</option>`).join("")}
+      </select>
+      <select class="c-series hidden" style="margin-top:6px" onchange="this.classList.remove('err')">
+        <option value="">（種類を選択）</option>
+        ${METAL_SERIES.map(x=>`<option>${x}</option>`).join("")}
+      </select>
+      <input class="c-type-other hidden" type="text" style="margin-top:6px"
+             placeholder="種別を入力" oninput="this.classList.remove('err')" />
+    </div>
 
-      <div>
-        <div class="smallLabel">アンカー種別</div>
-        <select class="c-type" onchange="onTypeChange(this)">
-          <option value="">（種別を選択）</option>
-          ${ANCHOR_TYPES.map(t=>`<option value="${t.v}">${t.label}</option>`).join("")}
-        </select>
-        <select class="c-series hidden" style="margin-top:6px" onchange="this.classList.remove('err')">
-          <option value="">（種類を選択）</option>
-          ${METAL_SERIES.map(x=>`<option>${x}</option>`).join("")}
-        </select>
-        <input class="c-type-other hidden" type="text" style="margin-top:6px"
-               placeholder="種別を入力" oninput="this.classList.remove('err')" />
+    <div style="margin-top:10px;">
+      <div class="smallLabel">部位（施工方向）</div>
+      <div class="pillrow bigpill dirrow" style="margin-top:0">
+        ${DIRS.map(d=>`<div class="pill c-dir" data-value="${d}" onclick="toggleOneOfTwo(this)">${d}</div>`).join("")}
       </div>
+    </div>
 
+    <div class="coreGrid2x" style="margin-top:10px;">
       <div>
         <div class="smallLabel">呼び</div>
         <select class="c-size" onchange="onSizeChange(this)">
