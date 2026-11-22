@@ -573,7 +573,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "anchor";
-const APP_VERSION   = "1.5.3";
+const APP_VERSION   = "1.5.4";
 const APP_BUILD     = "2026-11-22";
 
 (function(){
@@ -1011,9 +1011,9 @@ function addCoreRow(btn){
                placeholder="自動／変更可" oninput="markTouched(this);calcLen(this)" />
       </div>
       <div class="cell-proj">
-        <div class="smallLabel">突出長 ㎜（任意）</div>
+        <div class="smallLabel">突出長 ㎜</div>
         <input class="c-proj" type="number" min="0" step="1" inputmode="numeric"
-               placeholder="例：60" oninput="calcLen(this)" />
+               placeholder="例：60（出ていなければ 0）" oninput="calcLen(this)" />
       </div>
       <div>
         <div class="smallLabel lbl-total">全長（埋込＋突出）㎜</div>
@@ -1285,11 +1285,10 @@ function supplyLabel(a){
   if(a.supBolt) l.push("ボルト・鉄筋");
   return l.length ? "支給：" + l.join("・") : "材工共";
 }
+/* 確認書に出す規格の文字。埋込長はお客様向けには出さない（データには残っている） */
 function specText(a){
   const parts = [];
   if(a.dia != null) parts.push("φ" + a.dia);
-  if(a.emb != null) parts.push("埋込 " + a.emb + "㎜");
-  if(a.proj != null) parts.push("突出 " + a.proj + "㎜");
   if(a.len != null) parts.push("全長 " + a.len + "㎜");
   return parts.length ? parts.join("　") : "—";
 }
@@ -1668,6 +1667,11 @@ function goConfirm(){
       if(!(parseFloat(diaEl.value) > 0)) mark(diaEl);
       const embEl = r.querySelector(".c-emb");
       if(!(parseInt(embEl.value, 10) > 0)) mark(embEl);
+
+      // 突出長は未入力を赤で知らせる（0は可）
+      const projCell = r.querySelector(".cell-proj");
+      const projEl = r.querySelector(".c-proj");
+      if(!projCell.classList.contains("hidden") && projEl.value === "") mark(projEl);
 
       // 差筋アンカーは全長（規格）が必要
       const totalEl = r.querySelector(".c-total");
