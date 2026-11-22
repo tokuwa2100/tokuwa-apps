@@ -45,7 +45,7 @@
   </form>
 </div>
 <div id="root"></div>
-<script>window.__tbVer = "4.10.4";</script>
+<script>window.__tbVer = "4.10.5";</script>
 <script>
 /* 新しい版が出ていたら自動で読み直す（ホーム画面のアイコンが古い画面を覚えたままにならないように） */
 (function(){
@@ -161,7 +161,7 @@ const {
    定数
 ══════════════════════════════════════════════════════════ */
 const APP_NAME = "TOKUWAボード";
-const APP_VERSION = "4.10.4";
+const APP_VERSION = "4.10.5";
 const APP_UPDATED = "2026-11-22";
 /* 外部アプリ（日報）の初期リンク。設定から変更できる */
 const EXT_DEFAULT = {
@@ -5244,6 +5244,22 @@ function App() {
     };
   }, [nfKey, siteFetchTick]);
 
+  /* 時間が重なっている行の番号（id）を集める */
+  const CO_NAME = "会社での作業";
+  const nippoOverlap = rows => {
+    const xs = (rows || []).map(r => ({
+      id: r.id,
+      a: toMin(r.from),
+      b: toMin(r.to),
+      in: !!((r.siteName || "").trim() || (r.client || "").trim() || (r.work || "").trim())
+    })).filter(x => x.in && x.a != null && x.b != null && x.b > x.a);
+    const bad = new Set();
+    for (let i = 0; i < xs.length; i++) for (let j = i + 1; j < xs.length; j++) if (xs[i].a < xs[j].b && xs[j].a < xs[i].b) {
+      bad.add(xs[i].id);
+      bad.add(xs[j].id);
+    }
+    return bad;
+  };
   /* 「1日の流れ」の図：横が時間。現場ごとに色のついた帯で、何時から何時までかが一目で分かる */
   const flowChart = (rows, onTap) => {
     const COLS = ["#0f766e", "#1d4ed8", "#b45309", "#7c3aed", "#be185d"];
@@ -5254,6 +5270,7 @@ function App() {
       b: toMin(r.to)
     })).filter(x => x.a != null && x.b != null && x.b > x.a && ((x.r.siteName || "").trim() || (x.r.client || "").trim() || (x.r.work || "").trim())).sort((x, y) => x.a - y.a || x.i - y.i);
     if (!xs.length) return null;
+    const bad = nippoOverlap(rows);
     const h0 = Math.min(7, Math.floor(Math.min(...xs.map(x => x.a)) / 60)),
       h1 = Math.max(18, Math.ceil(Math.max(...xs.map(x => x.b)) / 60));
     const span = (h1 - h0) * 60,
@@ -5301,9 +5318,10 @@ function App() {
       const c = COLS[k % COLS.length],
         l = pc(x.a),
         w = pc(x.b) - pc(x.a);
-      const label = [x.r.client, x.r.siteName].filter(Boolean).join("　") || "（場所なし）";
-      const txt = `${x.r.from.replace(/^0/, "")}〜${x.r.to.replace(/^0/, "")}　${label}`;
-      const inside = w >= 42,
+      const isBad = bad.has(x.r.id);
+      const full = (x.r.siteName || "").trim() === CO_NAME ? "会社" : (x.r.siteName || "").trim() || (x.r.client || "").trim() || "作業";
+      const txt = (isBad ? "⚠ " : "") + (full.length > 9 ? full.slice(0, 8) + "…" : full); // 図の中の文字は短くする
+      const inside = w >= 24,
         rightSide = l + w <= 55;
       return /*#__PURE__*/React.createElement("div", {
         key: x.r.id || k,
@@ -5322,7 +5340,7 @@ function App() {
           top: 2,
           bottom: 2,
           minWidth: 4,
-          background: c,
+          background: isBad ? "#dc2626" : c,
           borderRadius: 6,
           overflow: "hidden",
           display: "flex",
@@ -5347,7 +5365,7 @@ function App() {
           alignItems: "center",
           fontSize: 12,
           fontWeight: 800,
-          color: c,
+          color: isBad ? "#dc2626" : c,
           whiteSpace: "nowrap",
           overflow: "hidden",
           textOverflow: "ellipsis",
@@ -16365,7 +16383,8 @@ function App() {
       } : r)
     });
     const filled = f.rows.some(r => r.siteName.trim() || r.client.trim() || r.work.trim());
-    const ok = !!f.by && filled;
+    const badSet = nippoOverlap(f.rows);
+    const ok = !!f.by && filled && badSet.size === 0;
     const canPickWho = isEditor;
     const INP = {
       width: "100%",
@@ -16684,7 +16703,17 @@ function App() {
         color: "#888",
         marginTop: 2
       }
-    }, "時間を入れると、上の図と下の並びがすぐに変わります。帯や行を押すと直せます。")), flowChart(f.rows, r => setNippoOpenRow(r.id)), (() => {
+    }, "時間を入れると、上の図と下の並びがすぐに変わります。帯や行を押すと直せます。")), badSet.size > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: "10px 14px",
+        background: "#fef2f2",
+        borderBottom: "1px solid #fecaca",
+        color: "#b91c1c",
+        fontSize: 13,
+        fontWeight: 800,
+        lineHeight: 1.6
+      }
+    }, "⚠ 時間が重なっています。赤い行を押して、時間を直すか、いらない行を消してください。"), flowChart(f.rows, r => setNippoOpenRow(r.id)), (() => {
       const srt = f.rows.map((r, i) => ({
         r,
         i
@@ -16775,12 +16804,13 @@ function App() {
         i,
         k
       } = it;
-      const QUICK = ["会社での作業", "移動", "打ち合わせ"];
       const COLS = ["#0f766e", "#1d4ed8", "#b45309", "#7c3aed", "#be185d"],
-        col = COLS[k % COLS.length];
+        isBad = badSet.has(r.id),
+        col = isBad ? "#dc2626" : COLS[k % COLS.length];
       const empty = !(r.siteName.trim() || r.client.trim() || r.work.trim());
       const open = nippoOpenRow === r.id || empty && f.rows.length === 1;
-      const label = [r.client, r.siteName].filter(Boolean).join("　");
+      const isCo = !r.eventId && !r.client && r.siteName === CO_NAME;
+      const label = isCo ? CO_NAME : [r.client, r.siteName].filter(Boolean).join("　");
       const chip = on => ({
         padding: "9px 13px",
         borderRadius: 12,
@@ -16794,12 +16824,30 @@ function App() {
         background: on ? "#f0fdf4" : "#fff",
         color: "#333"
       });
+      const kind = on => ({
+        flex: 1,
+        padding: "11px 0",
+        borderRadius: 12,
+        cursor: "pointer",
+        fontSize: 15,
+        fontWeight: 800,
+        minHeight: 48,
+        border: `2px solid ${on ? GREEN : "#e5e7eb"}`,
+        background: on ? GREEN : "#fff",
+        color: on ? "#fff" : "#555"
+      });
+      const LBL = {
+        fontSize: 12,
+        color: "#777",
+        fontWeight: 700,
+        marginBottom: 5
+      };
       return /*#__PURE__*/React.createElement("div", {
         key: r.id,
         style: {
           borderTop: oi ? "1px solid #e5e7eb" : "none",
           borderLeft: `6px solid ${col}`,
-          background: open ? "#fafffb" : "#fff"
+          background: isBad ? "#fef2f2" : open ? "#fafffb" : "#fff"
         }
       }, /*#__PURE__*/React.createElement("div", {
         onClick: () => setNippoOpenRow(open ? null : r.id),
@@ -16817,10 +16865,15 @@ function App() {
           flexShrink: 0,
           fontSize: 14,
           fontWeight: 800,
-          color: "#333",
+          color: isBad ? "#dc2626" : "#333",
           whiteSpace: "nowrap"
         }
-      }, r.from, "〜", r.to), /*#__PURE__*/React.createElement("span", {
+      }, r.from, "〜", r.to, isBad && /*#__PURE__*/React.createElement("span", {
+        style: {
+          display: "block",
+          fontSize: 11
+        }
+      }, "⚠ 重なり")), /*#__PURE__*/React.createElement("span", {
         style: {
           flex: 1,
           minWidth: 0
@@ -16831,26 +16884,29 @@ function App() {
           fontSize: 15,
           fontWeight: 800,
           color: empty ? "#bbb" : col,
-          wordBreak: "break-word"
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap"
         }
-      }, label || (empty ? "まだ入っていません" : "（場所なし）")), !open && r.work && /*#__PURE__*/React.createElement("span", {
+      }, label || (empty ? "まだ入っていません" : "（現場名なし）")), !open && r.work && /*#__PURE__*/React.createElement("span", {
         style: {
           display: "block",
           fontSize: 12,
           color: "#555",
-          whiteSpace: "pre-wrap",
-          lineHeight: 1.6,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
           marginTop: 2
         }
-      }, r.work)), /*#__PURE__*/React.createElement("span", {
+      }, r.work.replace(/\n/g, "／"))), /*#__PURE__*/React.createElement("span", {
         style: {
           flexShrink: 0,
           fontSize: 13,
           fontWeight: 800,
           padding: "7px 11px",
           borderRadius: 10,
-          border: `1.5px solid ${open ? "#d1d5db" : GREEN}`,
-          color: open ? "#666" : GREEN,
+          border: `1.5px solid ${open ? "#d1d5db" : isBad ? "#dc2626" : GREEN}`,
+          color: open ? "#666" : isBad ? "#dc2626" : GREEN,
           background: "#fff"
         }
       }, open ? "とじる" : "直す")), open && /*#__PURE__*/React.createElement("div", {
@@ -16859,11 +16915,27 @@ function App() {
         }
       }, /*#__PURE__*/React.createElement("div", {
         style: {
-          fontSize: 12,
-          color: "#999",
-          marginBottom: 6
+          display: "flex",
+          gap: 8,
+          marginBottom: 12
         }
-      }, "何時から何時まで"), /*#__PURE__*/React.createElement("div", {
+      }, /*#__PURE__*/React.createElement("button", {
+        onClick: () => isCo && setRow(i, {
+          siteName: "",
+          client: "",
+          eventId: null
+        }),
+        style: kind(!isCo)
+      }, "現場"), /*#__PURE__*/React.createElement("button", {
+        onClick: () => !isCo && setRow(i, {
+          siteName: CO_NAME,
+          client: "",
+          eventId: null
+        }),
+        style: kind(isCo)
+      }, "会社での作業")), /*#__PURE__*/React.createElement("div", {
+        style: LBL
+      }, "作業時間"), /*#__PURE__*/React.createElement("div", {
         style: {
           display: "flex",
           alignItems: "center",
@@ -16887,13 +16959,16 @@ function App() {
           to: v,
           rest: autoRest(r.from, v)
         })
-      })), /*#__PURE__*/React.createElement("div", {
+      })), isBad && /*#__PURE__*/React.createElement("div", {
         style: {
-          fontSize: 12,
-          color: "#999",
-          marginBottom: 6
+          fontSize: 13,
+          fontWeight: 800,
+          color: "#dc2626",
+          margin: "-4px 0 12px"
         }
-      }, "どこで（押して選ぶか、下に書く）"), /*#__PURE__*/React.createElement("div", {
+      }, "⚠ ほかの行と時間が重なっています"), !isCo && /*#__PURE__*/React.createElement(React.Fragment, null, sites.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+        style: LBL
+      }, "この日の予定から選ぶ"), /*#__PURE__*/React.createElement("div", {
         style: {
           display: "flex",
           flexWrap: "wrap",
@@ -16915,50 +16990,63 @@ function App() {
           color: "#999",
           fontWeight: 600
         }
-      }, e.client), e.siteName || "現場名なし")), QUICK.map(q => /*#__PURE__*/React.createElement("button", {
-        key: q,
-        onClick: () => setRow(i, {
-          eventId: null,
-          client: "",
-          siteName: q
-        }),
-        style: chip(!r.eventId && !r.client && r.siteName === q)
-      }, q))), /*#__PURE__*/React.createElement("input", {
-        value: r.siteName,
-        onChange: e => setRow(i, {
-          siteName: e.target.value,
-          eventId: null
-        }),
-        placeholder: "現場名・行き先",
-        style: {
-          ...INP,
-          marginBottom: 8
-        }
-      }), /*#__PURE__*/React.createElement("input", {
+      }, e.client), e.siteName || "現場名なし")))), /*#__PURE__*/React.createElement("div", {
+        style: LBL
+      }, "業者"), /*#__PURE__*/React.createElement("input", {
         value: r.client,
         onChange: e => setRow(i, {
           client: e.target.value,
           eventId: null
         }),
-        placeholder: "お客様（わかれば）",
+        placeholder: "例）北陸工業",
         style: {
           ...INP,
-          marginBottom: 8
+          marginBottom: 10
         }
-      }), /*#__PURE__*/React.createElement("textarea", {
+      }), /*#__PURE__*/React.createElement("div", {
+        style: LBL
+      }, "現場名"), /*#__PURE__*/React.createElement("input", {
+        value: r.siteName,
+        onChange: e => setRow(i, {
+          siteName: e.target.value,
+          eventId: null
+        }),
+        placeholder: "例）リージョンプラザ上越",
+        style: {
+          ...INP,
+          marginBottom: 10
+        }
+      }), /*#__PURE__*/React.createElement("div", {
+        style: LBL
+      }, "作業内容（ひとことで）"), /*#__PURE__*/React.createElement("textarea", {
         value: r.work,
         onChange: e => setRow(i, {
           work: e.target.value
         }),
-        placeholder: "やったこと（なくてもOK）\u3000例）スラブ抜き Φ100×12本／倉庫の片づけ",
-        rows: 2,
+        placeholder: "例）スラブ抜き Φ100×12本",
+        rows: 1,
         style: {
           ...INP,
-          minHeight: 52,
+          minHeight: 48,
+          resize: "vertical",
+          lineHeight: 1.6
+        }
+      })), isCo && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+        style: LBL
+      }, "作業内容（少しくわしく）"), /*#__PURE__*/React.createElement("textarea", {
+        value: r.work,
+        onChange: e => setRow(i, {
+          work: e.target.value
+        }),
+        placeholder: "例）倉庫の片づけ、コアビットの整理と在庫の確認、2tダンプの洗車",
+        rows: 3,
+        style: {
+          ...INP,
+          minHeight: 90,
           resize: "vertical",
           lineHeight: 1.7
         }
-      }), /*#__PURE__*/React.createElement("div", {
+      })), /*#__PURE__*/React.createElement("div", {
         style: {
           display: "flex",
           gap: 8,
@@ -17028,7 +17116,7 @@ function App() {
         cursor: "pointer",
         minHeight: 48
       }
-    }, "＋ 行を足す（会社での作業・ほかの行き先など）"), /*#__PURE__*/React.createElement("div", {
+    }, "＋ 行を足す（会社での作業・ほかの現場）"), /*#__PURE__*/React.createElement("div", {
       style: BOX
     }, /*#__PURE__*/React.createElement("div", {
       style: {
@@ -17042,7 +17130,7 @@ function App() {
         ...f,
         memo: e.target.value
       }),
-      placeholder: "例）帰りに発電機へ給油しました",
+      placeholder: "例）10時から11時は、私用で市役所へ行きました",
       style: {
         ...INP,
         minHeight: 52,
@@ -17071,7 +17159,11 @@ function App() {
         textAlign: "center",
         marginTop: 8
       }
-    }, !f.by ? "作業員を選んでください" : "どこで作業したかを入れてください"), saved && saved.rows.length > 0 && saved.status !== "checked" && /*#__PURE__*/React.createElement("div", {
+    }, !f.by ? "作業員を選んでください" : !filled ? "どこで作業したかを入れてください" : /*#__PURE__*/React.createElement("b", {
+      style: {
+        color: "#dc2626"
+      }
+    }, "時間が重なっている行（赤）を直すと、提出できます")), saved && saved.rows.length > 0 && saved.status !== "checked" && /*#__PURE__*/React.createElement("div", {
       style: {
         ...BOX,
         marginTop: 16
