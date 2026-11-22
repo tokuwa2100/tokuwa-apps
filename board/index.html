@@ -45,7 +45,7 @@
   </form>
 </div>
 <div id="root"></div>
-<script>window.__tbVer = "4.8.8";</script>
+<script>window.__tbVer = "4.8.9";</script>
 <script>
 /* 新しい版が出ていたら自動で読み直す（ホーム画面のアイコンが古い画面を覚えたままにならないように） */
 (function(){
@@ -161,7 +161,7 @@ const {
    定数
 ══════════════════════════════════════════════════════════ */
 const APP_NAME = "TOKUWAボード";
-const APP_VERSION = "4.8.8";
+const APP_VERSION = "4.8.9";
 const APP_UPDATED = "2026-11-22";
 /* 外部アプリ（日報）の初期リンク。設定から変更できる */
 const EXT_DEFAULT = {
@@ -4098,6 +4098,11 @@ function App() {
   const [selDay, setSelDay] = useState(null);
   const [dayOpen, setDayOpen] = useState(false);
   const [detailId, setDetailId] = useState(null);
+  const [detailEdit, setDetailEdit] = useState(false); // 詳細は見るだけ。「編集」を押した人（権限あり）だけ直せる
+  useEffect(() => {
+    setDetailEdit(false);
+  }, [detailId]);
+  const dEdit = isEditor && detailEdit;
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [ask, setAsk] = useState(null); // 確認ダイアログ { msg, yes, onYes }
@@ -9766,16 +9771,51 @@ function App() {
       whiteSpace: "nowrap",
       textOverflow: "ellipsis"
     }
-  }, detailEv.siteName || detailEv.client || "無題")), /*#__PURE__*/React.createElement("button", {
-    onClick: openEditFromDetail,
+  }, detailEv.siteName || detailEv.client || "無題")), dEdit ? /*#__PURE__*/React.createElement("button", {
+    onClick: () => setDetailEdit(false),
+    style: {
+      ...PILL,
+      background: "#111"
+    }
+  }, "完了") : /*#__PURE__*/React.createElement("button", {
+    onClick: () => isEditor ? setDetailEdit(true) : needEditor(() => setDetailEdit(true)),
     style: PILL
-  }, "編集")), /*#__PURE__*/React.createElement("div", {
+  }, "🔑 編集")), /*#__PURE__*/React.createElement("div", {
     style: {
       flex: 1,
       overflow: "auto",
       padding: "12px 0 40px"
     }
+  }, dEdit && /*#__PURE__*/React.createElement("div", {
+    style: {
+      margin: "0 12px 10px",
+      background: "#fff7ed",
+      border: "1.5px solid #fdba74",
+      borderRadius: 12,
+      padding: "12px 14px"
+    }
   }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 800,
+      color: "#c2410c",
+      marginBottom: 8
+    }
+  }, "✏ 編集中（", editorMember ? editorMember.name : "", "）\u3000終わったら右上の「完了」"), /*#__PURE__*/React.createElement("button", {
+    onClick: openEditFromDetail,
+    style: {
+      width: "100%",
+      padding: "13px 0",
+      borderRadius: 12,
+      background: GREEN,
+      color: "#fff",
+      border: "none",
+      fontSize: 15,
+      fontWeight: 800,
+      cursor: "pointer",
+      minHeight: 48
+    }
+  }, "日付・現場名・作業内容などを直す")), /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#fff",
       margin: "0 12px 10px",
@@ -10052,7 +10092,7 @@ function App() {
       display: "block",
       cursor: "zoom-in"
     }
-  }), isEditor && /*#__PURE__*/React.createElement("button", {
+  }), dEdit && /*#__PURE__*/React.createElement("button", {
     onClick: () => updateDetail({
       siteMaps: detailEv.siteMaps.filter((_, j) => j !== i)
     }),
@@ -10070,7 +10110,7 @@ function App() {
       cursor: "pointer",
       padding: 0
     }
-  }, "×")))), isEditor ? /*#__PURE__*/React.createElement("button", {
+  }, "×")))), dEdit ? /*#__PURE__*/React.createElement("button", {
     onClick: () => mapRef.current.click(),
     style: {
       display: "flex",
@@ -10107,7 +10147,7 @@ function App() {
   }, /*#__PURE__*/React.createElement("input", {
     type: "checkbox",
     checked: !!c.d,
-    disabled: !isEditor,
+    disabled: !dEdit,
     onChange: () => updateDetail({
       checklist: detailEv.checklist.map((x, j) => j === i ? {
         ...x,
@@ -10126,7 +10166,7 @@ function App() {
       color: c.d ? "#aaa" : "#222",
       textDecoration: c.d ? "line-through" : "none"
     }
-  }, c.t), /*#__PURE__*/React.createElement("button", {
+  }, c.t), dEdit && /*#__PURE__*/React.createElement("button", {
     onClick: () => updateDetail({
       checklist: detailEv.checklist.filter((_, j) => j !== i)
     }),
@@ -10137,7 +10177,7 @@ function App() {
       cursor: "pointer",
       fontSize: 16
     }
-  }, "✕"))), isEditor ? /*#__PURE__*/React.createElement(ChecklistAdder, {
+  }, "✕"))), dEdit ? /*#__PURE__*/React.createElement(ChecklistAdder, {
     onAdd: t => updateDetail({
       checklist: [...(detailEv.checklist || []), {
         t,
@@ -10172,7 +10212,7 @@ function App() {
       textOverflow: "ellipsis",
       whiteSpace: "nowrap"
     }
-  }, u), /*#__PURE__*/React.createElement("button", {
+  }, u), dEdit && /*#__PURE__*/React.createElement("button", {
     onClick: () => updateDetail({
       urls: detailEv.urls.filter((_, j) => j !== i)
     }),
@@ -10183,7 +10223,7 @@ function App() {
       cursor: "pointer",
       fontSize: 16
     }
-  }, "✕"))), isEditor ? /*#__PURE__*/React.createElement(ChecklistAdder, {
+  }, "✕"))), dEdit ? /*#__PURE__*/React.createElement(ChecklistAdder, {
     placeholder: "https://…",
     onAdd: u => updateDetail({
       urls: [...(detailEv.urls || []), u]
@@ -10219,7 +10259,7 @@ function App() {
       height: "100%",
       objectFit: "cover"
     }
-  }), /*#__PURE__*/React.createElement("button", {
+  }), dEdit && /*#__PURE__*/React.createElement("button", {
     onClick: () => updateDetail({
       photos: detailEv.photos.filter((_, j) => j !== i)
     }),
@@ -10237,7 +10277,7 @@ function App() {
       cursor: "pointer",
       padding: 0
     }
-  }, "×")))), isEditor && /*#__PURE__*/React.createElement("button", {
+  }, "×")))), dEdit && /*#__PURE__*/React.createElement("button", {
     onClick: () => photoRef.current.click(),
     style: {
       display: "flex",
@@ -10292,7 +10332,7 @@ function App() {
       fontSize: 11,
       color: "#aaa"
     }
-  }, Math.round((f.size || 0) / 1024), "KB"), /*#__PURE__*/React.createElement("button", {
+  }, Math.round((f.size || 0) / 1024), "KB"), dEdit && /*#__PURE__*/React.createElement("button", {
     onClick: () => updateDetail({
       files: detailEv.files.filter((_, j) => j !== i)
     }),
@@ -10303,7 +10343,7 @@ function App() {
       cursor: "pointer",
       fontSize: 16
     }
-  }, "✕")))), isEditor && /*#__PURE__*/React.createElement("button", {
+  }, "✕")))), dEdit && /*#__PURE__*/React.createElement("button", {
     onClick: () => fileRef.current.click(),
     style: {
       marginTop: 10,
@@ -10320,13 +10360,13 @@ function App() {
       cursor: "pointer",
       minHeight: 48
     }
-  }, "＋ ファイルを添付（PDF・図面など）"), isEditor && /*#__PURE__*/React.createElement("div", {
+  }, "＋ ファイルを添付（PDF・図面など）"), dEdit && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12,
       color: "#bbb",
       marginTop: 8
     }
-  }, "画像をコピーして Ctrl+V / Cmd+V でも貼り付けできます"), !isEditor && (detailEv.photos || []).length === 0 && (detailEv.files || []).length === 0 && /*#__PURE__*/React.createElement("span", {
+  }, "画像をコピーして Ctrl+V / Cmd+V でも貼り付けできます"), !dEdit && (detailEv.photos || []).length === 0 && (detailEv.files || []).length === 0 && /*#__PURE__*/React.createElement("span", {
     style: {
       color: "#bbb",
       fontSize: 14
@@ -10334,7 +10374,7 @@ function App() {
   }, "なし")), /*#__PURE__*/React.createElement(Section, {
     icon: "💬",
     label: "備考コメント"
-  }, !isEditor ? detailEv.comment ? /*#__PURE__*/React.createElement("div", {
+  }, !dEdit ? detailEv.comment ? /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 15,
       color: "#333",
@@ -10386,16 +10426,12 @@ function App() {
       fontSize: 13,
       color: "#333"
     }
-  }, NOTIFY_OPTS.find(o => o.v === (detailEv.notify || "none"))?.label)), /*#__PURE__*/React.createElement("div", {
+  }, NOTIFY_OPTS.find(o => o.v === (detailEv.notify || "none"))?.label)), dEdit && /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "0 12px"
     }
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => {
-      if (!isEditor) {
-        setEditorPickOpen(true);
-        return;
-      }
       setConfirmDeleteId(detailEv.id);
     },
     style: {
@@ -11712,6 +11748,36 @@ function App() {
   })()), /*#__PURE__*/React.createElement(Section, {
     icon: "👷",
     label: "作業員"
+  }, !isEditor && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "#92400e",
+      background: "#fffbeb",
+      border: "1px solid #fcd34d",
+      borderRadius: 10,
+      padding: "10px 12px",
+      marginBottom: 10,
+      lineHeight: 1.7
+    }
+  }, "作業員の追加・変更は、編集できる人（", editorList.map(m => m.name).join("・"), "）だけができます。", /*#__PURE__*/React.createElement("button", {
+    onClick: () => setEditorPickOpen(true),
+    style: {
+      display: "block",
+      marginTop: 6,
+      background: "none",
+      border: "none",
+      padding: 0,
+      color: GREEN,
+      fontWeight: 800,
+      fontSize: 13,
+      cursor: "pointer",
+      textDecoration: "underline"
+    }
+  }, "🔑 編集できる人として入る")), /*#__PURE__*/React.createElement("div", {
+    style: isEditor ? undefined : {
+      pointerEvents: "none",
+      opacity: .55
+    }
   }, members.map((m, i) => /*#__PURE__*/React.createElement("div", {
     key: m.id,
     style: {
@@ -11834,7 +11900,7 @@ function App() {
       fontWeight: 700,
       cursor: "pointer"
     }
-  }, "＋ 作業員を追加")), /*#__PURE__*/React.createElement(Section, {
+  }, "＋ 作業員を追加"))), /*#__PURE__*/React.createElement(Section, {
     icon: "🚚",
     label: "車両（配車で使います）"
   }, vehicles.map((v, i) => /*#__PURE__*/React.createElement("div", {
@@ -12628,7 +12694,7 @@ function App() {
       color: authPins[m.id] ? GREEN : "#bbb",
       fontWeight: 700
     }
-  }, authPins[m.id] ? "設定済み" : "未設定"), (editorId === m.id || viewerIsAdmin || !authPins[m.id]) && /*#__PURE__*/React.createElement("button", {
+  }, authPins[m.id] ? "設定済み" : "未設定"), (editorId === m.id || viewerIsAdmin && !window.__tbHost || !authPins[m.id]) && /*#__PURE__*/React.createElement("button", {
     onClick: () => setPinDlg({
       id: m.id,
       mode: "set",
