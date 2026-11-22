@@ -314,6 +314,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
           <div>
             <label>正式工事名（報告書用）</label>
             <input id="project" type="text" placeholder="例：令和8年度 ○○ビル耐震補強工事" />
+            <div class="hint" style="margin-top:4px;">※注文書などに書かれている正式な工事名。引張試験報告書の表紙に出ます。例のように分かる範囲で書けば大丈夫です。</div>
           </div>
         </div>
 
@@ -560,7 +561,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "anchor";
-const APP_VERSION   = "1.4.0";
+const APP_VERSION   = "1.5.0";
 const APP_BUILD     = "2026-11-22";
 
 (function(){
@@ -705,7 +706,7 @@ const METAL_GA_SPEC = { "M6":[11.0,30], "M8":[12.5,35], "M10":[14.5,40], "M12":[
                         "W5/8":[22.0,60], "W3/4":[26.0,80] };
 /* 差筋アンカー（スリーブ打込み式のD筋）。埋込長は穿孔長。
    メーカーで多少違う（D10は45〜50、D13は55〜65、D16は68〜76） */
-const METAL_SASHI_SPEC = { "D10":[14.5,45], "D13":[18.0,55], "D16":[22.0,68] };
+const METAL_SASHI_SPEC = { "D10":[14.5,45,450], "D13":[18.0,55,520], "D16":[22.0,68,640] };
 const SPEC_DEFAULT = {
   AP:       JSON.parse(JSON.stringify(AP_SPEC)),
   EA500:    JSON.parse(JSON.stringify(INJ_SPEC)),
@@ -772,12 +773,16 @@ function renderSpecTable(){
   }
   const t = sel.value || "AP";
   const box = document.getElementById("specTable");
-  box.innerHTML = `<table class="specT"><thead><tr><th>呼び</th><th>穿孔径 φ㎜</th><th>埋込長 ㎜</th></tr></thead><tbody>`
+  const hasLen = (t === "METAL_SASHI");   // 差筋は全長も規格で決まる
+  box.innerHTML = `<table class="specT"><thead><tr><th>呼び</th><th>穿孔径 φ㎜</th><th>埋込長 ㎜</th>`
+    + (hasLen ? `<th>全長 ㎜</th>` : ``) + `</tr></thead><tbody>`
     + SIZES.map(sz=>{
-        const v = (SPEC[t] && SPEC[t][sz]) || ["",""];
+        const v = (SPEC[t] && SPEC[t][sz]) || ["","",""];
         return `<tr><th>${sz}</th>`
-          + `<td><input type="number" step="0.1" inputmode="decimal" value="${v[0]===""?"":v[0]}" oninput="specEdit('${t}','${sz}',0,this.value)"></td>`
-          + `<td><input type="number" step="1" inputmode="numeric" value="${v[1]===""?"":v[1]}" oninput="specEdit('${t}','${sz}',1,this.value)"></td></tr>`;
+          + `<td><input type="number" step="0.1" inputmode="decimal" value="${v[0]===""||v[0]==null?"":v[0]}" oninput="specEdit('${t}','${sz}',0,this.value)"></td>`
+          + `<td><input type="number" step="1" inputmode="numeric" value="${v[1]===""||v[1]==null?"":v[1]}" oninput="specEdit('${t}','${sz}',1,this.value)"></td>`
+          + (hasLen ? `<td><input type="number" step="1" inputmode="numeric" value="${v[2]===""||v[2]==null?"":v[2]}" oninput="specEdit('${t}','${sz}',2,this.value)"></td>` : ``)
+          + `</tr>`;
       }).join("")
     + `</tbody></table>`;
 }
@@ -993,14 +998,15 @@ function addCoreRow(btn){
         <input class="c-emb" type="number" min="0" step="1" inputmode="numeric"
                placeholder="自動／変更可" oninput="markTouched(this);calcLen(this)" />
       </div>
-      <div>
+      <div class="cell-proj">
         <div class="smallLabel">突出長 ㎜（任意）</div>
         <input class="c-proj" type="number" min="0" step="1" inputmode="numeric"
                placeholder="例：60" oninput="calcLen(this)" />
       </div>
       <div>
-        <div class="smallLabel">全長（埋込＋突出）</div>
-        <input class="c-total" type="text" readonly value="—" style="background:#f1f3f6" />
+        <div class="smallLabel lbl-total">全長（埋込＋突出）㎜</div>
+        <input class="c-total" type="number" min="0" step="1" inputmode="numeric" readonly
+               placeholder="—" style="background:#f1f3f6" oninput="markTouched(this)" />
       </div>
     </div>
 
@@ -1009,6 +1015,7 @@ function addCoreRow(btn){
       <div class="pillrow bigpill" style="margin-top:0">
         <div class="pill c-supchem" onclick="togglePill(this)">ケミカル材 支給</div>
         <div class="pill c-supbolt" onclick="togglePill(this)">ボルト・鉄筋 支給</div>
+        <div class="pill c-supmetal hidden" onclick="togglePill(this)">材料 支給</div>
       </div>
     </div>
     <div style="margin-top:10px;">
@@ -1031,6 +1038,7 @@ function addCoreRow(btn){
       if(ps) row.querySelector(".c-series").value = ps;
       const po = prev.querySelector(".c-type-other").value;
       if(po) row.querySelector(".c-type-other").value = po;
+      applyRowMode(row);
     }
     const pz = prev.querySelector(".c-size").value;
     if(pz){
@@ -1054,12 +1062,51 @@ function onTypeChange(sel){
   sel.classList.remove("err");
   row.querySelector(".c-series").classList.toggle("hidden", sel.value !== "METAL");
   row.querySelector(".c-type-other").classList.toggle("hidden", sel.value !== "OTHER");
+  applyRowMode(row);
   applySpec(row);
+}
+
+/* 金属系・差筋のときの画面の出し分け
+   ・金属系（差筋を含む）はケミカル材を使わないので、支給は「材料 支給」の1つだけ
+   ・差筋は規格で全長が決まるので、突出長は使わず全長を直接出す */
+function applyRowMode(row){
+  const type   = row.querySelector(".c-type").value;
+  const series = row.querySelector(".c-series").value;
+  const isMetal = (type === "METAL");
+  const isSashi = isMetal && metalKey(series) === "METAL_SASHI";
+
+  const chem  = row.querySelector(".c-supchem");
+  const bolt  = row.querySelector(".c-supbolt");
+  const metal = row.querySelector(".c-supmetal");
+  chem.classList.toggle("hidden", isMetal);
+  bolt.classList.toggle("hidden", isMetal);
+  metal.classList.toggle("hidden", !isMetal);
+  if(isMetal){ chem.classList.remove("active"); bolt.classList.remove("active"); }
+  else { metal.classList.remove("active"); }
+
+  const projCell = row.querySelector(".cell-proj");
+  const proj  = row.querySelector(".c-proj");
+  const total = row.querySelector(".c-total");
+  const lbl   = row.querySelector(".lbl-total");
+  projCell.classList.toggle("hidden", isSashi);
+  if(isSashi){
+    proj.value = "";
+    total.readOnly = false;
+    total.style.background = "";
+    lbl.textContent = "全長（規格）㎜";
+  }else{
+    total.readOnly = true;
+    total.style.background = "#f1f3f6";
+    lbl.textContent = "全長（埋込＋突出）㎜";
+    delete total.dataset.touched;
+  }
 }
 
 function onSeriesChange(sel){
   sel.classList.remove("err");
-  applySpec(sel.closest(".coreRow"));
+  const row = sel.closest(".coreRow");
+  applyRowMode(row);
+  applySpec(row);
 }
 
 function onSizeChange(sel){
@@ -1082,8 +1129,13 @@ function applySpec(row){
   // 規格がある欄は入れ、無い欄は（手で直していなければ）前の値を消す
   const v0 = sp ? sp[0] : "";
   const v1 = sp ? sp[1] : "";
+  const v2 = sp ? sp[2] : "";
   if(!dia.dataset.touched) dia.value = (v0 === "" || v0 == null) ? "" : v0;
   if(!emb.dataset.touched) emb.value = (v1 === "" || v1 == null) ? "" : v1;
+  const total = row.querySelector(".c-total");
+  if(!total.readOnly && !total.dataset.touched){
+    total.value = (v2 === "" || v2 == null) ? "" : v2;
+  }
   if(tag) tag.textContent = (sp && (sp[0] !== "" || sp[1] !== "")) ? "規格値" : "";
   calcLenRow(row);
 }
@@ -1091,14 +1143,11 @@ function applySpec(row){
 function calcLen(el){ calcLenRow(el.closest(".coreRow")); }
 function calcLenRow(row){
   if(!row) return;
+  const t = row.querySelector(".c-total");
+  if(!t.readOnly) return;          // 差筋は規格の全長をそのまま残す
   const emb = parseInt(row.querySelector(".c-emb").value, 10);
   const prj = parseInt(row.querySelector(".c-proj").value, 10);
-  const t = row.querySelector(".c-total");
-  if(!isNaN(emb) && emb > 0){
-    t.value = (isNaN(prj) ? emb : emb + prj) + " ㎜";
-  }else{
-    t.value = "—";
-  }
+  t.value = (!isNaN(emb) && emb > 0) ? (isNaN(prj) ? emb : emb + prj) : "";
 }
 
 function removeCoreRow(btn){
@@ -1156,8 +1205,10 @@ function collectData(){
       const proj = intOrNull(r.querySelector(".c-proj").value);
       const qty = parseInt(r.querySelector(".c-qty").value, 10);
 
-      const supChem = r.querySelector(".c-supchem").classList.contains("active");
-      const supBolt = r.querySelector(".c-supbolt").classList.contains("active");
+      const supChem  = r.querySelector(".c-supchem").classList.contains("active");
+      const supBolt  = r.querySelector(".c-supbolt").classList.contains("active");
+      const supMetal = r.querySelector(".c-supmetal").classList.contains("active");
+      const totalIn  = intOrNull(r.querySelector(".c-total").value);
       const memo = (r.querySelector(".c-memo").value || "").trim();
 
       // 種別・呼び・本数がそろった行だけ保存
@@ -1165,8 +1216,8 @@ function collectData(){
         anchors.push({
           dir, type, typeOther, series, size,
           dia, emb, proj,
-          len: (emb != null) ? emb + (proj || 0) : null,
-          qty, supChem, supBolt, memo
+          len: totalIn != null ? totalIn : ((emb != null) ? emb + (proj || 0) : null),
+          qty, supChem, supBolt, supMetal, memo
         });
       }
     });
@@ -1216,6 +1267,7 @@ function anchorTypeLabel(a){
   return t.label.replace(/（.*$/, "");
 }
 function supplyLabel(a){
+  if(a.type === "METAL") return a.supMetal ? "材料支給" : "材工共";
   const l = [];
   if(a.supChem) l.push("ケミカル材");
   if(a.supBolt) l.push("ボルト・鉄筋");
@@ -1226,7 +1278,7 @@ function specText(a){
   if(a.dia != null) parts.push("φ" + a.dia);
   if(a.emb != null) parts.push("埋込 " + a.emb + "㎜");
   if(a.proj != null) parts.push("突出 " + a.proj + "㎜");
-  if(a.emb != null) parts.push("全長 " + (a.emb + (a.proj || 0)) + "㎜");
+  if(a.len != null) parts.push("全長 " + a.len + "㎜");
   return parts.length ? parts.join("　") : "—";
 }
 function aggregateAnchors(data){
@@ -1235,7 +1287,8 @@ function aggregateAnchors(data){
     (w.anchors || []).forEach(a=>{
       const key = [a.type, a.typeOther||"", a.series||"", a.size,
                    a.dia==null?"-":a.dia, a.emb==null?"-":a.emb, a.proj==null?"-":a.proj,
-                   a.dir, a.supChem?"C1":"C0", a.supBolt?"B1":"B0"].join("|");
+                   a.dir, a.supChem?"C1":"C0", a.supBolt?"B1":"B0", a.supMetal?"S1":"S0",
+                   a.len==null?"-":a.len].join("|");
       const cur = map.get(key) || Object.assign({}, a, { total:0 });
       cur.total += a.qty;
       map.set(key, cur);
@@ -1603,6 +1656,10 @@ function goConfirm(){
       if(!(parseFloat(diaEl.value) > 0)) mark(diaEl);
       const embEl = r.querySelector(".c-emb");
       if(!(parseInt(embEl.value, 10) > 0)) mark(embEl);
+
+      // 差筋アンカーは全長（規格）が必要
+      const totalEl = r.querySelector(".c-total");
+      if(!totalEl.readOnly && !(parseInt(totalEl.value, 10) > 0)) mark(totalEl);
     });
   });
 
