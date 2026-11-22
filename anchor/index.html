@@ -560,7 +560,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "anchor";
-const APP_VERSION   = "1.2.0";
+const APP_VERSION   = "1.3.0";
 const APP_BUILD     = "2026-11-22";
 
 (function(){
@@ -667,7 +667,7 @@ const ANCHOR_TYPES = [
 const METAL_SERIES = ["オールアンカー（C）","ボルトアンカー（BA）","グリップアンカー（GA）","その他"];
 
 /* 呼び */
-const SIZES = ["M8","M10","M12","M16","M20","M22","M24",
+const SIZES = ["M6","M8","M10","M12","M16","M20","M22","M24",
                "W3/8","W1/2","W5/8","W3/4","W7/8","W1",
                "D10","D13","D16","D19","D22","D25"];
 function sizeKind(sz){
@@ -691,13 +691,35 @@ const AP_SPEC = Object.assign({}, INJ_SPEC, {
   "M8":[9,70], "M10":[12,90], "M12":[14.5,100], "M16":[19,130], "M20":[24,200], "M22":[28,190], "M24":[32,210],
   "D19":[24,200]
 });
+/* 金属系（サンコーテクノのカタログ値）[穿孔径φ㎜, アンカー埋込み長さ㎜]
+   ・オールアンカーC：穿孔深さは 埋込＋呼び径（M10なら50以上）
+   ・ボルトアンカーBA：M16は BA-1610 のみ埋込50
+   ・グリップアンカーGA：本体を全部埋めるので 埋込長＝全長 */
+const METAL_C_SPEC  = { "M6":[6.4,30], "M8":[8.5,35], "M10":[10.5,40], "M12":[12.7,50], "M16":[17.0,60], "M20":[21.5,80] };
+const METAL_BA_SPEC = { "M6":[10.0,30], "M8":[12.5,35], "M10":[14.5,40], "M12":[18.0,50], "M16":[22.5,60], "M20":[26.0,80] };
+const METAL_GA_SPEC = { "M6":[11.0,30], "M8":[12.5,35], "M10":[14.5,40], "M12":[18.0,50], "M16":[22.0,60],
+                        "M20":[26.0,80], "M22":[29.0,90], "M24":[33.0,110] };
 const SPEC_DEFAULT = {
-  AP:    JSON.parse(JSON.stringify(AP_SPEC)),
-  EA500: JSON.parse(JSON.stringify(INJ_SPEC)),
-  EL360: JSON.parse(JSON.stringify(INJ_SPEC)),
-  METAL: {},
+  AP:       JSON.parse(JSON.stringify(AP_SPEC)),
+  EA500:    JSON.parse(JSON.stringify(INJ_SPEC)),
+  EL360:    JSON.parse(JSON.stringify(INJ_SPEC)),
+  METAL_C:  JSON.parse(JSON.stringify(METAL_C_SPEC)),
+  METAL_BA: JSON.parse(JSON.stringify(METAL_BA_SPEC)),
+  METAL_GA: JSON.parse(JSON.stringify(METAL_GA_SPEC)),
   OTHER: {}
 };
+/* 金属系は選んだ種類（シリーズ）で規格表を切り替える */
+function metalKey(series){
+  if(!series) return "";
+  if(series.indexOf("オール") === 0) return "METAL_C";
+  if(series.indexOf("ボルト") === 0) return "METAL_BA";
+  if(series.indexOf("グリップ") === 0) return "METAL_GA";
+  return "";
+}
+function specKey(type, series){
+  if(type === "METAL") return metalKey(series);
+  return type || "";
+}
 const SPEC_LS = "TOKUWA_ANCHOR_SPEC_V1";
 let SPEC = JSON.parse(JSON.stringify(SPEC_DEFAULT));
 function loadSpec(){
@@ -711,8 +733,9 @@ function loadSpec(){
   }catch(e){}
 }
 function saveSpec(){ try{ localStorage.setItem(SPEC_LS, JSON.stringify(SPEC)); }catch(e){} }
-function specOf(type, size){
-  const t = SPEC[type] || {};
+function specOf(type, size, series){
+  const k = specKey(type, series);
+  const t = SPEC[k] || {};
   return t[size] || null;
 }
 function specReset(){
@@ -728,8 +751,14 @@ function renderSpecTable(){
   const sel = document.getElementById("specType");
   if(!sel) return;
   if(!sel.options.length){
-    sel.innerHTML = ANCHOR_TYPES.filter(t=>t.v!=="OTHER")
-      .map(t=>`<option value="${t.v}">${t.label}</option>`).join("");
+    sel.innerHTML = [
+      {v:"AP",       label:"AP（カプセル・旭化成）"},
+      {v:"EA500",    label:"EA-500（注入・旭化成）"},
+      {v:"EL360",    label:"EL360（注入・デコラックス）"},
+      {v:"METAL_C",  label:"金属系：オールアンカー（C）"},
+      {v:"METAL_BA", label:"金属系：ボルトアンカー（BA）"},
+      {v:"METAL_GA", label:"金属系：グリップアンカー（GA）"}
+    ].map(t=>`<option value="${t.v}">${t.label}</option>`).join("");
   }
   const t = sel.value || "AP";
   const box = document.getElementById("specTable");
@@ -909,7 +938,7 @@ function addCoreRow(btn){
         <option value="">（種別を選択）</option>
         ${ANCHOR_TYPES.map(t=>`<option value="${t.v}">${t.label}</option>`).join("")}
       </select>
-      <select class="c-series hidden" style="margin-top:6px" onchange="this.classList.remove('err')">
+      <select class="c-series hidden" style="margin-top:6px" onchange="onSeriesChange(this)">
         <option value="">（種類を選択）</option>
         ${METAL_SERIES.map(x=>`<option>${x}</option>`).join("")}
       </select>
@@ -1018,6 +1047,11 @@ function onTypeChange(sel){
   applySpec(row);
 }
 
+function onSeriesChange(sel){
+  sel.classList.remove("err");
+  applySpec(sel.closest(".coreRow"));
+}
+
 function onSizeChange(sel){
   const row = sel.closest(".coreRow");
   sel.classList.remove("err");
@@ -1028,16 +1062,18 @@ function onSizeChange(sel){
 /* 種別＋呼びが決まったら規格値（穿孔径・埋込長）を自動で入れる。
    手で直した欄は上書きしない */
 function applySpec(row){
-  const type = row.querySelector(".c-type").value;
-  const size = row.querySelector(".c-size").value;
+  const type   = row.querySelector(".c-type").value;
+  const size   = row.querySelector(".c-size").value;
+  const series = row.querySelector(".c-series").value;
   const dia  = row.querySelector(".c-dia");
   const emb  = row.querySelector(".c-emb");
   const tag  = row.querySelector(".specTag");
-  const sp = (type && size && size !== "OTHER") ? specOf(type, size) : null;
-  if(sp){
-    if(sp[0] !== "" && sp[0] != null && !dia.dataset.touched) dia.value = sp[0];
-    if(sp[1] !== "" && sp[1] != null && !emb.dataset.touched) emb.value = sp[1];
-  }
+  const sp = (type && size && size !== "OTHER") ? specOf(type, size, series) : null;
+  // 規格がある欄は入れ、無い欄は（手で直していなければ）前の値を消す
+  const v0 = sp ? sp[0] : "";
+  const v1 = sp ? sp[1] : "";
+  if(!dia.dataset.touched) dia.value = (v0 === "" || v0 == null) ? "" : v0;
+  if(!emb.dataset.touched) emb.value = (v1 === "" || v1 == null) ? "" : v1;
   if(tag) tag.textContent = (sp && (sp[0] !== "" || sp[1] !== "")) ? "規格値" : "";
   calcLenRow(row);
 }
