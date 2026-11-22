@@ -45,7 +45,7 @@
   </form>
 </div>
 <div id="root"></div>
-<script>window.__tbVer = "4.10.6";</script>
+<script>window.__tbVer = "4.10.7";</script>
 <script>
 /* 新しい版が出ていたら自動で読み直す（ホーム画面のアイコンが古い画面を覚えたままにならないように） */
 (function(){
@@ -161,7 +161,7 @@ const {
    定数
 ══════════════════════════════════════════════════════════ */
 const APP_NAME = "TOKUWAボード";
-const APP_VERSION = "4.10.6";
+const APP_VERSION = "4.10.7";
 const APP_UPDATED = "2026-11-22";
 /* 外部アプリ（日報）の初期リンク。設定から変更できる */
 const EXT_DEFAULT = {
@@ -2707,6 +2707,7 @@ function App() {
   const kyScrollRef = useRef(null);
   const [nippoYm, setNippoYm] = useState(null); // 一覧の月（"YYYY-MM"）
   const [nippoPast, setNippoPast] = useState(false);
+  const [nippoConfirm, setNippoConfirm] = useState(null); // 提出前の確認の窓（{ checked }）
   const [nippoOpenRow, setNippoOpenRow] = useState(null); // 日報を書く画面で、いま開いて直している行
   const [nippoAll, setNippoAll] = useState(false); // 事務用：全員の提出分を見ているか
   /* この端末から提出した日報の番号。過去の日報には、これだけを出す */
@@ -4829,6 +4830,11 @@ function App() {
       date: f.date,
       holiday: !!f.holiday,
       rows,
+      /* 給与計算で月ごとに集めるための項目：月・始業・終業・本人が確認した日時 */
+      ym: f.date.slice(0, 7),
+      startAt: rows.map(r => r.from).filter(Boolean).sort()[0] || "",
+      endAt: rows.map(r => r.to).filter(Boolean).sort().slice(-1)[0] || "",
+      confirmedAt: new Date().toISOString(),
       workMin: sumMin(rows),
       fromSite: !!f.fromSite,
       // 実働の合計（分）／現場日報から入れた日報かどうか
@@ -4845,6 +4851,7 @@ function App() {
     addNippoMine(saved.id);
     if (f.id && f.id !== saved.id && !String(f.id).startsWith("s_")) deleteNippo(f.id);
     setNippoYm(f.date.slice(0, 7));
+    setNippoConfirm(null);
     setNippoForm(null);
   };
   /* 事務の確認（暗証番号が必要） */
@@ -17167,7 +17174,12 @@ function App() {
         lineHeight: 1.7
       }
     })), /*#__PURE__*/React.createElement("button", {
-      onClick: saveNippo,
+      onClick: () => {
+        setNippoOpenRow(null);
+        setNippoConfirm({
+          checked: false
+        });
+      },
       disabled: !ok,
       style: {
         width: "100%",
@@ -17181,7 +17193,213 @@ function App() {
         color: ok ? "#fff" : "#aaa",
         cursor: ok ? "pointer" : "default"
       }
-    }, saved && saved.rows.length ? "直して提出する" : "提出する"), !ok && /*#__PURE__*/React.createElement("div", {
+    }, saved && saved.rows.length ? "直して提出する（確認へ）" : "提出する（確認へ）"), nippoConfirm && ok && (() => {
+      const rows = f.rows.filter(r => r.siteName.trim() || r.client.trim() || r.work.trim()).slice().sort((a, b) => (toMin(a.from) || 0) - (toMin(b.from) || 0));
+      const st = rows.map(r => r.from).sort()[0],
+        en = rows.map(r => r.to).sort().slice(-1)[0];
+      const ck = nippoConfirm.checked;
+      return /*#__PURE__*/React.createElement("div", {
+        style: {
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,.55)",
+          zIndex: 99,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "16px 12px"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          background: "#fff",
+          borderRadius: 18,
+          width: "100%",
+          maxWidth: 520,
+          maxHeight: "92vh",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          boxShadow: "0 16px 40px rgba(0,0,0,.35)"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          padding: "16px 16px 12px",
+          borderBottom: "1px solid #e5e7eb",
+          flexShrink: 0
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 18,
+          fontWeight: 900,
+          color: "#111"
+        }
+      }, "提出の前に、確認してください"), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 13,
+          color: "#b45309",
+          fontWeight: 700,
+          marginTop: 6,
+          lineHeight: 1.6
+        }
+      }, "この日報は給与の計算に使います。日付・時間・現場にまちがいがないか、見直してください。")), /*#__PURE__*/React.createElement("div", {
+        style: {
+          flex: 1,
+          overflow: "auto",
+          padding: "12px 16px",
+          WebkitOverflowScrolling: "touch"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "grid",
+          gridTemplateColumns: "auto 1fr",
+          gap: "8px 14px",
+          fontSize: 16,
+          marginBottom: 12
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: "#888",
+          fontSize: 13
+        }
+      }, "名前"), /*#__PURE__*/React.createElement("b", null, memberOf(f.by) ? memberOf(f.by).name : ""), /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: "#888",
+          fontSize: 13
+        }
+      }, "日付"), /*#__PURE__*/React.createElement("b", null, fmtDateJ(f.date)), /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: "#888",
+          fontSize: 13
+        }
+      }, "時間"), /*#__PURE__*/React.createElement("b", null, st, "\u3000から\u3000", en, "\u3000まで")), /*#__PURE__*/React.createElement("div", {
+        style: {
+          border: "1px solid #e5e7eb",
+          borderRadius: 12,
+          overflow: "hidden"
+        }
+      }, rows.map((r, k) => /*#__PURE__*/React.createElement("div", {
+        key: r.id,
+        style: {
+          display: "flex",
+          gap: 10,
+          padding: "10px 12px",
+          borderTop: k ? "1px solid #f0f0f0" : "none",
+          alignItems: "flex-start"
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          width: 96,
+          flexShrink: 0,
+          fontSize: 14,
+          fontWeight: 800,
+          color: "#333",
+          whiteSpace: "nowrap"
+        }
+      }, r.from, "〜", r.to), /*#__PURE__*/React.createElement("span", {
+        style: {
+          flex: 1,
+          minWidth: 0
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          display: "block",
+          fontSize: 15,
+          fontWeight: 800,
+          color: "#111",
+          wordBreak: "break-word"
+        }
+      }, [r.client, r.siteName].filter(Boolean).join("　") || "（現場名なし）"), r.work && /*#__PURE__*/React.createElement("span", {
+        style: {
+          display: "block",
+          fontSize: 13,
+          color: "#555",
+          whiteSpace: "pre-wrap",
+          lineHeight: 1.6,
+          marginTop: 2
+        }
+      }, r.work))))), (f.memo || "").trim() && /*#__PURE__*/React.createElement("div", {
+        style: {
+          marginTop: 10,
+          fontSize: 14,
+          color: "#333",
+          lineHeight: 1.7,
+          whiteSpace: "pre-wrap"
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 12,
+          color: "#888",
+          fontWeight: 700
+        }
+      }, "事務への連絡："), f.memo), /*#__PURE__*/React.createElement("label", {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          marginTop: 14,
+          padding: "14px 14px",
+          borderRadius: 12,
+          border: `2px solid ${ck ? GREEN : "#d1d5db"}`,
+          background: ck ? "#f0fdf4" : "#fff",
+          cursor: "pointer"
+        }
+      }, /*#__PURE__*/React.createElement("input", {
+        type: "checkbox",
+        checked: ck,
+        onChange: e => setNippoConfirm({
+          checked: e.target.checked
+        }),
+        style: {
+          width: 26,
+          height: 26,
+          accentColor: GREEN,
+          flexShrink: 0
+        }
+      }), /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 16,
+          fontWeight: 800,
+          color: "#111"
+        }
+      }, "内容にまちがいありません"))), /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          gap: 10,
+          padding: "12px 16px calc(12px + env(safe-area-inset-bottom))",
+          borderTop: "1px solid #e5e7eb",
+          flexShrink: 0
+        }
+      }, /*#__PURE__*/React.createElement("button", {
+        onClick: () => setNippoConfirm(null),
+        style: {
+          flex: 1,
+          padding: "14px 0",
+          borderRadius: 12,
+          border: "1.5px solid #d1d5db",
+          background: "#fff",
+          color: "#555",
+          fontSize: 15,
+          fontWeight: 800,
+          cursor: "pointer",
+          minHeight: 52
+        }
+      }, "もどって直す"), /*#__PURE__*/React.createElement("button", {
+        onClick: saveNippo,
+        disabled: !ck,
+        style: {
+          flex: 2,
+          padding: "14px 0",
+          borderRadius: 12,
+          border: "none",
+          fontSize: 16,
+          fontWeight: 800,
+          minHeight: 52,
+          background: ck ? GREEN : "#e5e7eb",
+          color: ck ? "#fff" : "#aaa",
+          cursor: ck ? "pointer" : "default"
+        }
+      }, "提出する"))));
+    })(), !ok && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
         color: "#aaa",
