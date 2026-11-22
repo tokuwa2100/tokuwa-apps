@@ -45,7 +45,7 @@
   </form>
 </div>
 <div id="root"></div>
-<script>window.__tbVer = "4.9.5";</script>
+<script>window.__tbVer = "4.9.6";</script>
 <script>
 /* 新しい版が出ていたら自動で読み直す（ホーム画面のアイコンが古い画面を覚えたままにならないように） */
 (function(){
@@ -161,7 +161,7 @@ const {
    定数
 ══════════════════════════════════════════════════════════ */
 const APP_NAME = "TOKUWAボード";
-const APP_VERSION = "4.9.5";
+const APP_VERSION = "4.9.6";
 const APP_UPDATED = "2026-11-22";
 /* 外部アプリ（日報）の初期リンク。設定から変更できる */
 const EXT_DEFAULT = {
@@ -1084,6 +1084,17 @@ const rowMin = r => {
 };
 const hmText = m => m ? `${Math.floor(m / 60)}時間${m % 60 ? pad(m % 60) + "分" : ""}` : "0時間";
 const REST_OPTS = [0, 15, 30, 45, 60, 90, 120];
+/* 会社の決まった時間。就業は 7:30〜17:30、休憩は 10:00〜10:30・12:00〜13:00（昼）・15:00〜15:30。
+   現場日報には休憩が入っていないので、作業した時間にかかる休憩を自動で引いて「実働」を出す */
+const WORK_FROM = "07:30",
+  WORK_TO = "17:30";
+const BREAKS = [["10:00", "10:30"], ["12:00", "13:00"], ["15:00", "15:30"]];
+const autoRest = (from, to) => {
+  const a = toMin(from),
+    b = toMin(to);
+  if (a == null || b == null || b <= a) return 0;
+  return BREAKS.reduce((sum, [x, y]) => sum + Math.max(0, Math.min(b, toMin(y)) - Math.max(a, toMin(x))), 0);
+};
 /* 日報アプリ（コア・常用）のデータを個人日報の1行に直す */
 const numToHm = v => {
   const n = Number(v);
@@ -1107,9 +1118,9 @@ const newNippoRow = () => ({
   eventId: null,
   client: "",
   siteName: "",
-  from: "08:00",
-  to: "17:00",
-  rest: 60,
+  from: WORK_FROM,
+  to: WORK_TO,
+  rest: autoRest(WORK_FROM, WORK_TO),
   work: "",
   night: false
 });
@@ -4781,7 +4792,10 @@ function App() {
   const saveNippo = () => {
     const f = nippoForm;
     if (!f || !f.by) return;
-    const rows = f.rows.filter(r => r.siteName.trim() || r.client.trim() || r.work.trim());
+    const rows = f.rows.filter(r => r.siteName.trim() || r.client.trim() || r.work.trim()).map(r => ({
+      ...r,
+      min: rowMin(r)
+    })); // min＝その現場の実働（分）
     if (!rows.length) return;
     const ex = nippoFind(f.by, f.date); // 同じ人・同じ日は1つにまとめる
     const rec = {
@@ -4791,6 +4805,9 @@ function App() {
       date: f.date,
       holiday: !!f.holiday,
       rows,
+      workMin: sumMin(rows),
+      fromSite: !!f.fromSite,
+      // 実働の合計（分）／現場日報から入れた日報かどうか
       memo: (f.memo || "").trim(),
       status: "submitted",
       checkedBy: null,
@@ -5066,18 +5083,17 @@ function App() {
       const srcId = String(r.recordId || r.id || r.date + "|" + client + "|" + site);
       r.workers.forEach(w => {
         if (!w || w.outsource || w.name === "外注" || String(w.name || "").trim() !== m.name) return;
-        const st = Number(w.start),
-          en = Number(w.end);
-        const span = !Number.isNaN(st) && !Number.isNaN(en) && en > st ? (en - st) * 60 : 0;
-        const rest = Math.max(0, Math.round(span - (Number(w.hours) || 0) * 60));
+        const from = numToHm(w.start),
+          to = numToHm(w.end);
+        const rest = autoRest(from, to); // 現場日報には休憩が入っていないので、決まった休憩時間を引く
         const ot = (w.overtime || []).reduce((a, o) => a + (Number(o.hours) || 0), 0);
         const work = (isCore ? coreWorkText(w, r) : r.workDesc || "") + (ot ? `${isCore || r.workDesc ? "\n" : ""}残業 ${ot}時間` : "");
         rows.push({
           id: nid(),
           client,
           siteName: site,
-          from: numToHm(w.start),
-          to: numToHm(w.end),
+          from,
+          to,
           rest,
           work,
           src: srcId,
@@ -16164,7 +16180,26 @@ function App() {
           color: tone[2],
           lineHeight: 1.7
         }
-      }, sf.state === "loading" && /*#__PURE__*/React.createElement("b", null, "📋 この日の現場日報を確認しています…"), sf.state === "ok" && (sf.filled ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("b", null, "📋 現場日報の内容を入れました（", sf.n, "現場）"), /*#__PURE__*/React.createElement("br", null), "ちがうところを直し、足りないところを書き足して、提出してください。") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("b", null, "📋 この日の現場日報があります（", sf.n, "現場）"), /*#__PURE__*/React.createElement("br", null), "下に出ています。すでに書いてある内容は、そのままにしています。")), sf.state === "none" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("b", null, "📋 この日の現場日報は、まだ届いていません"), /*#__PURE__*/React.createElement("br", null), "現場日報を送ったあとなら「もう一度確認」を押してください。届いていなければ、自分で書いて提出できます。"), sf.state === "err" && /*#__PURE__*/React.createElement("b", null, sf.msg), (sf.state === "none" || sf.state === "err") && /*#__PURE__*/React.createElement("button", {
+      }, sf.state === "loading" && /*#__PURE__*/React.createElement("b", null, "📋 この日の現場日報を確認しています…"), sf.state === "ok" && (sf.filled ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("b", null, "📋 現場日報の内容を入れました（", sf.n, "現場）"), /*#__PURE__*/React.createElement("br", null), "休憩を引いた実働時間も入っています。ちがうところを直し、足りないところを書き足して、提出してください。") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("b", null, "📋 この日の現場日報があります（", sf.n, "現場）"), /*#__PURE__*/React.createElement("br", null), "すでに書いてある内容は、そのままにしています。", /*#__PURE__*/React.createElement("button", {
+        onClick: () => setNippoForm({
+          ...f,
+          rows: rowsFromSite(f.siteRows || []),
+          fromSite: true
+        }),
+        style: {
+          display: "block",
+          marginTop: 8,
+          padding: "9px 16px",
+          borderRadius: 10,
+          border: "1.5px solid #1d4ed8",
+          background: "#fff",
+          color: "#1d4ed8",
+          fontSize: 14,
+          fontWeight: 800,
+          cursor: "pointer",
+          minHeight: 44
+        }
+      }, "現場日報の内容に入れ直す"))), sf.state === "none" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("b", null, "📋 この日の現場日報は、まだ届いていません"), /*#__PURE__*/React.createElement("br", null), "現場日報を送ったあとなら「もう一度確認」を押してください。届いていなければ、自分で書いて提出できます。"), sf.state === "err" && /*#__PURE__*/React.createElement("b", null, sf.msg), (sf.state === "none" || sf.state === "err") && /*#__PURE__*/React.createElement("button", {
         onClick: () => setSiteFetchTick(t => t + 1),
         style: {
           display: "block",
@@ -16304,7 +16339,8 @@ function App() {
     }, /*#__PURE__*/React.createElement(TimePicker, {
       value: r.from,
       onChange: v => setRow(i, {
-        from: v
+        from: v,
+        rest: autoRest(v, r.to)
       })
     }), /*#__PURE__*/React.createElement("span", {
       style: {
@@ -16314,9 +16350,17 @@ function App() {
     }, "〜"), /*#__PURE__*/React.createElement(TimePicker, {
       value: r.to,
       onChange: v => setRow(i, {
-        to: v
+        to: v,
+        rest: autoRest(r.from, v)
       })
     })), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "#888",
+        margin: "-4px 0 8px",
+        lineHeight: 1.6
+      }
+    }, "休憩（10時・昼・15時）は、時間に合わせて自動で引きます。ちがう日は下で直せます。"), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
@@ -16330,7 +16374,12 @@ function App() {
         color: "#999",
         marginRight: 2
       }
-    }, "休憩"), REST_OPTS.map(m => /*#__PURE__*/React.createElement("button", {
+    }, "休憩 ", /*#__PURE__*/React.createElement("b", {
+      style: {
+        color: "#333",
+        fontSize: 14
+      }
+    }, Number(r.rest) || 0, "分")), REST_OPTS.map(m => /*#__PURE__*/React.createElement("button", {
       key: m,
       onClick: () => setRow(i, {
         rest: m
@@ -16383,13 +16432,15 @@ function App() {
     }))), /*#__PURE__*/React.createElement("button", {
       onClick: () => {
         const last = f.rows[f.rows.length - 1];
+        const from = last ? last.to : WORK_FROM,
+          to = toMin(from) < toMin(WORK_TO) ? WORK_TO : from;
         setNippoForm({
           ...f,
           rows: [...f.rows, {
             ...newNippoRow(),
-            from: last ? last.to : "08:00",
-            to: "17:00",
-            rest: 0
+            from,
+            to,
+            rest: autoRest(from, to)
           }]
         });
       },
@@ -16445,81 +16496,7 @@ function App() {
         marginTop: 12,
         background: "#fff"
       }
-    })), siteRows.length > 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        ...BOX,
-        border: diff !== 0 ? "2px solid #fecaca" : "2px solid transparent"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        alignItems: "center",
-        marginBottom: 8
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        flex: 1,
-        fontSize: 13,
-        fontWeight: 800,
-        color: "#0369a1"
-      }
-    }, "📋 現場日報（日報アプリ）"), /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 14,
-        fontWeight: 800,
-        color: "#333"
-      }
-    }, hmText(siteTotal))), siteRows.map((r, i) => /*#__PURE__*/React.createElement("div", {
-      key: r.id || i,
-      style: {
-        padding: "8px 0",
-        borderTop: i === 0 ? "none" : "1px solid #f3f4f6",
-        fontSize: 13,
-        color: "#333",
-        lineHeight: 1.6
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontWeight: 800
-      }
-    }, [r.client, r.siteName].filter(Boolean).join("　") || "名前なし", /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontWeight: 600,
-        color: "#888",
-        marginLeft: 8
-      }
-    }, r.from, "〜", r.to, "\u3000", hmText(rowMin(r)))), r.work && /*#__PURE__*/React.createElement("div", {
-      style: {
-        color: "#666",
-        whiteSpace: "pre-wrap"
-      }
-    }, r.work))), diff !== 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 13,
-        fontWeight: 800,
-        color: "#b91c1c",
-        marginTop: 6
-      }
-    }, "⚠ 本人の日報と", hmText(Math.abs(diff)), "ちがいます（本人が", diff > 0 ? "長い" : "短い", "）"), !filled && /*#__PURE__*/React.createElement("button", {
-      onClick: () => setNippoForm({
-        ...f,
-        rows: rowsFromSite(siteRows),
-        fromSite: true
-      }),
-      style: {
-        width: "100%",
-        marginTop: 10,
-        padding: "11px 0",
-        borderRadius: 12,
-        border: "1.5px solid #0369a1",
-        background: "#fff",
-        color: "#0369a1",
-        fontSize: 14,
-        fontWeight: 800,
-        cursor: "pointer",
-        minHeight: 46
-      }
-    }, "この内容を日報に写す")), /*#__PURE__*/React.createElement("button", {
+    })), /*#__PURE__*/React.createElement("button", {
       onClick: saveNippo,
       disabled: !ok,
       style: {
