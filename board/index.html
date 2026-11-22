@@ -45,7 +45,7 @@
   </form>
 </div>
 <div id="root"></div>
-<script>window.__tbVer = "4.10.7";</script>
+<script>window.__tbVer = "4.10.8";</script>
 <script>
 /* 新しい版が出ていたら自動で読み直す（ホーム画面のアイコンが古い画面を覚えたままにならないように） */
 (function(){
@@ -161,7 +161,7 @@ const {
    定数
 ══════════════════════════════════════════════════════════ */
 const APP_NAME = "TOKUWAボード";
-const APP_VERSION = "4.10.7";
+const APP_VERSION = "4.10.8";
 const APP_UPDATED = "2026-11-22";
 /* 外部アプリ（日報）の初期リンク。設定から変更できる */
 const EXT_DEFAULT = {
@@ -8220,7 +8220,7 @@ function App() {
           textAlign: "right",
           flexShrink: 0
         }
-      }, /*#__PURE__*/React.createElement("span", {
+      }, (isEditor || n.status === "returned") && /*#__PURE__*/React.createElement("span", {
         style: {
           display: "inline-block",
           fontSize: 10,
@@ -16265,7 +16265,7 @@ function App() {
         color: "#555",
         marginTop: 2
       }
-    }, m ? m.name : "名前なし", /*#__PURE__*/React.createElement("span", {
+    }, m ? m.name : "名前なし", (isEditor || n.status === "returned") && /*#__PURE__*/React.createElement("span", {
       style: {
         marginLeft: 8,
         fontSize: 11,
@@ -16472,7 +16472,7 @@ function App() {
         fontWeight: 800,
         color: "#111"
       }
-    }, "個人日報"), st && /*#__PURE__*/React.createElement("span", {
+    }, "個人日報"), st && (isEditor || saved.status === "returned") && /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 12,
         fontWeight: 800,
@@ -16532,7 +16532,7 @@ function App() {
         color: "#7f1d1d",
         marginTop: 6
       }
-    }, "直して「提出する」を押してください")), saved && saved.status === "checked" && /*#__PURE__*/React.createElement("div", {
+    }, "直して「提出する」を押してください")), saved && saved.status === "checked" && isEditor && /*#__PURE__*/React.createElement("div", {
       style: {
         ...BOX,
         background: "#dcfce7"
@@ -17410,7 +17410,7 @@ function App() {
       style: {
         color: "#dc2626"
       }
-    }, "時間が重なっている行（赤）を直すと、提出できます")), saved && saved.rows.length > 0 && saved.status !== "checked" && /*#__PURE__*/React.createElement("div", {
+    }, "時間が重なっている行（赤）を直すと、提出できます")), saved && saved.rows.length > 0 && saved.status !== "checked" && isEditor && /*#__PURE__*/React.createElement("div", {
       style: {
         ...BOX,
         marginTop: 16
