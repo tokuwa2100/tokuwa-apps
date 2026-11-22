@@ -623,7 +623,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
     <div class="sr-grid">
       <label>会社名（お客様名・一部でOK）<input id="sr-client" placeholder="例：サンプル" oninput="srRender()"></label>
       <label>現場名（一部でOK）<input id="sr-site" placeholder="例：小学校" oninput="srRender()"></label>
-      <label>種類<select id="sr-type" onchange="srRender()"><option value="">すべて</option><option value="core">コア・探査</option><option value="joyou">常用</option></select></label>
+      <label>種類<select id="sr-type" onchange="srRender()"><option value="">すべて</option><option value="core">コア・探査</option><option value="anchor">アンカー</option><option value="joyou">常用</option></select></label>
       <label>期間（作業日）<span class="sr-period"><input type="date" id="sr-from" onchange="srChanged()"> 〜 <input type="date" id="sr-to" onchange="srChanged()"></span></label>
     </div>
     <div class="sr-quick">
@@ -827,8 +827,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "shukei";
-const APP_VERSION   = "1.9.1";
-const APP_BUILD     = "2026-11-21";
+const APP_VERSION   = "1.10.0";
+const APP_BUILD     = "2026-11-22";
 
 (function(){
   const b = document.getElementById("verBadge");
@@ -901,8 +901,16 @@ const REPORT_TYPES = {
     detect: r => r.type === "joyou" || (r.workers && !r.workers.some(w => w.cores?.length > 0) && r.customer !== undefined),
     clientField: "customer",
   },
+  anchor: {
+    label: "アンカー日報",
+    icon: "⚓",
+    // 新アプリは app:"anchor-nippo"。印が付く前に送った日報も中身で拾う
+    detect: r => r.app === "anchor-nippo" || r.type === "anchor"
+              || r.workers?.some(w => w.anchors && w.anchors.length > 0)
+              || (r.test && r.test.on === true),
+    clientField: "client",
+  },
   // 将来追加例:
-  // anchor: { label: "アンカー日報", icon: "⚓", detect: r => r.type === "anchor", clientField: "customer" },
   // cutter: { label: "カッター日報", icon: "✂️", detect: r => r.type === "cutter", clientField: "customer" },
 };
 
@@ -1572,6 +1580,7 @@ function renderTable() {
   empty.classList.add("hidden");
 
   if (activeType === "core") renderCoreTable(records, site, month, range, statsGrid, tableArea);
+  else if (activeType === "anchor") renderAnchorTable(records, site, month, range, statsGrid, tableArea);
   else if (activeType === "joyou") renderJoyouTable(records, site, month, range, statsGrid, tableArea);
   else {
     tableArea.innerHTML = `<div class="empty"><div class="ei">🔧</div><p>この日報種別の集計表は準備中です</p></div>`;
@@ -1667,6 +1676,91 @@ function aggregateSurvey(records) {
     });
     return { ...def, byDate, total };
   }).filter(x => x.total > 0);
+}
+
+/* ===== アンカー日報 ===== */
+const ANCHOR_SIZE_ORDER = ["M6","M8","M10","M12","M16","M20","M22","M24",
+  "W1/4","W5/16","W3/8","W1/2","W5/8","W3/4","W7/8","W1",
+  "D10","D13","D16","D19","D22","D25"];
+const ANCHOR_KIND_ORDER = ["ケミカルアンカー","オールアンカー","ボルトアンカー","グリップアンカー","差筋アンカー"];
+
+/* 集計表に出す種別名：接着系は「ケミカルアンカー」、金属系は製品名 */
+function anchorKindName(a){
+  if(a.type === "METAL"){
+    const s = String(a.series || "").replace(/（[^）]*）/g, "").replace(/\([^)]*\)/g, "").trim();
+    return s || "金属系アンカー";
+  }
+  if(a.type === "OTHER") return (a.typeOther || "その他").trim();
+  return "ケミカルアンカー";
+}
+/* 材工か支給か */
+function anchorSupLabel(a){
+  const sup = (a.type === "METAL") ? !!a.supMetal : (!!a.supChem || !!a.supBolt);
+  return sup ? "支給" : "材工";
+}
+function anchorLenOf(a){
+  if(a.len != null) return a.len;
+  if(a.emb != null) return a.emb + (a.proj || 0);
+  return null;
+}
+function anchorRowKey(a){
+  return [anchorKindName(a), a.size || "", anchorLenOf(a) == null ? "" : anchorLenOf(a), anchorSupLabel(a)].join("|");
+}
+function anchorRowLabel(key){
+  const p = key.split("|");
+  return { kind: p[0], size: p[1] || "—", len: p[2] === "" ? "—" : "全長" + p[2], sup: p[3] || "材工" };
+}
+/* 1件の日報の明細を、同じ条件で合算する */
+function aggregateAnchors(record){
+  const map = new Map();
+  (record.workers || []).forEach(w => {
+    (w.anchors || []).forEach(a => {
+      const k = anchorRowKey(a);
+      if(map.has(k)) map.get(k).qty += (a.qty || 0);
+      else map.set(k, { ...a, qty: a.qty || 0, __key: k });
+    });
+  });
+  return [...map.values()];
+}
+function anchorRowSort(ka, kb){
+  const A = anchorRowLabel(ka), B = anchorRowLabel(kb);
+  const ix = (arr,v) => { const i = arr.indexOf(v); return i < 0 ? 999 : i; };
+  if(ix(ANCHOR_KIND_ORDER,A.kind) !== ix(ANCHOR_KIND_ORDER,B.kind)) return ix(ANCHOR_KIND_ORDER,A.kind) - ix(ANCHOR_KIND_ORDER,B.kind);
+  if(A.kind !== B.kind) return A.kind.localeCompare(B.kind,"ja");
+  if(ix(ANCHOR_SIZE_ORDER,A.size) !== ix(ANCHOR_SIZE_ORDER,B.size)) return ix(ANCHOR_SIZE_ORDER,A.size) - ix(ANCHOR_SIZE_ORDER,B.size);
+  const la = parseInt(String(A.len).replace("全長",""),10) || 0;
+  const lb = parseInt(String(B.len).replace("全長",""),10) || 0;
+  if(la !== lb) return la - lb;
+  return A.sup.localeCompare(B.sup,"ja");
+}
+/* 引張試験：呼びごとの本数を日付別に */
+function aggregateAnchorTests(records){
+  const map = new Map();
+  records.forEach(r => {
+    const t = r.test;
+    if(!t || t.on !== true) return;
+    (t.rows || []).forEach(x => {
+      if(x.measured == null && !x.size) return;
+      const sz = x.size || "—";
+      if(!map.has(sz)) map.set(sz, { size: sz, byDate: {}, total: 0, ng: 0 });
+      const o = map.get(sz);
+      o.byDate[r.date] = (o.byDate[r.date] || 0) + 1;
+      o.total += 1;
+      if(x.judge === "不合格") o.ng += 1;
+    });
+  });
+  const ix = v => { const i = ANCHOR_SIZE_ORDER.indexOf(v); return i < 0 ? 999 : i; };
+  return [...map.values()].sort((a,b) => ix(a.size) - ix(b.size) || String(a.size).localeCompare(String(b.size),"ja"));
+}
+/* 鉄筋探査：やった日に○（アンカーは箇所数で数えにくいので有無だけ） */
+function aggregateAnchorTansa(records){
+  const byDate = {}; let days = 0;
+  records.forEach(r => {
+    const sv = r.survey;
+    if(!sv || sv.tansa !== true) return;
+    if(!byDate[r.date]){ byDate[r.date] = true; days++; }
+  });
+  return { byDate, days };
 }
 
 function aggregateHatsuri(records) {
@@ -1795,6 +1889,96 @@ function renderCoreTable(records, site, month, range, statsGrid, tableArea) {
   html += buildDiaryHTML(records, range);
   tableArea.innerHTML=html;
 }
+function renderAnchorTable(records, site, month, range, statsGrid, tableArea) {
+  const [year,mon] = month.split("-").map(Number);
+  const cutoff = parseInt(document.getElementById("sel-cutoff").value);
+  const cols = buildDateList(range);
+  const holidaysH = new Set([...getJapaneseHolidays(year-1), ...getJapaneseHolidays(year), ...getJapaneseHolidays(year+1)]);
+  const dCls = dt => (holidaysH.has(dt.key) || dt.wd === 0) ? 'sun' : dt.wd === 6 ? 'sat' : '';
+
+  // 行（種別・サイズ・全長・材料）
+  const rowSet = new Set(), rowKeys = [];
+  records.forEach(r => aggregateAnchors(r).forEach(a => {
+    if(!rowSet.has(a.__key)){ rowSet.add(a.__key); rowKeys.push(a.__key); }
+  }));
+  rowKeys.sort(anchorRowSort);
+
+  const gridByDate = {};
+  rowKeys.forEach(k => gridByDate[k] = {});
+  records.forEach(r => {
+    aggregateAnchors(r).forEach(a => {
+      gridByDate[a.__key][r.date] = (gridByDate[a.__key][r.date] || 0) + (a.qty || 0);
+    });
+  });
+
+  const testRows = aggregateAnchorTests(records);
+  const tansa = aggregateAnchorTansa(records);
+  const totalQty = rowKeys.reduce((s,k) => s + Object.values(gridByDate[k]).reduce((ss,v) => ss+v, 0), 0);
+  const totalTest = testRows.reduce((s,t) => s + t.total, 0);
+  const totalNg = testRows.reduce((s,t) => s + t.ng, 0);
+  const totalWorkers = new Set(records.flatMap(r => (r.workers||[]).map(w => w.name))).size;
+
+  statsGrid.classList.remove("hidden");
+  statsGrid.innerHTML = `
+    <div class="stat-card"><div class="stat-num">${records.length}</div><div class="stat-label">作業日数</div></div>
+    <div class="stat-card"><div class="stat-num">${totalWorkers}</div><div class="stat-label">延べ作業員</div></div>
+    <div class="stat-card"><div class="stat-num">${totalQty}</div><div class="stat-label">アンカー本数</div></div>
+    ${totalTest ? `<div class="stat-card"><div class="stat-num" style="color:var(--primary);">${totalTest}</div><div class="stat-label">引張試験（本）${totalNg ? "／不合格" + totalNg : ""}</div></div>` : ""}
+    ${tansa.days ? `<div class="stat-card"><div class="stat-num" style="color:var(--primary);">${tansa.days}</div><div class="stat-label">鉄筋探査（日）</div></div>` : ""}`;
+
+  let html = `<div class="monthly-wrap"><table class="monthly-tbl">`;
+  html += `<tr><th colspan="4">${year}年${mon}月${cutoff!==0?"〜"+range.end.slice(5):""}</th>`;
+  {
+    let prevM=null, spanStart=0, spans=[];
+    cols.forEach((dt,i)=>{
+      if(dt.m!==prevM){ if(prevM!==null) spans.push({m:prevM,count:i-spanStart}); spanStart=i; prevM=dt.m; }
+      if(i===cols.length-1) spans.push({m:dt.m,count:cols.length-spanStart});
+    });
+    spans.forEach(sp => html += `<th colspan="${sp.count}" style="background:#e8f0fe;color:#1a56db;">${sp.m}月</th>`);
+  }
+  html += `<th class="total-col">小計</th></tr>`;
+  html += `<tr><th>種別</th><th>サイズ</th><th>全長</th><th>材料</th>`;
+  cols.forEach(dt => {
+    const hasR = dvHas(dt.key);
+    html += `<th class="${dCls(dt)}${hasR?' dv-clickable':''}"${hasR?` onclick="dvOpen('${dt.key}')" title="この日の日報を表示"`:''}>${dt.d}<br><span style="font-weight:400;font-size:9px;">${["日","月","火","水","木","金","土"][dt.wd]}</span></th>`;
+  });
+  html += `<th class="total-col"></th></tr>`;
+
+  rowKeys.forEach(k => {
+    const l = anchorRowLabel(k);
+    const rt = Object.values(gridByDate[k]).reduce((s,v) => s+v, 0);
+    html += `<tr><td class="row-hd">${esc(l.kind)}</td><td>${esc(l.size)}</td><td>${esc(l.len)}</td>`
+         +  `<td style="font-size:10px;color:${l.sup==="支給"?"#b45309":"var(--text2)"};">${esc(l.sup)}</td>`;
+    cols.forEach(dt => { const v = gridByDate[k][dt.key]||null; html += `<td class="${dCls(dt)}">${v?`<span class="val">${v}</span>`:""}</td>`; });
+    html += `<td class="total-col">${rt}</td></tr>`;
+  });
+
+  // 引張試験（呼びごとの本数）
+  testRows.forEach(t => {
+    html += `<tr><td class="row-hd" colspan="2" style="background:#e8f0fe;color:var(--primary);">引張試験</td>`
+         +  `<td style="background:#e8f0fe;color:var(--primary);">${esc(t.size)}</td>`
+         +  `<td style="font-size:10px;color:var(--primary);background:#e8f0fe;">本</td>`;
+    cols.forEach(dt => { const v = t.byDate[dt.key]||null; html += `<td class="${dCls(dt)}">${v?`<span class="val" style="color:var(--primary);">${v}</span>`:""}</td>`; });
+    html += `<td class="total-col">${t.total}</td></tr>`;
+  });
+
+  // 鉄筋探査（有無）
+  if(tansa.days){
+    html += `<tr><td class="row-hd" colspan="3" style="background:#e8f0fe;color:var(--primary);">鉄筋探査</td>`
+         +  `<td style="font-size:10px;color:var(--primary);background:#e8f0fe;">有無</td>`;
+    cols.forEach(dt => { const v = tansa.byDate[dt.key]; html += `<td class="${dCls(dt)}">${v?`<span class="val" style="color:var(--primary);">○</span>`:""}</td>`; });
+    html += `<td class="total-col">${tansa.days}日</td></tr>`;
+  }
+
+  html += `<tr class="total-row"><td colspan="4">小計（アンカー本数）</td>`;
+  let grand = 0;
+  cols.forEach(dt => { const t = rowKeys.reduce((s,k) => s + (gridByDate[k][dt.key]||0), 0); grand += t; html += `<td>${t||""}</td>`; });
+  html += `<td class="total-col">${grand}</td></tr></table></div>`;
+  html += `<div class="hint">※ 日付（📄マーク）をタップすると、その日の日報がそのまま表示されます</div>`;
+  html += buildDiaryHTML(records, range);
+  tableArea.innerHTML = html;
+}
+
 // range.start〜range.endの日付配列を生成
 function buildDateList(range) {
   const dates = [];
@@ -1974,6 +2158,8 @@ function buildDiaryHTML(records, range) {
           if((w.end||'0') > (wkMap[w.name].end||'0')) wkMap[w.name].end = w.end;
         }
         (w.cores||[]).forEach(c => wkMap[w.name].cores.push(c));
+        if(!wkMap[w.name].anchors) wkMap[w.name].anchors = [];
+        (w.anchors||[]).forEach(a => wkMap[w.name].anchors.push(a));
       });
       (r.tools||[]).forEach(t => { dayToolMap[t.name] = (dayToolMap[t.name]||0) + t.qty; });
     });
@@ -1998,8 +2184,25 @@ function buildDiaryHTML(records, range) {
         <span class="diary-wname">${esc(w.name)}</span>
         <span class="diary-time">${timeStr}</span>`;
 
+      // アンカー明細（同じ条件は合算）
+      const ancMap = new Map();
+      (w.anchors || []).forEach(a => {
+        const k = anchorRowKey(a);
+        if(ancMap.has(k)) ancMap.get(k).qty += (a.qty || 0);
+        else ancMap.set(k, { ...a, qty: a.qty || 0 });
+      });
+      const ancList = [...ancMap.values()];
+      const ancTotal = ancList.reduce((s,a) => s + (a.qty||0), 0);
+      const ancStr = ancList.map(a => {
+        const L = anchorLenOf(a);
+        const sup = anchorSupLabel(a) === "支給" ? "（支給）" : "";
+        return `${esc(anchorKindName(a))} ${esc(a.size||"")}${L!=null?" 全長"+L:""} ${esc(a.dir||"")}${sup}×${a.qty||0}本`;
+      }).join("／");
+
       if (coreTotal > 0) {
         html += `<span class="diary-cores">${coreStr}　<b>計${coreTotal}本</b></span>`;
+      } else if (ancTotal > 0) {
+        html += `<span class="diary-cores">${ancStr}　<b>計${ancTotal}本</b></span>`;
       } else if (!Object.keys(dayToolMap).length) {
         html += `<span class="diary-nocores">穿孔なし</span>`;
       }
@@ -3627,7 +3830,7 @@ function dvPrint(){
 
 /* ---- 本体の組み立て ---- */
 // 明示的に表示済みのキー（これ以外は「その他の記入項目」に自動で出す）
-const DV_KNOWN = new Set(["id","date","app","type","client","customer","site",
+const DV_KNOWN = new Set(["id","date","app","type","client","customer","site","project","test",
   "workers","tools","survey","hatsuri","otherNote","waste","workDesc","needConfirm",
   "highway","useHighway","recordId","createdAt","appVersion","appBuild","version","_rev","_editCount",
   "revision","revisedAt","revisedBy","driveSent","driveSentAt","driveSkip","sent","sentAt"]);
@@ -3769,10 +3972,67 @@ function dvDetailHtml(r){
     h += `</div>`;
   }
 
+  /* アンカー明細（作業員別） */
+  const aGroups = (r.workers || []).map(w => {
+    const map = new Map();
+    (w.anchors || []).forEach(a => {
+      const k = anchorRowKey(a) + "|" + (a.dir||"") + "|" + (a.memo||"");
+      if(map.has(k)) map.get(k).qty += (a.qty||0);
+      else map.set(k, { ...a, qty: a.qty||0 });
+    });
+    const list = [...map.values()];
+    return { name: (typeof edWorkerLabel === "function" ? edWorkerLabel(w) : (w.name||"")) || (w.name||""),
+             start: w.start, end: w.end, hours: w.hours || 0,
+             list, total: list.reduce((s,a) => s + (a.qty||0), 0) };
+  }).filter(g => g.list.length);
+  if(aGroups.length){
+    const grandA = aGroups.reduce((s,g) => s + g.total, 0);
+    h += `<div class="dv-sec"><div class="dv-sec-t">⚓ アンカー明細（作業員別）</div>`;
+    aGroups.forEach(g => {
+      const st = cfHalf(g.start), en = cfHalf(g.end);
+      const tm = (st && en) ? `${st}〜${en}　実働${g.hours}h` : (g.hours ? `実働${g.hours}h` : "");
+      h += `<div class="dv-wgrp">` +
+           `<div class="dv-wgrp-t">👷 ${esc(g.name || "—")}` +
+           (tm ? `<span class="dv-wgrp-time">${esc(tm)}</span>` : "") +
+           `<span class="dv-wgrp-n">計${g.total}本</span></div>` +
+           `<div class="dv-scroll"><table class="dv-tbl"><tr><th>種別</th><th>サイズ</th><th>部位</th>` +
+           `<th>穿孔径</th><th>埋込</th><th>全長</th><th>材料</th><th>本数</th><th>メモ</th></tr>`;
+      g.list.forEach(a => {
+        const L = anchorLenOf(a);
+        h += `<tr><td class="l">${esc(anchorKindName(a))}</td><td>${esc(a.size||"—")}</td>` +
+             `<td>${esc(a.dir||"—")}</td><td>${a.dia!=null?"φ"+a.dia:"—"}</td>` +
+             `<td>${a.emb!=null?a.emb+"㎜":"—"}</td><td>${L!=null?L+"㎜":"—"}</td>` +
+             `<td>${esc(anchorSupLabel(a))}</td><td class="n">${a.qty||0}本</td>` +
+             `<td class="l">${esc(a.memo||"")}</td></tr>`;
+      });
+      h += `</table></div></div>`;
+    });
+    if(aGroups.length > 1) h += `<div class="dv-grand">この日報の合計　${grandA}本</div>`;
+    h += `</div>`;
+  }
+
+  /* 引張試験 */
+  const tst = r.test;
+  if(tst && tst.on === true && (tst.rows || []).length){
+    h += `<div class="dv-sec"><div class="dv-sec-t">🧪 引張試験（${esc(tst.machine||"")}　${tst.rows.length}本）</div>` +
+         `<div class="dv-scroll"><table class="dv-tbl"><tr><th>№</th><th>呼び</th><th>指定荷重</th><th>実施荷重</th><th>判定</th><th>写真</th><th>メモ</th></tr>`;
+    tst.rows.forEach((x,i) => {
+      const ph = (x.overall ? 1 : 0) + (x.value ? 1 : 0);
+      const ng = x.judge === "不合格";
+      h += `<tr><td>${i+1}</td><td>${esc(x.size||"—")}</td>` +
+           `<td class="n">${x.design!=null?x.design+" kN":"—"}</td>` +
+           `<td class="n">${x.measured!=null?x.measured+" kN":"—"}</td>` +
+           `<td style="${ng?"color:#b00020;font-weight:800;":""}">${esc(x.judge||"—")}</td>` +
+           `<td>${ph}/2</td><td class="l">${esc(x.memo||"")}</td></tr>`;
+    });
+    h += `</table></div></div>`;
+  }
+
   /* 調査（レントゲン・鉄筋探査） */
   const sv = r.survey;
   if(sv){
     const p = [];
+    if(sv.tansa && !sv.t300 && !sv.t600) p.push("鉄筋探査 あり");
     if(sv.xray && sv.xrayCount) p.push(`レントゲン検査 ${sv.xrayCount}枚`);
     if(sv.t300 && sv.t300Count) p.push(`鉄筋探査 □300 ${sv.t300Count}箇所`);
     if(sv.t600 && sv.t600Count) p.push(`鉄筋探査 □600 ${sv.t600Count}箇所`);
@@ -6046,8 +6306,29 @@ function nbJoyouLines(records){
   }catch(e){}
   return lines;
 }
+function nbAnchorLines(records){
+  const totals = {}, order = [];
+  records.forEach(r => aggregateAnchors(r).forEach(a => {
+    const k = a.__key;
+    if(!(k in totals)){ totals[k] = { key:k, qty:0 }; order.push(k); }
+    totals[k].qty += (a.qty || 0);
+  }));
+  order.sort(anchorRowSort);
+  const lines = order.map(k => {
+    const l = anchorRowLabel(k);
+    const nm = [l.kind, l.size === "—" ? "" : l.size, l.len === "—" ? "" : l.len,
+                l.sup === "支給" ? "（材料支給）" : ""].filter(Boolean).join(" ");
+    return { name: nm, qty: totals[k].qty };
+  });
+  aggregateAnchorTests(records).forEach(t => lines.push({ name: `引張試験 ${t.size}`, qty: t.total }));
+  const tn = aggregateAnchorTansa(records);
+  if(tn.days) lines.push({ name: "鉄筋探査", qty: tn.days });
+  return lines;
+}
 function nbLinesFor(records){
-  return activeType === "joyou" ? nbJoyouLines(records) : nbCoreLines(records);
+  if(activeType === "joyou")  return nbJoyouLines(records);
+  if(activeType === "anchor") return nbAnchorLines(records);
+  return nbCoreLines(records);
 }
 
 /* ---------- 雛形に書き込む ---------- */
