@@ -45,7 +45,7 @@
   </form>
 </div>
 <div id="root"></div>
-<script>window.__tbVer = "4.9.8";</script>
+<script>window.__tbVer = "4.9.9";</script>
 <script>
 /* 新しい版が出ていたら自動で読み直す（ホーム画面のアイコンが古い画面を覚えたままにならないように） */
 (function(){
@@ -161,7 +161,7 @@ const {
    定数
 ══════════════════════════════════════════════════════════ */
 const APP_NAME = "TOKUWAボード";
-const APP_VERSION = "4.9.8";
+const APP_VERSION = "4.9.9";
 const APP_UPDATED = "2026-11-22";
 /* 外部アプリ（日報）の初期リンク。設定から変更できる */
 const EXT_DEFAULT = {
@@ -1113,78 +1113,27 @@ const coreWorkText = (w, r) => {
   }
   return parts.join("\n");
 };
-/* 1日の流れ（時間の順に、作業・休憩・空き時間を並べる）。行の休憩が自動の値と同じなら、決まった休憩の時間で区切って見せる */
+/* 1日の流れ：現場ごとに「何時から何時まで作業したか」を、時間の早い順に並べる。
+   休憩はずらして取ることもあるので、休憩の時間帯は表に出さない（実働は休憩を引いた時間） */
 const minToHm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
-const dayFlow = rows => {
-  const list = (rows || []).map(r => ({
-    r,
-    a: toMin(r.from),
-    b: toMin(r.to)
-  })).filter(x => x.a != null && x.b != null && x.b > x.a && ((x.r.siteName || "").trim() || (x.r.client || "").trim() || (x.r.work || "").trim())).sort((x, y) => x.a - y.a);
-  const out = [];
-  let cur = null;
-  list.forEach(({
-    r,
-    a,
-    b
-  }, idx) => {
-    if (cur != null && a > cur) {
-      // 現場と現場のあいだ
-      const br = BREAKS.find(([x, y]) => toMin(x) <= cur && toMin(y) >= a);
-      out.push({
-        type: br ? "break" : "gap",
-        from: cur,
-        to: a,
-        label: br ? toMin(br[0]) === 720 ? "昼食休憩" : "休憩" : "移動・空き時間"
-      });
-    }
-    const name = [r.client, r.siteName].filter(Boolean).join("　") || "名前なし";
-    const std = (Number(r.rest) || 0) === autoRest(r.from, r.to);
-    if (std) {
-      let t = a;
-      BREAKS.map(([x, y]) => [Math.max(a, toMin(x)), Math.min(b, toMin(y)), toMin(x)]).filter(([x, y]) => y > x).forEach(([x, y, x0]) => {
-        if (x > t) out.push({
-          type: "work",
-          from: t,
-          to: x,
-          label: name,
-          work: r.work,
-          night: r.night,
-          n: idx
-        });
-        out.push({
-          type: "break",
-          from: x,
-          to: y,
-          label: x0 === 720 ? "昼食休憩" : "休憩"
-        });
-        t = y;
-      });
-      if (b > t) out.push({
-        type: "work",
-        from: t,
-        to: b,
-        label: name,
-        work: r.work,
-        night: r.night,
-        n: idx
-      });
-    } else {
-      out.push({
-        type: "work",
-        from: a,
-        to: b,
-        label: name,
-        work: r.work,
-        night: r.night,
-        n: idx,
-        rest: Number(r.rest) || 0
-      });
-    }
-    cur = Math.max(cur == null ? b : cur, b);
-  });
-  return out;
-};
+const dayFlow = rows => (rows || []).map(r => ({
+  r,
+  a: toMin(r.from),
+  b: toMin(r.to)
+})).filter(x => x.a != null && x.b != null && x.b > x.a && ((x.r.siteName || "").trim() || (x.r.client || "").trim() || (x.r.work || "").trim())).sort((x, y) => x.a - y.a).map(({
+  r,
+  a,
+  b
+}, n) => ({
+  type: "work",
+  from: a,
+  to: b,
+  label: [r.client, r.siteName].filter(Boolean).join("　") || "名前なし",
+  work: r.work,
+  night: r.night,
+  n,
+  rest: Number(r.rest) || 0
+}));
 const newNippoRow = () => ({
   id: nid(),
   eventId: null,
@@ -5404,13 +5353,7 @@ function App() {
           lineHeight: 1.6,
           marginTop: 2
         }
-      }, x.work), x.rest > 0 && /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 12,
-          color: "#92400e",
-          marginTop: 2
-        }
-      }, "うち休憩 ", x.rest, "分")) : /*#__PURE__*/React.createElement("span", {
+      }, x.work)) : /*#__PURE__*/React.createElement("span", {
         style: {
           fontWeight: 700,
           color: x.type === "gap" ? "#888" : "#92400e"
@@ -5424,32 +5367,14 @@ function App() {
           whiteSpace: "nowrap"
         }
       }, x.type === "work" ? minToHm(mins) : "—"));
-    }), /*#__PURE__*/React.createElement("tr", {
+    }))), flow.some(x => x.rest > 0) && /*#__PURE__*/React.createElement("div", {
       style: {
-        background: "#f0fdf4"
+        padding: "8px 14px 10px",
+        fontSize: 11,
+        color: "#999",
+        borderTop: "1px solid #e5e7eb"
       }
-    }, /*#__PURE__*/React.createElement("td", {
-      style: {
-        ...TD,
-        fontWeight: 800,
-        borderLeft: `5px solid ${GREEN}`
-      }
-    }, "合計"), /*#__PURE__*/React.createElement("td", {
-      style: {
-        ...TD,
-        fontSize: 12,
-        color: "#555"
-      }
-    }, holiday ? "休日出勤" : ot > 0 ? `うち残業 ${hmText(ot)}` : "休憩を引いた実働"), /*#__PURE__*/React.createElement("td", {
-      style: {
-        ...TD,
-        textAlign: "right",
-        fontWeight: 900,
-        fontSize: 16,
-        color: GREEN,
-        whiteSpace: "nowrap"
-      }
-    }, minToHm(total))))));
+    }, "実働は、休憩を引いた時間です。"));
   };
 
   /* ── 点検・報告 ── */
