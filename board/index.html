@@ -45,7 +45,7 @@
   </form>
 </div>
 <div id="root"></div>
-<script>window.__tbVer = "4.8.6";</script>
+<script>window.__tbVer = "4.8.7";</script>
 <script>
 /* 新しい版が出ていたら自動で読み直す（ホーム画面のアイコンが古い画面を覚えたままにならないように） */
 (function(){
@@ -161,7 +161,7 @@ const {
    定数
 ══════════════════════════════════════════════════════════ */
 const APP_NAME = "TOKUWAボード";
-const APP_VERSION = "4.8.6";
+const APP_VERSION = "4.8.7";
 const APP_UPDATED = "2026-11-22";
 /* 外部アプリ（日報）の初期リンク。設定から変更できる */
 const EXT_DEFAULT = {
@@ -6868,6 +6868,19 @@ function App() {
       none: list.filter(n => n.status === "none").length,
       diff: list.filter(n => diffOf(n) !== 0).length
     };
+    const siteName1 = r => [r.client, r.siteName].filter(Boolean).join("　") || "名前なし";
+    const siteSum = (() => {
+      const m = {};
+      own.slice().sort((a, b) => a.date.localeCompare(b.date)).forEach(n => n.rows.forEach(r => {
+        const k = siteName1(r);
+        m[k] = m[k] || {
+          name: k,
+          days: []
+        };
+        if (!m[k].days.includes(n.date)) m[k].days.push(n.date);
+      }));
+      return Object.values(m).sort((a, b) => b.days.length - a.days.length || a.days[0].localeCompare(b.days[0]));
+    })();
     const Cell = ({
       label,
       value,
@@ -6964,7 +6977,14 @@ function App() {
         minHeight: 52,
         boxShadow: "0 2px 8px rgba(0,153,51,.25)"
       }
-    }, "＋ 今日の日報を書く"), isEditor && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+    }, "＋ 日報を書く"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "#888",
+        margin: "-6px 4px 12px",
+        lineHeight: 1.7
+      }
+    }, "日付は書く画面で変えられます。書き忘れた日の分も、ここから書けます。"), isEditor && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
       onClick: () => nippoFileRef.current.click(),
       style: {
         width: "100%",
@@ -7053,11 +7073,22 @@ function App() {
       }
     }, yy, "年", mm, "月", who === "all" ? "　全員" : ""), /*#__PURE__*/React.createElement("button", {
       onClick: () => setNippoYm(shiftYm(nYm, 1)),
+      disabled: nYm >= ymNow,
       style: {
         ...SB,
-        padding: "8px 12px"
+        padding: "8px 12px",
+        opacity: nYm >= ymNow ? .3 : 1
       }
-    }, "›")), /*#__PURE__*/React.createElement("div", {
+    }, "›"), nYm !== ymNow && /*#__PURE__*/React.createElement("button", {
+      onClick: () => setNippoYm(ymNow),
+      style: {
+        ...SB,
+        padding: "8px 10px",
+        color: GREEN,
+        fontWeight: 800,
+        fontSize: 13
+      }
+    }, "今月")), isEditor ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         flexWrap: "wrap",
@@ -7108,7 +7139,73 @@ function App() {
         color: "#aaa",
         lineHeight: 1.6
       }
-    }, "残業は1日8時間を超えた分（休日出勤の日は除く）。夜間は「夜間」にした現場の時間。")), list.length === 0 && /*#__PURE__*/React.createElement("div", {
+    }, "残業は1日8時間を超えた分（休日出勤の日は除く）。夜間は「夜間」にした現場の時間。")) : /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: "12px 16px 14px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "baseline",
+        gap: 8
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        color: "#888",
+        fontWeight: 700
+      }
+    }, "この月の出勤"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 20,
+        fontWeight: 800,
+        color: "#111"
+      }
+    }, tot.days, "日"), tot.hol > 0 && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        fontWeight: 800,
+        color: "#b91c1c"
+      }
+    }, "（うち休日出勤 ", tot.hol, "日）")), siteSum.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "#888",
+        fontWeight: 700,
+        margin: "12px 0 4px"
+      }
+    }, "行った現場"), siteSum.map(x => /*#__PURE__*/React.createElement("div", {
+      key: x.name,
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "6px 0",
+        borderTop: "1px solid #f5f5f5"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        flex: 1,
+        minWidth: 0,
+        fontSize: 14,
+        fontWeight: 700,
+        color: "#222",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap"
+      }
+    }, x.name), /*#__PURE__*/React.createElement("span", {
+      style: {
+        flexShrink: 0,
+        fontSize: 12,
+        color: "#666"
+      }
+    }, x.days.length, "日", /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: "#aaa",
+        marginLeft: 6
+      }
+    }, x.days.map(d => Number(d.slice(8))).join("・"), "日"))))))), list.length === 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         background: "#fff",
         borderRadius: 12,
@@ -7118,7 +7215,7 @@ function App() {
         textAlign: "center",
         boxShadow: "0 1px 3px #0001"
       }
-    }, "この月の日報はまだありません"), list.length > 0 && /*#__PURE__*/React.createElement("div", {
+    }, "この月の日報はありません"), list.length > 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         background: "#fff",
         borderRadius: 14,
@@ -7180,7 +7277,7 @@ function App() {
       }, memberOf(n.by) && /*#__PURE__*/React.createElement(MemberDot, {
         m: memberOf(n.by),
         size: 18
-      }), memberOf(n.by) ? memberOf(n.by).name : "名前なし"), /*#__PURE__*/React.createElement("span", {
+      }), memberOf(n.by) ? memberOf(n.by).name : "名前なし"), who === "all" ? /*#__PURE__*/React.createElement("span", {
         style: {
           display: "block",
           fontSize: 12,
@@ -7190,7 +7287,32 @@ function App() {
           textOverflow: "ellipsis",
           whiteSpace: "nowrap"
         }
-      }, (n.rows.length ? n.rows : n.siteRows).map(r => r.client || r.siteName || "名前なし").join(" ／ ")), d !== 0 && /*#__PURE__*/React.createElement("span", {
+      }, (n.rows.length ? n.rows : n.siteRows).map(r => r.client || r.siteName || "名前なし").join(" ／ ")) : (n.rows.length ? n.rows : n.siteRows).map((r, ri) => /*#__PURE__*/React.createElement("span", {
+        key: ri,
+        style: {
+          display: "block",
+          marginTop: ri ? 5 : 0
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          display: "block",
+          fontSize: 14,
+          fontWeight: 700,
+          color: "#222",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap"
+        }
+      }, siteName1(r)), (r.work || r.from) && /*#__PURE__*/React.createElement("span", {
+        style: {
+          display: "block",
+          fontSize: 12,
+          color: "#888",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap"
+        }
+      }, r.from && r.to ? `${r.from}〜${r.to}` : "", r.work ? `　${r.work}` : ""))), d !== 0 && /*#__PURE__*/React.createElement("span", {
         style: {
           display: "block",
           fontSize: 11,
