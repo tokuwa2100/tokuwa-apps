@@ -45,7 +45,7 @@
   </form>
 </div>
 <div id="root"></div>
-<script>window.__tbVer = "4.8.7";</script>
+<script>window.__tbVer = "4.8.8";</script>
 <script>
 /* 新しい版が出ていたら自動で読み直す（ホーム画面のアイコンが古い画面を覚えたままにならないように） */
 (function(){
@@ -161,7 +161,7 @@ const {
    定数
 ══════════════════════════════════════════════════════════ */
 const APP_NAME = "TOKUWAボード";
-const APP_VERSION = "4.8.7";
+const APP_VERSION = "4.8.8";
 const APP_UPDATED = "2026-11-22";
 /* 外部アプリ（日報）の初期リンク。設定から変更できる */
 const EXT_DEFAULT = {
@@ -176,7 +176,7 @@ const LABELS = [{
   color: "#16a34a"
 }, {
   name: "仮予定",
-  color: "#f59e0b"
+  color: "#facc15"
 }, {
   name: "夜間作業",
   color: "#1f2937"
@@ -197,6 +197,8 @@ const LABELS = [{
   color: "#78716c"
 }];
 const lc = n => LABELS.find(l => l.name === n)?.color || "#aaa";
+const lt = n => n === "仮予定" ? "#3f2d00" : "#fff"; // ラベル色の上にのせる文字の色（黄色は濃い字）
+
 const DOW = ["日", "月", "火", "水", "木", "金", "土"];
 
 /* 国民の祝日（振替休日・国民の休日を含む） */
@@ -9096,7 +9098,7 @@ function App() {
       style: {
         fontSize: 11,
         fontWeight: 700,
-        color: "#fff",
+        color: lt(e.label),
         background: lc(e.label),
         padding: "3px 9px",
         borderRadius: 10,
@@ -9370,9 +9372,9 @@ function App() {
         height: BAR_H,
         background: lc(e.label),
         borderRadius: `${roundL ? 3 : 0}px ${roundR ? 3 : 0}px ${roundR ? 3 : 0}px ${roundL ? 3 : 0}px`,
-        color: "#fff",
+        color: lt(e.label),
         fontSize: 9,
-        fontWeight: 600,
+        fontWeight: 700,
         padding: "0 4px",
         lineHeight: `${BAR_H}px`,
         overflow: "hidden",
@@ -9792,7 +9794,7 @@ function App() {
   }, /*#__PURE__*/React.createElement("span", {
     style: {
       background: lc(detailEv.label),
-      color: "#fff",
+      color: lt(detailEv.label),
       fontSize: 11,
       fontWeight: 700,
       padding: "3px 10px",
@@ -10917,7 +10919,71 @@ function App() {
           textDecoration: "underline"
         }
       }, "個別指定をすべて解除して一律に戻す"))));
-    })(), /*#__PURE__*/React.createElement(Row, {
+    })(), form.kind === "site" ? /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: "12px 16px",
+        borderBottom: "1px solid #f3f4f6"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "#888",
+        fontWeight: 700,
+        marginBottom: 8
+      }
+    }, "🏷 予定の状態"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 10
+      }
+    }, ["仮予定", "確定"].map(n => {
+      const on = form.label === n;
+      return /*#__PURE__*/React.createElement("button", {
+        key: n,
+        type: "button",
+        onClick: () => setForm(f => ({
+          ...f,
+          label: n
+        })),
+        style: {
+          flex: 1,
+          minHeight: 54,
+          borderRadius: 14,
+          cursor: "pointer",
+          fontSize: 17,
+          fontWeight: 800,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+          border: `2.5px solid ${on ? lc(n) : "#e5e7eb"}`,
+          background: on ? lc(n) : "#fff",
+          color: on ? lt(n) : "#555"
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          width: 14,
+          height: 14,
+          borderRadius: "50%",
+          background: on ? lt(n) : lc(n),
+          flexShrink: 0
+        }
+      }), n);
+    })), /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      onClick: () => setSheet("label"),
+      style: {
+        marginTop: 8,
+        background: "none",
+        border: "none",
+        padding: "6px 0",
+        color: "#888",
+        fontSize: 13,
+        fontWeight: 700,
+        cursor: "pointer",
+        textDecoration: "underline"
+      }
+    }, ["仮予定", "確定"].includes(form.label) ? "ほかのラベルにする（夜間作業など）" : `今のラベル：${form.label}（変える）`)) : /*#__PURE__*/React.createElement(Row, {
       icon: "🏷",
       label: /*#__PURE__*/React.createElement("span", {
         style: {
