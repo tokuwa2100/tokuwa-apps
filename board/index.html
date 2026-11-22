@@ -45,7 +45,7 @@
   </form>
 </div>
 <div id="root"></div>
-<script>window.__tbVer = "4.8.9";</script>
+<script>window.__tbVer = "4.9.0";</script>
 <script>
 /* 新しい版が出ていたら自動で読み直す（ホーム画面のアイコンが古い画面を覚えたままにならないように） */
 (function(){
@@ -161,7 +161,7 @@ const {
    定数
 ══════════════════════════════════════════════════════════ */
 const APP_NAME = "TOKUWAボード";
-const APP_VERSION = "4.8.9";
+const APP_VERSION = "4.9.0";
 const APP_UPDATED = "2026-11-22";
 /* 外部アプリ（日報）の初期リンク。設定から変更できる */
 const EXT_DEFAULT = {
@@ -4098,6 +4098,13 @@ function App() {
   const [selDay, setSelDay] = useState(null);
   const [dayOpen, setDayOpen] = useState(false);
   const [detailId, setDetailId] = useState(null);
+  const calSwipe = useRef(null),
+    calSwiped = useRef(0); // 月の一覧を横にずらす操作
+  const [vlist, setVlist] = useState({
+    tab: "day",
+    day: null,
+    ym: null
+  }); // 車両点検の一覧（日ごと／月）
   const [detailEdit, setDetailEdit] = useState(false); // 詳細は見るだけ。「編集」を押した人（権限あり）だけ直せる
   useEffect(() => {
     setDetailEdit(false);
@@ -4150,7 +4157,8 @@ function App() {
   const myKyToday = me ? kys.find(k => k.id === me + "_" + todayKey) : null;
   const fgd = toKey(year, month, 1);
   const gk = abs => addDays(fgd, abs - fdow);
-  const visibleEvents = filterMember ? events.filter(e => e.members?.includes(filterMember)) : events;
+  const visibleEvents = events; // カレンダーは全員が同じものを見る（名前での絞り込みはしない）
+
   const NUM_H = 20,
     BAR_H = 14,
     BAR_G = 2,
@@ -4794,13 +4802,15 @@ function App() {
   /* ── 点検・報告 ── */
   const lastCheck = (kind, targetId, type) => checks.filter(c => c.kind === kind && c.targetId === targetId && (!type || c.type === type)).sort((a, b) => (b.ts || "").localeCompare(a.ts || ""))[0];
   const overdueBy = (c, limit) => !c ? -1 : daysBetween(c.date, todayKey) - limit;
-  /* 直近7日の「乗る前チェック」 */
-  const lastDaily = vid => vdaily.filter(x => x.vehicleId === vid && x.date > addDays(todayKey, -7) && x.date <= todayKey).sort((a, b) => (b.ts || "").localeCompare(a.ts || ""))[0] || null;
-  const weeklyNeeded = v => {
-    if (lastDaily(v.id)) return false;
-    const w = lastCheck("vehicle", v.id, "weekly");
-    return !w || daysBetween(w.date, todayKey) > 7;
-  };
+  /* 週の点検：水曜が起点。前の水曜から今日まで「乗る前チェック」が1回もない車は、車両担当が今週末（日曜）までに点検する。
+     点検の項目は乗る前チェックと同じ。点検すれば（＝乗る前チェックが1回入れば）消える */
+  const wkWed = addDays(todayKey, -((parseKey(todayKey).getDay() + 4) % 7)); // 直近の水曜
+  const wkPrev = addDays(wkWed, -7),
+    wkEnd = addDays(wkWed, 4); // 前の水曜／今週の日曜
+  const lastDaily = vid => vdaily.filter(x => x.vehicleId === vid && x.date >= wkPrev && x.date <= todayKey).sort((a, b) => (b.ts || "").localeCompare(a.ts || ""))[0] || null;
+  const weeklyNeeded = v => !lastDaily(v.id);
+  const wkOver = todayKey > wkEnd; // 週末を過ぎた（月・火）
+  const wkList = vehicles.filter(weeklyNeeded);
   const vehNeeds = v => {
     const m = lastCheck("vehicle", v.id, "monthly");
     return weeklyNeeded(v) || !m || daysBetween(m.date, todayKey) > 31;
@@ -4835,7 +4845,7 @@ function App() {
   };
   const lastOdo = vid => checks.filter(c => c.kind === "vehicle" && c.targetId === vid && c.odo).sort((a, b) => (b.ts || "").localeCompare(a.ts || ""))[0] || null;
   const dmgOf = vid => vdamage.filter(d => d.vehicleId === vid && !d.fixed).sort((a, b) => (b.ts || "").localeCompare(a.ts || ""));
-  const openVd = v => {
+  const openVd = (v, weekly) => {
     const ex = vdOf(v.id, todayKey);
     const lu = lastUsedBefore(v.id, todayKey);
     const stale = !lu || daysBetween(lu, todayKey) >= 7;
@@ -4855,7 +4865,8 @@ function App() {
       dmgs: [],
       draft: null,
       stale,
-      lastUsed: lu
+      lastUsed: lu,
+      weekly: !!weekly
     });
   };
   const saveVd = () => {
@@ -4902,7 +4913,8 @@ function App() {
       items: f.items,
       note: (f.note || "").trim(),
       newDamage: (f.newDamage || 0) + f.dmgs.length,
-      stale: !!f.stale
+      stale: !!f.stale,
+      weekly: !!f.weekly
     });
     setVdForm(null);
     setAsk({
@@ -5927,7 +5939,33 @@ function App() {
       color: "#9a3412",
       lineHeight: 1.7
     }
-  }, /*#__PURE__*/React.createElement("b", null, "このアカウントは見るだけの権限です。"), "日報・KY・チェックを出すには、ボードの共有設定で「投稿者」にしてもらってください。"), !me && /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("b", null, "このアカウントは見るだけの権限です。"), "日報・KY・チェックを出すには、ボードの共有設定で「投稿者」にしてもらってください。"), isVehMgr && wkList.length > 0 && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setView("vcheck"),
+    style: {
+      display: "block",
+      width: "100%",
+      textAlign: "left",
+      background: "#fef2f2",
+      border: "2px solid #f87171",
+      borderRadius: 14,
+      padding: "12px 14px",
+      marginBottom: 12,
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 15,
+      fontWeight: 900,
+      color: "#b91c1c",
+      marginBottom: 4
+    }
+  }, "🚗 週の点検をお願いします（", wkList.length, "台）", wkOver ? "　期限切れ" : ""), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "#7f1d1d",
+      lineHeight: 1.7
+    }
+  }, wkList.map(v => v.name || "名前なし").join("、"), /*#__PURE__*/React.createElement("br", null), "1週間 乗る前チェックがありません。", /*#__PURE__*/React.createElement("b", null, fmtDate(wkEnd), "（日）"), "までに点検してください。ここを押すと車両点検が開きます。")), !me && /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#fff",
       border: `2px solid ${GREEN}`,
@@ -7415,7 +7453,28 @@ function App() {
         margin: "0 4px 12px",
         lineHeight: 1.8
       }
-    }, /*#__PURE__*/React.createElement("b", null, "毎日"), "：乗る人が30秒の乗る前チェック（傷・警告灯・ドラレコ・タイヤ）", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("b", null, "週"), "：直近7日に乗る前チェックがない車だけ、車両担当がエンジンをかけて点検", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("b", null, "月"), "：車両担当が全台（灯火・タイヤ溝・車載品・ボンネットのレベル確認）"), vFaults.length > 0 && /*#__PURE__*/React.createElement("div", {
+    }, /*#__PURE__*/React.createElement("b", null, "毎日"), "：乗る人が30秒の乗る前チェック（傷・警告灯・ドラレコ・タイヤ）", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("b", null, "週"), "：水曜から次の水曜まで乗る前チェックが1回もない車は、車両担当が週末までに点検（項目は乗る前チェックと同じ）", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("b", null, "月"), "：車両担当が全台（灯火・タイヤ溝・車載品・ボンネットのレベル確認）"), wkList.length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#fef2f2",
+        border: "1.5px solid #fca5a5",
+        borderRadius: 14,
+        padding: "12px 14px",
+        marginBottom: 12
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 14,
+        fontWeight: 900,
+        color: "#b91c1c",
+        marginBottom: 4
+      }
+    }, "🚗 週の点検が必要な車：", wkList.length, "台", wkOver ? "（期限切れ）" : ""), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        color: "#7f1d1d",
+        lineHeight: 1.7
+      }
+    }, wkList.map(v => v.name || "名前なし").join("、"), /*#__PURE__*/React.createElement("br", null), fmtDate(wkPrev), "（水）から乗る前チェックがありません。", /*#__PURE__*/React.createElement("b", null, mgr ? mgr.name + "さん" : "車両担当"), "が", /*#__PURE__*/React.createElement("b", null, fmtDate(wkEnd), "（日）"), "までに点検してください。")), vFaults.length > 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         background: "#fff",
         borderRadius: 14,
@@ -7460,8 +7519,7 @@ function App() {
         lineHeight: 1.6
       }
     }, t.detail)))), vehicles.map(v => {
-      const w = lastCheck("vehicle", v.id, "weekly"),
-        m = lastCheck("vehicle", v.id, "monthly");
+      const m = lastCheck("vehicle", v.id, "monthly");
       const d = vdOf(v.id, todayKey),
         used = vehUsedOn(v.id, todayKey);
       const ld = lastDaily(v.id);
@@ -7548,7 +7606,7 @@ function App() {
           fontSize: 12,
           fontWeight: 700
         }
-      }, "週\u3000点検が必要") : /*#__PURE__*/React.createElement("span", {
+      }, "週\u3000点検が必要", wkOver ? "（期限切れ）" : `（${fmtDate(wkEnd)}まで）`) : /*#__PURE__*/React.createElement("span", {
         style: {
           padding: "4px 10px",
           borderRadius: 12,
@@ -7557,7 +7615,7 @@ function App() {
           fontSize: 12,
           fontWeight: 700
         }
-      }, "週\u3000", ld ? "乗る前チェックあり" : `${fmtDate(w.date)} ${memberOf(w.by)?.name || ""}`), chip(m, 31, "月"), sk !== null && sk <= 30 && /*#__PURE__*/React.createElement("span", {
+      }, "週\u3000", ld.weekly ? "点検済み" : "乗る前チェックあり"), chip(m, 31, "月"), sk !== null && sk <= 30 && /*#__PURE__*/React.createElement("span", {
         style: {
           padding: "4px 10px",
           borderRadius: 12,
@@ -7572,7 +7630,7 @@ function App() {
           color: "#666",
           marginBottom: 10
         }
-      }, ld ? /*#__PURE__*/React.createElement(React.Fragment, null, "直近の乗る前チェック：", /*#__PURE__*/React.createElement("b", null, fmtDate(ld.date), " ", memberOf(ld.by)?.name || ""), "（週点検は不要）") : wNeed ? /*#__PURE__*/React.createElement(React.Fragment, null, "7日間 乗る前チェックなし → ", /*#__PURE__*/React.createElement("b", null, mgr ? mgr.name : "車両担当"), "が週点検") : /*#__PURE__*/React.createElement(React.Fragment, null, "7日間 乗る前チェックなし → 週点検済み")), /*#__PURE__*/React.createElement("div", {
+      }, ld ? /*#__PURE__*/React.createElement(React.Fragment, null, "直近のチェック：", /*#__PURE__*/React.createElement("b", null, fmtDate(ld.date), " ", memberOf(ld.by)?.name || ""), ld.weekly ? "（週の点検）" : "") : /*#__PURE__*/React.createElement(React.Fragment, null, fmtDate(wkPrev), "（水）から乗る前チェックなし → ", /*#__PURE__*/React.createElement("b", null, mgr ? mgr.name : "車両担当"), "が", fmtDate(wkEnd), "（日）までに点検")), /*#__PURE__*/React.createElement("div", {
         style: {
           display: "flex",
           gap: 8,
@@ -7586,19 +7644,15 @@ function App() {
           fontSize: 13,
           background: "#0f766e"
         }
-      }, d ? "今日のチェックを見る" : "乗る前チェック"), /*#__PURE__*/React.createElement("button", {
-        onClick: () => openCheck("vehicle", v, "weekly"),
+      }, d ? "今日のチェックを見る" : "乗る前チェック"), wNeed && /*#__PURE__*/React.createElement("button", {
+        onClick: () => openVd(v, true),
         style: {
           ...PILL,
           padding: "10px 14px",
           fontSize: 13,
-          ...(wNeed ? {} : {
-            background: "#fff",
-            color: GREEN,
-            border: `1.5px solid ${GREEN}`
-          })
+          background: "#b91c1c"
         }
-      }, "週の点検"), /*#__PURE__*/React.createElement("button", {
+      }, "週の点検をする"), /*#__PURE__*/React.createElement("button", {
         onClick: () => openCheck("vehicle", v, "monthly"),
         style: {
           ...PILL,
@@ -7709,7 +7763,304 @@ function App() {
         color: "#bbb",
         fontSize: 13
       }
-    }, "設定で車両を登録してください"), CheckLog({
+    }, "設定で車両を登録してください"), (() => {
+      const day = vlist.day || todayKey,
+        ym = vlist.ym || todayKey.slice(0, 7);
+      const [ly, lm] = ym.split("-").map(Number);
+      const tabBtn = (k, t) => /*#__PURE__*/React.createElement("button", {
+        onClick: () => setVlist({
+          ...vlist,
+          tab: k
+        }),
+        style: {
+          flex: 1,
+          padding: "11px 0",
+          borderRadius: 12,
+          cursor: "pointer",
+          fontSize: 15,
+          fontWeight: 800,
+          minHeight: 46,
+          border: `2px solid ${vlist.tab === k ? "#0f766e" : "#e5e7eb"}`,
+          background: vlist.tab === k ? "#0f766e" : "#fff",
+          color: vlist.tab === k ? "#fff" : "#666"
+        }
+      }, t);
+      const ngOf = r => VD_ITEMS.filter(it => r.items && r.items[it.k] === "ng").map(it => it.ng);
+      return /*#__PURE__*/React.createElement("div", {
+        style: {
+          background: "#fff",
+          borderRadius: 14,
+          boxShadow: "0 1px 3px #0001",
+          overflow: "hidden",
+          marginTop: 16
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          padding: "13px 16px 4px",
+          fontSize: 13,
+          fontWeight: 800,
+          color: "#333"
+        }
+      }, "点検の一覧", /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 11,
+          color: "#999",
+          fontWeight: 600,
+          marginLeft: 8
+        }
+      }, "だれでも見られます")), /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          gap: 8,
+          padding: "8px 12px"
+        }
+      }, tabBtn("day", "日ごと"), tabBtn("month", "月")), vlist.tab === "day" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "4px 10px 8px"
+        }
+      }, /*#__PURE__*/React.createElement("button", {
+        onClick: () => setVlist({
+          ...vlist,
+          day: addDays(day, -1)
+        }),
+        style: {
+          ...SB,
+          padding: "8px 12px"
+        }
+      }, "‹"), /*#__PURE__*/React.createElement("div", {
+        style: {
+          flex: 1,
+          textAlign: "center",
+          fontSize: 15,
+          fontWeight: 800,
+          color: "#111"
+        }
+      }, fmtDateJ(day), day === todayKey ? "　今日" : ""), /*#__PURE__*/React.createElement("button", {
+        onClick: () => setVlist({
+          ...vlist,
+          day: addDays(day, 1)
+        }),
+        disabled: day >= todayKey,
+        style: {
+          ...SB,
+          padding: "8px 12px",
+          opacity: day >= todayKey ? .3 : 1
+        }
+      }, "›"), day !== todayKey && /*#__PURE__*/React.createElement("button", {
+        onClick: () => setVlist({
+          ...vlist,
+          day: null
+        }),
+        style: {
+          ...SB,
+          padding: "8px 10px",
+          color: GREEN,
+          fontWeight: 800,
+          fontSize: 13
+        }
+      }, "今日")), vehicles.map((v, i) => {
+        const r = vdOf(v.id, day),
+          used = vehUsedOn(v.id, day),
+          ng = r ? ngOf(r) : [];
+        const bad = ng.length > 0 || r && r.newDamage > 0;
+        return /*#__PURE__*/React.createElement("div", {
+          key: v.id,
+          style: {
+            padding: "11px 16px",
+            borderTop: "1px solid #f3f4f6",
+            background: bad ? "#fff7ed" : "#fff"
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 10
+          }
+        }, /*#__PURE__*/React.createElement("span", {
+          style: {
+            flex: 1,
+            minWidth: 0,
+            fontSize: 15,
+            fontWeight: 800,
+            color: "#111",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap"
+          }
+        }, v.name || "名前なし"), r ? /*#__PURE__*/React.createElement("span", {
+          style: {
+            flexShrink: 0,
+            fontSize: 12,
+            fontWeight: 800,
+            padding: "4px 10px",
+            borderRadius: 12,
+            background: bad ? "#fee2e2" : "#dcfce7",
+            color: bad ? "#b91c1c" : "#166534"
+          }
+        }, bad ? "⚠ 気になる点あり" : "✓ 異常なし") : /*#__PURE__*/React.createElement("span", {
+          style: {
+            flexShrink: 0,
+            fontSize: 12,
+            fontWeight: 700,
+            padding: "4px 10px",
+            borderRadius: 12,
+            background: used ? "#ffedd5" : "#f3f4f6",
+            color: used ? "#c2410c" : "#999"
+          }
+        }, used ? "配車あり・チェックなし" : "チェックなし")), r && /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: 12,
+            color: "#666",
+            marginTop: 4
+          }
+        }, memberOf(r.by)?.name || "名前なし", "\u3000", hhmm(r.ts), r.weekly ? "　週の点検" : ""), ng.length > 0 && /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: 13,
+            fontWeight: 700,
+            color: "#b91c1c",
+            marginTop: 4,
+            lineHeight: 1.6
+          }
+        }, ng.join("・")), r && r.newDamage > 0 && /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: 13,
+            fontWeight: 700,
+            color: "#b45309",
+            marginTop: 2
+          }
+        }, "新しい傷 ", r.newDamage, "件"), r && r.note && /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: 13,
+            color: "#444",
+            marginTop: 2,
+            whiteSpace: "pre-wrap",
+            lineHeight: 1.6
+          }
+        }, r.note));
+      }), /*#__PURE__*/React.createElement("div", {
+        style: {
+          padding: "8px 16px 12px",
+          fontSize: 11,
+          color: "#aaa"
+        }
+      }, "さかのぼれるのは30日前までです。")), vlist.tab === "month" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "4px 10px 8px"
+        }
+      }, /*#__PURE__*/React.createElement("button", {
+        onClick: () => setVlist({
+          ...vlist,
+          ym: shiftYm(ym, -1)
+        }),
+        style: {
+          ...SB,
+          padding: "8px 12px"
+        }
+      }, "‹"), /*#__PURE__*/React.createElement("div", {
+        style: {
+          flex: 1,
+          textAlign: "center",
+          fontSize: 15,
+          fontWeight: 800,
+          color: "#111"
+        }
+      }, ly, "年", lm, "月"), /*#__PURE__*/React.createElement("button", {
+        onClick: () => setVlist({
+          ...vlist,
+          ym: shiftYm(ym, 1)
+        }),
+        disabled: ym >= ymNow,
+        style: {
+          ...SB,
+          padding: "8px 12px",
+          opacity: ym >= ymNow ? .3 : 1
+        }
+      }, "›")), vehicles.map(v => {
+        const ms = checks.filter(c => c.kind === "vehicle" && c.targetId === v.id && c.type === "monthly" && (c.date || "").slice(0, 7) === ym).sort((a, b) => (b.ts || "").localeCompare(a.ts || ""));
+        const dn = vdaily.filter(x => x.vehicleId === v.id && (x.date || "").slice(0, 7) === ym).length;
+        return /*#__PURE__*/React.createElement("div", {
+          key: v.id,
+          style: {
+            padding: "11px 16px",
+            borderTop: "1px solid #f3f4f6"
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 10
+          }
+        }, /*#__PURE__*/React.createElement("span", {
+          style: {
+            flex: 1,
+            minWidth: 0,
+            fontSize: 15,
+            fontWeight: 800,
+            color: "#111",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap"
+          }
+        }, v.name || "名前なし"), ms.length === 0 && /*#__PURE__*/React.createElement("span", {
+          style: {
+            flexShrink: 0,
+            fontSize: 12,
+            fontWeight: 700,
+            padding: "4px 10px",
+            borderRadius: 12,
+            background: "#f3f4f6",
+            color: "#999"
+          }
+        }, "月の点検なし")), ms.map(c => /*#__PURE__*/React.createElement("div", {
+          key: c.id,
+          onClick: () => setCheckView(c),
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginTop: 6,
+            padding: "9px 10px",
+            borderRadius: 10,
+            background: c.ng ? "#fef2f2" : c.warn ? "#fff7ed" : "#f0fdf4",
+            cursor: "pointer",
+            minHeight: 44
+          }
+        }, /*#__PURE__*/React.createElement("span", {
+          style: {
+            flex: 1,
+            fontSize: 13,
+            color: "#222"
+          }
+        }, /*#__PURE__*/React.createElement("b", null, fmtDate(c.date)), "\u3000", memberOf(c.by)?.name || "名前なし"), /*#__PURE__*/React.createElement("span", {
+          style: {
+            fontSize: 12,
+            fontWeight: 800,
+            color: c.ng ? "#b91c1c" : c.warn ? "#c2410c" : "#166534"
+          }
+        }, c.ng ? `要整備${c.ng}` : c.warn ? `要注意${c.warn}` : "良"), /*#__PURE__*/React.createElement("span", {
+          style: {
+            fontSize: 18,
+            color: "#ccc"
+          }
+        }, "›"))), dn > 0 && /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: 11,
+            color: "#999",
+            marginTop: 5
+          }
+        }, "乗る前チェック：", dn, "日"));
+      }), /*#__PURE__*/React.createElement("div", {
+        style: {
+          height: 8
+        }
+      })));
+    })(), CheckLog({
       kind: "vehicle"
     }));
   })(), view === "guide" && (() => {
@@ -7792,7 +8143,7 @@ function App() {
     }), /*#__PURE__*/React.createElement(G, {
       title: "担当者",
       color: "#b45309",
-      rows: [["工具担当", "故障・異常の報告を受けて処置を記録。機械の月の点検"], ["車両担当", "車の異常を受ける。乗る前チェックが7日ない車の週点検。全台の月の点検。直した傷を「直した」に"]]
+      rows: [["工具担当", "故障・異常の報告を受けて処置を記録。機械の月の点検"], ["車両担当", "車の異常を受ける。水曜から1週間 乗る前チェックがない車を週末までに点検（項目は乗る前チェックと同じ）。全台の月の点検。直した傷を「直した」に"]]
     }), /*#__PURE__*/React.createElement("div", {
       style: {
         background: "#fff",
@@ -9211,43 +9562,7 @@ function App() {
       color: "#999",
       marginTop: 4
     }
-  }, "この端末だけに保存しています（共有URLから開くと全員で共有されます）"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 6,
-      marginTop: 6,
-      overflowX: "auto"
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => setFilterMember(null),
-    style: {
-      padding: "8px 14px",
-      borderRadius: 20,
-      border: "none",
-      fontSize: 13,
-      fontWeight: 700,
-      cursor: "pointer",
-      whiteSpace: "nowrap",
-      minHeight: 36,
-      background: !filterMember ? "#111" : "#f0f0f0",
-      color: !filterMember ? "#fff" : "#666"
-    }
-  }, "全員"), members.map(m => /*#__PURE__*/React.createElement("button", {
-    key: m.id,
-    onClick: () => setFilterMember(filterMember === m.id ? null : m.id),
-    style: {
-      padding: "8px 14px",
-      borderRadius: 20,
-      border: "none",
-      fontSize: 13,
-      fontWeight: 700,
-      cursor: "pointer",
-      whiteSpace: "nowrap",
-      minHeight: 36,
-      background: filterMember === m.id ? m.color : "#f0f0f0",
-      color: filterMember === m.id ? "#fff" : "#666"
-    }
-  }, m.name)))), /*#__PURE__*/React.createElement(BrandLine, {
+  }, "この端末だけに保存しています（共有URLから開くと全員で共有されます）")), /*#__PURE__*/React.createElement(BrandLine, {
     h: 3
   }), loadNote && /*#__PURE__*/React.createElement("div", {
     style: {
@@ -9304,7 +9619,27 @@ function App() {
       flex: 1,
       display: "flex",
       flexDirection: "column",
-      overflow: "hidden"
+      overflow: "hidden",
+      touchAction: "pan-y"
+    },
+    onTouchStart: e => {
+      const t = e.touches[0];
+      calSwipe.current = {
+        x: t.clientX,
+        y: t.clientY
+      };
+    },
+    onTouchEnd: e => {
+      const st = calSwipe.current;
+      calSwipe.current = null;
+      if (!st) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - st.x,
+        dy = t.clientY - st.y;
+      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        calSwiped.current = Date.now();
+        if (dx < 0) nextM();else prevM();
+      }
     }
   }, weeksData.map((week, ri) => /*#__PURE__*/React.createElement("div", {
     key: ri,
@@ -9437,6 +9772,7 @@ function App() {
   }, week.cols.map((dk, col) => /*#__PURE__*/React.createElement("div", {
     key: col,
     onClick: () => {
+      if (Date.now() - calSwiped.current < 400) return;
       setSelDay(dk);
       setDayOpen(true);
     },
@@ -12323,17 +12659,6 @@ function App() {
     icon: "📋",
     label: "点検の項目"
   }, [{
-    key: "vw",
-    label: "車両・週の点検（乗る前チェックがない車）",
-    list: vehItems.weekly,
-    put: l => persistInspect({
-      vehItems: {
-        ...vehItems,
-        ver: 3,
-        weekly: l
-      }
-    })
-  }, {
     key: "vm",
     label: "車両・月の点検",
     list: vehItems.monthly,
@@ -16441,7 +16766,7 @@ function App() {
         color: "#888",
         fontWeight: 700
       }
-    }, "乗る前チェック\u3000", fmtDateJ(f.date)), /*#__PURE__*/React.createElement("div", {
+    }, f.weekly ? "週の点検（乗る前チェックと同じ項目）" : "乗る前チェック", "\u3000", fmtDateJ(f.date)), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 17,
         fontWeight: 800,
