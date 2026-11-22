@@ -259,6 +259,16 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   .specT th,.specT td{border:1px solid #cfd6de;padding:4px 6px}
   .specT th{background:#eef2f7;white-space:nowrap}
   .specT input{width:100%;padding:6px;font-size:14px}
+
+  /* 横に少し揺れる（横スクロールが出る）のを防ぐ
+     ・flex／grid の中身は既定で「最小幅＝中身の幅」になり、写真や長い行がはみ出す
+     ・はみ出しを止めたうえで、最後の保険として横スクロール自体を切る */
+  .tphotos > .tph{min-width:0}
+  .tph .thumb{max-width:100%}
+  .coreGrid > *,.coreGrid2 > *,.coreGrid2x > *,.grid-basic > *{min-width:0}
+  .coreRowTop{flex-wrap:wrap}
+  .coreRow,.section,.card{overflow-wrap:anywhere}
+  html,body{overflow-x:hidden;max-width:100%}
 </style>
 </head>
 
@@ -563,7 +573,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "anchor";
-const APP_VERSION   = "1.5.1";
+const APP_VERSION   = "1.5.2";
 const APP_BUILD     = "2026-11-22";
 
 (function(){
