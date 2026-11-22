@@ -45,7 +45,7 @@
   </form>
 </div>
 <div id="root"></div>
-<script>window.__tbVer = "4.8.5";</script>
+<script>window.__tbVer = "4.8.6";</script>
 <script>
 /* 新しい版が出ていたら自動で読み直す（ホーム画面のアイコンが古い画面を覚えたままにならないように） */
 (function(){
@@ -161,7 +161,7 @@ const {
    定数
 ══════════════════════════════════════════════════════════ */
 const APP_NAME = "TOKUWAボード";
-const APP_VERSION = "4.8.5";
+const APP_VERSION = "4.8.6";
 const APP_UPDATED = "2026-11-22";
 /* 外部アプリ（日報）の初期リンク。設定から変更できる */
 const EXT_DEFAULT = {
@@ -5624,13 +5624,18 @@ function App() {
     const sub = [...(e.works || []).map(w => `${wt(w.type)?.name || ""} ${workSummary(w)}`.trim()), e.workNote, e.memo].filter(Boolean).join("　");
     const ms = (e.members || []).map(memberOf).filter(Boolean);
     return /*#__PURE__*/React.createElement("div", {
+      role: "button",
       onClick: () => openDetail(e),
       style: {
         display: "flex",
         alignItems: "stretch",
         cursor: "pointer",
-        borderBottom: last ? "none" : "1px solid #f3f4f6",
-        minHeight: 64
+        borderBottom: last ? "none" : "1px solid #eceef0",
+        minHeight: 78,
+        WebkitTapHighlightColor: "rgba(22,163,74,.18)",
+        touchAction: "manipulation",
+        userSelect: "none",
+        WebkitUserSelect: "none"
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
@@ -5659,8 +5664,11 @@ function App() {
     }), /*#__PURE__*/React.createElement("div", {
       style: {
         flex: 1,
-        padding: "14px 12px",
-        minWidth: 0
+        padding: "18px 12px",
+        minWidth: 0,
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center"
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
@@ -5691,13 +5699,23 @@ function App() {
         display: "flex",
         alignItems: "center",
         gap: 3,
-        paddingRight: 14
+        paddingRight: 6
       }
     }, ms.map(m => /*#__PURE__*/React.createElement(MemberDot, {
       key: m.id,
       m: m,
       size: 32
-    }))));
+    }))), /*#__PURE__*/React.createElement("div", {
+      "aria-hidden": "true",
+      style: {
+        display: "flex",
+        alignItems: "center",
+        paddingRight: 14,
+        color: "#c4c8cc",
+        fontSize: 24,
+        fontWeight: 700
+      }
+    }, "›"));
   };
   const FI = {
     width: "100%",
@@ -9469,17 +9487,21 @@ function App() {
       right: 0,
       background: "#fff",
       borderRadius: "18px 18px 0 0",
-      maxHeight: "80vh",
+      height: "86vh",
       display: "flex",
       flexDirection: "column",
       overflow: "hidden",
       transform: `translateY(${swipeDy}px)`,
       transition: swipeDy === 0 ? "transform .25s ease" : "none"
     },
-    onClick: e => e.stopPropagation(),
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("div", {
     onTouchStart: onPanelTouchStart,
     onTouchMove: onPanelTouchMove,
-    onTouchEnd: onPanelTouchEnd
+    onTouchEnd: onPanelTouchEnd,
+    style: {
+      flexShrink: 0
+    }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
@@ -9541,12 +9563,19 @@ function App() {
       marginTop: 12,
       flexShrink: 0
     }
-  }), /*#__PURE__*/React.createElement("div", {
+  })), /*#__PURE__*/React.createElement("div", {
     style: {
       flex: 1,
-      overflow: "auto"
+      overflow: "auto",
+      WebkitOverflowScrolling: "touch"
     }
-  }, dayEvs.length === 0 && /*#__PURE__*/React.createElement("p", {
+  }, dayEvs.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#9ca3af",
+      padding: "8px 20px 2px"
+    }
+  }, "現場をタップすると詳細が開きます"), dayEvs.length === 0 && /*#__PURE__*/React.createElement("p", {
     style: {
       color: "#bbb",
       textAlign: "center",
@@ -9560,7 +9589,7 @@ function App() {
     last: idx === dayEvs.length - 1
   }))), /*#__PURE__*/React.createElement("div", {
     style: {
-      height: 20
+      height: 110
     }
   })))), detailEv && /*#__PURE__*/React.createElement("div", {
     style: {
