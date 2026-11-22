@@ -45,7 +45,7 @@
   </form>
 </div>
 <div id="root"></div>
-<script>window.__tbVer = "4.10.3";</script>
+<script>window.__tbVer = "4.10.4";</script>
 <script>
 /* 新しい版が出ていたら自動で読み直す（ホーム画面のアイコンが古い画面を覚えたままにならないように） */
 (function(){
@@ -161,7 +161,7 @@ const {
    定数
 ══════════════════════════════════════════════════════════ */
 const APP_NAME = "TOKUWAボード";
-const APP_VERSION = "4.10.3";
+const APP_VERSION = "4.10.4";
 const APP_UPDATED = "2026-11-22";
 /* 外部アプリ（日報）の初期リンク。設定から変更できる */
 const EXT_DEFAULT = {
@@ -5244,6 +5244,125 @@ function App() {
     };
   }, [nfKey, siteFetchTick]);
 
+  /* 「1日の流れ」の図：横が時間。現場ごとに色のついた帯で、何時から何時までかが一目で分かる */
+  const flowChart = (rows, onTap) => {
+    const COLS = ["#0f766e", "#1d4ed8", "#b45309", "#7c3aed", "#be185d"];
+    const xs = (rows || []).map((r, i) => ({
+      r,
+      i,
+      a: toMin(r.from),
+      b: toMin(r.to)
+    })).filter(x => x.a != null && x.b != null && x.b > x.a && ((x.r.siteName || "").trim() || (x.r.client || "").trim() || (x.r.work || "").trim())).sort((x, y) => x.a - y.a || x.i - y.i);
+    if (!xs.length) return null;
+    const h0 = Math.min(7, Math.floor(Math.min(...xs.map(x => x.a)) / 60)),
+      h1 = Math.max(18, Math.ceil(Math.max(...xs.map(x => x.b)) / 60));
+    const span = (h1 - h0) * 60,
+      pc = m => (m - h0 * 60) / span * 100;
+    const step = h1 - h0 > 13 ? 2 : 1,
+      hours = [];
+    for (let h = h0; h <= h1; h += step) hours.push(h);
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: "10px 14px 12px",
+        borderBottom: "1px solid #e5e7eb",
+        background: "#fcfcfd"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "relative",
+        height: 16,
+        marginBottom: 2
+      }
+    }, hours.map(h => /*#__PURE__*/React.createElement("span", {
+      key: h,
+      style: {
+        position: "absolute",
+        left: pc(h * 60) + "%",
+        transform: h === h0 ? "none" : h === h1 ? "translateX(-100%)" : "translateX(-50%)",
+        fontSize: 11,
+        fontWeight: 700,
+        color: "#888"
+      }
+    }, h))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "relative"
+      }
+    }, hours.map(h => /*#__PURE__*/React.createElement("span", {
+      key: h,
+      style: {
+        position: "absolute",
+        top: 0,
+        bottom: 0,
+        left: pc(h * 60) + "%",
+        width: 1,
+        background: h === 12 ? "#d1d5db" : "#eceef1"
+      }
+    })), xs.map((x, k) => {
+      const c = COLS[k % COLS.length],
+        l = pc(x.a),
+        w = pc(x.b) - pc(x.a);
+      const label = [x.r.client, x.r.siteName].filter(Boolean).join("　") || "（場所なし）";
+      const txt = `${x.r.from.replace(/^0/, "")}〜${x.r.to.replace(/^0/, "")}　${label}`;
+      const inside = w >= 42,
+        rightSide = l + w <= 55;
+      return /*#__PURE__*/React.createElement("div", {
+        key: x.r.id || k,
+        onClick: onTap ? () => onTap(x.r) : undefined,
+        style: {
+          position: "relative",
+          height: 30,
+          marginBottom: 4,
+          cursor: onTap ? "pointer" : "default"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          position: "absolute",
+          left: l + "%",
+          width: w + "%",
+          top: 2,
+          bottom: 2,
+          minWidth: 4,
+          background: c,
+          borderRadius: 6,
+          overflow: "hidden",
+          display: "flex",
+          alignItems: "center"
+        }
+      }, inside && /*#__PURE__*/React.createElement("span", {
+        style: {
+          padding: "0 7px",
+          fontSize: 12,
+          fontWeight: 800,
+          color: "#fff",
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis"
+        }
+      }, txt)), !inside && /*#__PURE__*/React.createElement("span", {
+        style: {
+          position: "absolute",
+          top: 0,
+          height: 30,
+          display: "flex",
+          alignItems: "center",
+          fontSize: 12,
+          fontWeight: 800,
+          color: c,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          ...(rightSide ? {
+            left: `calc(${l + w}% + 6px)`,
+            right: 0
+          } : {
+            right: `calc(${100 - l}% + 6px)`,
+            left: 0,
+            justifyContent: "flex-end"
+          })
+        }
+      }, txt));
+    })));
+  };
   /* 「1日の流れ」の表（日報を書く画面と、過去の日報を見る窓の両方で使う） */
   const flowTable = (rows, holiday, BOX) => {
     const total = sumMin(rows),
@@ -5282,7 +5401,7 @@ function App() {
         fontSize: 13,
         color: "#555"
       }
-    }, minToHm(flow[0].from), "〜", minToHm(flow[flow.length - 1].to))), /*#__PURE__*/React.createElement("table", {
+    }, minToHm(flow[0].from), "〜", minToHm(flow[flow.length - 1].to))), flowChart(rows), /*#__PURE__*/React.createElement("table", {
       style: {
         width: "100%",
         borderCollapse: "collapse",
@@ -16565,7 +16684,7 @@ function App() {
         color: "#888",
         marginTop: 2
       }
-    }, "時間の順にならびます。時間を変えると、すぐに並びが変わります。行を押すと直せます。")), (() => {
+    }, "時間を入れると、上の図と下の並びがすぐに変わります。帯や行を押すと直せます。")), flowChart(f.rows, r => setNippoOpenRow(r.id)), (() => {
       const srt = f.rows.map((r, i) => ({
         r,
         i
