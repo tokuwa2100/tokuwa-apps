@@ -410,7 +410,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
         <button class="btn" type="button" onclick="goConfirm()">作業確認</button>
       </div>
 
-      <details id="specMaster" class="noshot" style="margin:18px 0 6px;padding:10px 12px;border:1px solid #ccd;border-radius:10px;background:#f7f8fb;">
+      <details id="specMaster" class="noshot" style="display:none;margin:18px 0 6px;padding:10px 12px;border:1px solid #ccd;border-radius:10px;background:#f7f8fb;">
         <summary style="font-weight:700;font-size:14px;cursor:pointer;">⚙ 規格マスタ（穿孔径・埋込長）の確認・変更</summary>
         <div style="font-size:13px;line-height:1.6;margin:8px 0;">呼びを選んだときに自動で入る値です。メーカー仕様と違っていたらここで直してください（直した値はこの端末に保存され、次からそれが入ります）。</div>
         <select id="specType" onchange="renderSpecTable()" style="margin-bottom:8px;"></select>
@@ -573,7 +573,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "anchor";
-const APP_VERSION   = "1.5.2";
+const APP_VERSION   = "1.5.3";
 const APP_BUILD     = "2026-11-22";
 
 (function(){
