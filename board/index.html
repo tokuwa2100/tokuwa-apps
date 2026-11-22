@@ -45,7 +45,7 @@
   </form>
 </div>
 <div id="root"></div>
-<script>window.__tbVer = "4.9.7";</script>
+<script>window.__tbVer = "4.9.8";</script>
 <script>
 /* 新しい版が出ていたら自動で読み直す（ホーム画面のアイコンが古い画面を覚えたままにならないように） */
 (function(){
@@ -161,7 +161,7 @@ const {
    定数
 ══════════════════════════════════════════════════════════ */
 const APP_NAME = "TOKUWAボード";
-const APP_VERSION = "4.9.7";
+const APP_VERSION = "4.9.8";
 const APP_UPDATED = "2026-11-22";
 /* 外部アプリ（日報）の初期リンク。設定から変更できる */
 const EXT_DEFAULT = {
@@ -2741,6 +2741,7 @@ function App() {
   const [leaveForm, setLeaveForm] = useState(null); // 申請の入力・確認
   const [nippos, setNippos] = useState([]); // 個人日報
   const [nippoForm, setNippoForm] = useState(null); // 日報の入力
+  const [nippoView, setNippoView] = useState(null); // 過去の日報を見る窓（日報のID）
   const [siteMap, setSiteMap] = useState({}); // 日報アプリから読み込んだ現場日報（事務だけが見る）  key: 人_日付
   const [nippoOwners, setNippoOwners] = useState({}); // 提出先の持ち主 uid → { memberId }
   const myUidRef = useRef(null);
@@ -5291,6 +5292,166 @@ function App() {
     };
   }, [nfKey, siteFetchTick]);
 
+  /* 「1日の流れ」の表（日報を書く画面と、過去の日報を見る窓の両方で使う） */
+  const flowTable = (rows, holiday, BOX) => {
+    const total = sumMin(rows),
+      ot = holiday ? 0 : Math.max(0, total - STD_MIN);
+    const flow = dayFlow(rows);
+    if (!flow.length) return null;
+    const COLS = ["#0f766e", "#1d4ed8", "#b45309", "#7c3aed", "#be185d"];
+    const TD = {
+      padding: "9px 8px",
+      borderTop: "1px solid #e5e7eb",
+      fontSize: 14,
+      verticalAlign: "top"
+    };
+    let lastN = -1;
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        ...BOX,
+        padding: 0,
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        padding: "12px 14px 10px"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        flex: 1,
+        fontSize: 14,
+        fontWeight: 800,
+        color: "#111"
+      }
+    }, "🕒 1日の流れ"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 13,
+        color: "#555"
+      }
+    }, minToHm(flow[0].from), "〜", minToHm(flow[flow.length - 1].to))), /*#__PURE__*/React.createElement("table", {
+      style: {
+        width: "100%",
+        borderCollapse: "collapse",
+        tableLayout: "fixed"
+      }
+    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", {
+      style: {
+        background: "#f3f4f6"
+      }
+    }, /*#__PURE__*/React.createElement("th", {
+      style: {
+        ...TD,
+        width: 88,
+        textAlign: "left",
+        fontSize: 12,
+        color: "#666",
+        borderTop: "none"
+      }
+    }, "時間"), /*#__PURE__*/React.createElement("th", {
+      style: {
+        ...TD,
+        textAlign: "left",
+        fontSize: 12,
+        color: "#666",
+        borderTop: "none"
+      }
+    }, "内容"), /*#__PURE__*/React.createElement("th", {
+      style: {
+        ...TD,
+        width: 50,
+        textAlign: "right",
+        fontSize: 12,
+        color: "#666",
+        borderTop: "none"
+      }
+    }, "実働"))), /*#__PURE__*/React.createElement("tbody", null, flow.map((x, k) => {
+      const first = x.type === "work" && x.n !== lastN;
+      if (x.type === "work") lastN = x.n;
+      const c = x.type === "work" ? COLS[x.n % COLS.length] : null;
+      const mins = x.type === "work" ? x.to - x.from - (x.rest || 0) : 0;
+      return /*#__PURE__*/React.createElement("tr", {
+        key: k,
+        style: {
+          background: x.type === "break" ? "#fffbeb" : x.type === "gap" ? "#f9fafb" : "#fff"
+        }
+      }, /*#__PURE__*/React.createElement("td", {
+        style: {
+          ...TD,
+          fontSize: 13,
+          fontWeight: 700,
+          color: "#333",
+          whiteSpace: "nowrap",
+          borderLeft: `5px solid ${c || (x.type === "break" ? "#fcd34d" : "#e5e7eb")}`
+        }
+      }, minToHm(x.from), "〜", minToHm(x.to)), /*#__PURE__*/React.createElement("td", {
+        style: {
+          ...TD,
+          color: x.type === "work" ? "#111" : "#92400e",
+          wordBreak: "break-word"
+        }
+      }, x.type === "work" ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontWeight: 800,
+          color: c
+        }
+      }, x.label, x.night ? "　🌙夜間" : ""), first && x.work && /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 12,
+          color: "#555",
+          whiteSpace: "pre-wrap",
+          lineHeight: 1.6,
+          marginTop: 2
+        }
+      }, x.work), x.rest > 0 && /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 12,
+          color: "#92400e",
+          marginTop: 2
+        }
+      }, "うち休憩 ", x.rest, "分")) : /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontWeight: 700,
+          color: x.type === "gap" ? "#888" : "#92400e"
+        }
+      }, x.type === "break" ? "☕ " : "", x.label)), /*#__PURE__*/React.createElement("td", {
+        style: {
+          ...TD,
+          textAlign: "right",
+          fontWeight: 800,
+          color: x.type === "work" ? "#111" : "#bbb",
+          whiteSpace: "nowrap"
+        }
+      }, x.type === "work" ? minToHm(mins) : "—"));
+    }), /*#__PURE__*/React.createElement("tr", {
+      style: {
+        background: "#f0fdf4"
+      }
+    }, /*#__PURE__*/React.createElement("td", {
+      style: {
+        ...TD,
+        fontWeight: 800,
+        borderLeft: `5px solid ${GREEN}`
+      }
+    }, "合計"), /*#__PURE__*/React.createElement("td", {
+      style: {
+        ...TD,
+        fontSize: 12,
+        color: "#555"
+      }
+    }, holiday ? "休日出勤" : ot > 0 ? `うち残業 ${hmText(ot)}` : "休憩を引いた実働"), /*#__PURE__*/React.createElement("td", {
+      style: {
+        ...TD,
+        textAlign: "right",
+        fontWeight: 900,
+        fontSize: 16,
+        color: GREEN,
+        whiteSpace: "nowrap"
+      }
+    }, minToHm(total))))));
+  };
+
   /* ── 点検・報告 ── */
   const lastCheck = (kind, targetId, type) => checks.filter(c => c.kind === kind && c.targetId === targetId && (!type || c.type === type)).sort((a, b) => (b.ts || "").localeCompare(a.ts || ""))[0];
   const overdueBy = (c, limit) => !c ? -1 : daysBetween(c.date, todayKey) - limit;
@@ -7762,24 +7923,7 @@ function App() {
         marginBottom: 12,
         lineHeight: 1.7
       }
-    }, "📋 現場日報（コア日報・常用日報）は、日報を開いたときに、その日・その人の分だけを読んで表示します。ボードには保存しません。"), window.__tbHost && /*#__PURE__*/React.createElement("button", {
-      onClick: () => saveKintai(nYm),
-      disabled: kintaiBusy,
-      style: {
-        width: "100%",
-        marginBottom: 12,
-        padding: "13px 0",
-        borderRadius: 14,
-        background: "#fff",
-        color: "#1d4ed8",
-        border: "1.5px solid #1d4ed8",
-        fontSize: 15,
-        fontWeight: 800,
-        cursor: kintaiBusy ? "default" : "pointer",
-        minHeight: 50,
-        opacity: kintaiBusy ? .6 : 1
-      }
-    }, kintaiBusy ? "ドライブに保存しています…" : `📤 ${yy}年${mm}月の出勤簿をドライブに保存`), /*#__PURE__*/React.createElement("div", {
+    }, "📋 現場日報（コア日報・常用日報）は、日報を開いたときに、その日・その人の分だけを読んで表示します。ボードには保存しません。"), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         gap: 8,
@@ -7882,9 +8026,9 @@ function App() {
       const dw = parseKey(n.date).getDay();
       return /*#__PURE__*/React.createElement("div", {
         key: n.id,
-        onClick: () => setNippoForm(JSON.parse(JSON.stringify({
+        onClick: () => n.rows.length ? setNippoView(n.id) : setNippoForm(JSON.parse(JSON.stringify({
           ...n,
-          rows: n.rows.length ? n.rows : [newNippoRow()]
+          rows: [newNippoRow()]
         }))),
         style: {
           display: "flex",
@@ -10609,6 +10753,7 @@ function App() {
       setVdForm(null);
       cardBack.current = null;
       setDetailEdit(false);
+      setNippoView(null);
       setDispatchDay(null);
       setDispatchFocus(null);
       setDetailId(null);
@@ -13822,7 +13967,7 @@ function App() {
     }
   }, mode === "db" ? "共有データベースに保存しています。同じURLを開いた全員に数秒で反映されます。" : "この端末だけに保存しています。共有URLから開くと全員で同じ予定を見られます。")), isEditor && mode === "db" && window.__tbHost && /*#__PURE__*/React.createElement(Section, {
     icon: "📂",
-    label: "勤怠の保存先（Googleドライブ）"
+    label: "受け口（現場日報の読み込み）"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 13,
@@ -13830,7 +13975,7 @@ function App() {
       lineHeight: 1.7,
       marginBottom: 8
     }
-  }, "個人日報の画面の「出勤簿をドライブに保存」の送り先です。勤怠の受け口（Apps Script）のURLを入れてください。"), /*#__PURE__*/React.createElement("input", {
+  }, "日報を書くときに、その日の現場日報を読みに行く先です。ふつうは変える必要はありません。"), /*#__PURE__*/React.createElement("input", {
     value: kintaiUrl,
     onChange: e => setKintaiUrl(e.target.value),
     onBlur: e => {
@@ -15944,7 +16089,184 @@ function App() {
       fontSize: 22,
       cursor: "pointer"
     }
-  }, "✕")), nippoForm && (() => {
+  }, "✕")), nippoView && !nippoForm && (() => {
+    const n = nippoList.find(x => x.id === nippoView);
+    if (!n) return null;
+    const m = memberOf(n.by),
+      st = NIPPO_ST[n.status] || NIPPO_ST.submitted,
+      dw = parseKey(n.date).getDay();
+    const sorted = nippoList.filter(x => x.by === n.by && x.rows.length).sort((a, b) => a.date.localeCompare(b.date));
+    const idx = sorted.findIndex(x => x.id === n.id),
+      prev = sorted[idx - 1],
+      next = sorted[idx + 1];
+    const NAV = {
+      ...SB,
+      padding: "10px 14px",
+      minHeight: 44,
+      fontSize: 14,
+      fontWeight: 800
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      onClick: () => setNippoView(null),
+      style: {
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,.5)",
+        zIndex: 92,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "16px 12px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      onClick: e => e.stopPropagation(),
+      style: {
+        background: "#f6f7f8",
+        borderRadius: 18,
+        width: "100%",
+        maxWidth: 520,
+        maxHeight: "92vh",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        boxShadow: "0 16px 40px rgba(0,0,0,.35)"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#fff",
+        padding: "14px 14px 12px",
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        borderBottom: "1px solid #e5e7eb",
+        flexShrink: 0
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        minWidth: 0
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 18,
+        fontWeight: 900,
+        color: "#111"
+      }
+    }, fmtDateJ(n.date)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        color: "#555",
+        marginTop: 2
+      }
+    }, m ? m.name : "名前なし", n.holiday ? "　休日出勤" : "", /*#__PURE__*/React.createElement("span", {
+      style: {
+        marginLeft: 8,
+        fontSize: 11,
+        fontWeight: 800,
+        padding: "3px 8px",
+        borderRadius: 9,
+        background: st.bg,
+        color: st.color
+      }
+    }, st.label))), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setNippoView(null),
+      "aria-label": "閉じる",
+      style: {
+        width: 44,
+        height: 44,
+        borderRadius: "50%",
+        border: "none",
+        background: "#f3f4f6",
+        fontSize: 22,
+        color: "#555",
+        cursor: "pointer",
+        flexShrink: 0
+      }
+    }, "✕")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        overflow: "auto",
+        padding: "12px 12px 4px",
+        WebkitOverflowScrolling: "touch"
+      }
+    }, flowTable(n.rows, n.holiday, {
+      background: "#fff",
+      borderRadius: 14,
+      boxShadow: "0 1px 3px #0001",
+      marginBottom: 12
+    }), n.memo && /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#fff",
+        borderRadius: 14,
+        padding: "12px 14px",
+        marginBottom: 12,
+        fontSize: 14,
+        color: "#333",
+        lineHeight: 1.7,
+        whiteSpace: "pre-wrap"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "#888",
+        fontWeight: 700,
+        marginBottom: 4
+      }
+    }, "メモ"), n.memo), n.status === "returned" && n.checkNote && /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#fef2f2",
+        border: "1.5px solid #fca5a5",
+        borderRadius: 14,
+        padding: "12px 14px",
+        marginBottom: 12,
+        fontSize: 14,
+        color: "#b91c1c",
+        lineHeight: 1.7,
+        whiteSpace: "pre-wrap"
+      }
+    }, /*#__PURE__*/React.createElement("b", null, "事務から："), n.checkNote)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#fff",
+        padding: "10px 12px calc(10px + env(safe-area-inset-bottom))",
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        borderTop: "1px solid #e5e7eb",
+        flexShrink: 0
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => prev && setNippoView(prev.id),
+      disabled: !prev,
+      style: {
+        ...NAV,
+        opacity: prev ? 1 : .3
+      }
+    }, "‹ 前の日"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => next && setNippoView(next.id),
+      disabled: !next,
+      style: {
+        ...NAV,
+        opacity: next ? 1 : .3
+      }
+    }, "次の日 ›"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        setNippoForm(JSON.parse(JSON.stringify(n)));
+        setNippoView(null);
+      },
+      style: {
+        marginLeft: "auto",
+        padding: "11px 18px",
+        borderRadius: 12,
+        border: `1.5px solid ${GREEN}`,
+        background: "#fff",
+        color: GREEN,
+        fontSize: 14,
+        fontWeight: 800,
+        cursor: "pointer",
+        minHeight: 44
+      }
+    }, isEditor ? "開いて確認・直す" : "直す"))));
+  })(), nippoForm && (() => {
     const f = nippoForm;
     const saved = f.id ? nippoList.find(n => n.id === f.id) : null;
     const st = saved ? NIPPO_ST[saved.status] || NIPPO_ST.submitted : null;
@@ -16287,162 +16609,7 @@ function App() {
           minHeight: 44
         }
       }, "もう一度確認"));
-    })(), (() => {
-      const flow = dayFlow(f.rows);
-      if (!flow.length) return null;
-      const COLS = ["#0f766e", "#1d4ed8", "#b45309", "#7c3aed", "#be185d"];
-      const TD = {
-        padding: "9px 8px",
-        borderTop: "1px solid #e5e7eb",
-        fontSize: 14,
-        verticalAlign: "top"
-      };
-      let lastN = -1;
-      return /*#__PURE__*/React.createElement("div", {
-        style: {
-          ...BOX,
-          padding: 0,
-          overflow: "hidden"
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          alignItems: "center",
-          padding: "12px 14px 10px"
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        style: {
-          flex: 1,
-          fontSize: 14,
-          fontWeight: 800,
-          color: "#111"
-        }
-      }, "🕒 1日の流れ"), /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 13,
-          color: "#555"
-        }
-      }, minToHm(flow[0].from), "〜", minToHm(flow[flow.length - 1].to))), /*#__PURE__*/React.createElement("table", {
-        style: {
-          width: "100%",
-          borderCollapse: "collapse",
-          tableLayout: "fixed"
-        }
-      }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", {
-        style: {
-          background: "#f3f4f6"
-        }
-      }, /*#__PURE__*/React.createElement("th", {
-        style: {
-          ...TD,
-          width: 88,
-          textAlign: "left",
-          fontSize: 12,
-          color: "#666",
-          borderTop: "none"
-        }
-      }, "時間"), /*#__PURE__*/React.createElement("th", {
-        style: {
-          ...TD,
-          textAlign: "left",
-          fontSize: 12,
-          color: "#666",
-          borderTop: "none"
-        }
-      }, "内容"), /*#__PURE__*/React.createElement("th", {
-        style: {
-          ...TD,
-          width: 50,
-          textAlign: "right",
-          fontSize: 12,
-          color: "#666",
-          borderTop: "none"
-        }
-      }, "実働"))), /*#__PURE__*/React.createElement("tbody", null, flow.map((x, k) => {
-        const first = x.type === "work" && x.n !== lastN;
-        if (x.type === "work") lastN = x.n;
-        const c = x.type === "work" ? COLS[x.n % COLS.length] : null;
-        const mins = x.type === "work" ? x.to - x.from - (x.rest || 0) : 0;
-        return /*#__PURE__*/React.createElement("tr", {
-          key: k,
-          style: {
-            background: x.type === "break" ? "#fffbeb" : x.type === "gap" ? "#f9fafb" : "#fff"
-          }
-        }, /*#__PURE__*/React.createElement("td", {
-          style: {
-            ...TD,
-            fontSize: 13,
-            fontWeight: 700,
-            color: "#333",
-            whiteSpace: "nowrap",
-            borderLeft: `5px solid ${c || (x.type === "break" ? "#fcd34d" : "#e5e7eb")}`
-          }
-        }, minToHm(x.from), "〜", minToHm(x.to)), /*#__PURE__*/React.createElement("td", {
-          style: {
-            ...TD,
-            color: x.type === "work" ? "#111" : "#92400e",
-            wordBreak: "break-word"
-          }
-        }, x.type === "work" ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-          style: {
-            fontWeight: 800,
-            color: c
-          }
-        }, x.label, x.night ? "　🌙夜間" : ""), first && x.work && /*#__PURE__*/React.createElement("div", {
-          style: {
-            fontSize: 12,
-            color: "#555",
-            whiteSpace: "pre-wrap",
-            lineHeight: 1.6,
-            marginTop: 2
-          }
-        }, x.work), x.rest > 0 && /*#__PURE__*/React.createElement("div", {
-          style: {
-            fontSize: 12,
-            color: "#92400e",
-            marginTop: 2
-          }
-        }, "うち休憩 ", x.rest, "分")) : /*#__PURE__*/React.createElement("span", {
-          style: {
-            fontWeight: 700,
-            color: x.type === "gap" ? "#888" : "#92400e"
-          }
-        }, x.type === "break" ? "☕ " : "", x.label)), /*#__PURE__*/React.createElement("td", {
-          style: {
-            ...TD,
-            textAlign: "right",
-            fontWeight: 800,
-            color: x.type === "work" ? "#111" : "#bbb",
-            whiteSpace: "nowrap"
-          }
-        }, x.type === "work" ? minToHm(mins) : "—"));
-      }), /*#__PURE__*/React.createElement("tr", {
-        style: {
-          background: "#f0fdf4"
-        }
-      }, /*#__PURE__*/React.createElement("td", {
-        style: {
-          ...TD,
-          fontWeight: 800,
-          borderLeft: `5px solid ${GREEN}`
-        }
-      }, "合計"), /*#__PURE__*/React.createElement("td", {
-        style: {
-          ...TD,
-          fontSize: 12,
-          color: "#555"
-        }
-      }, f.holiday ? "休日出勤" : ot > 0 ? `うち残業 ${hmText(ot)}` : "休憩を引いた実働"), /*#__PURE__*/React.createElement("td", {
-        style: {
-          ...TD,
-          textAlign: "right",
-          fontWeight: 900,
-          fontSize: 16,
-          color: GREEN,
-          whiteSpace: "nowrap"
-        }
-      }, minToHm(total))))));
-    })(), f.rows.map((r, i) => /*#__PURE__*/React.createElement("div", {
+    })(), flowTable(f.rows, f.holiday, BOX), f.rows.map((r, i) => /*#__PURE__*/React.createElement("div", {
       key: r.id,
       style: BOX
     }, /*#__PURE__*/React.createElement("div", {
