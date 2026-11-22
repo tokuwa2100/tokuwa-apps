@@ -238,6 +238,8 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   @media (max-width:820px){
     .pillrow.bigpill .pill{ flex:1 1 calc(50% - 10px); }
   }
+  /* .pill に display:flex を当てているので、非表示指定を勝たせる */
+  .pill.hidden,.pillrow .pill.hidden,.pillrow.bigpill .pill.hidden{display:none !important}
   /* 上・横・下は3つ等幅 */
   .pillrow.dirrow .pill{ flex:1 1 0; min-width:0; }
   @media (max-width:820px){ .pillrow.dirrow .pill{ flex:1 1 0; } }
@@ -561,7 +563,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "anchor";
-const APP_VERSION   = "1.5.0";
+const APP_VERSION   = "1.5.1";
 const APP_BUILD     = "2026-11-22";
 
 (function(){
