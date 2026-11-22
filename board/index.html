@@ -141,8 +141,8 @@ const {
    定数
 ══════════════════════════════════════════════════════════ */
 const APP_NAME = "TOKUWAボード";
-const APP_VERSION = "4.8.1";
-const APP_UPDATED = "2026-11-21";
+const APP_VERSION = "4.8.2";
+const APP_UPDATED = "2026-11-22";
 /* 外部アプリ（日報）の初期リンク。設定から変更できる */
 const EXT_DEFAULT = {
   nippoCoreUrl: "https://tokuwa2100.github.io/tokuwa-apps/core/",
@@ -12466,7 +12466,7 @@ function App() {
       outline: "none",
       boxSizing: "border-box"
     }
-  })), isEditor && mode === "db" && /*#__PURE__*/React.createElement(Section, {
+  })), (isEditor || window.__tbHost) && mode === "db" && /*#__PURE__*/React.createElement(Section, {
     icon: "📦",
     label: "データの取り込み（引っ越し）"
   }, /*#__PURE__*/React.createElement("div", {
