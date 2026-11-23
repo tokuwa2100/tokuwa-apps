@@ -45,7 +45,7 @@
   </form>
 </div>
 <div id="root"></div>
-<script>window.__tbVer = "4.12.0";</script>
+<script>window.__tbVer = "4.12.1";</script>
 <script>
 /* 新しい版が出ていたら自動で読み直す（ホーム画面のアイコンが古い画面を覚えたままにならないように） */
 (function(){
@@ -161,7 +161,7 @@ const {
    定数
 ══════════════════════════════════════════════════════════ */
 const APP_NAME = "TOKUWAボード";
-const APP_VERSION = "4.12.0";
+const APP_VERSION = "4.12.1";
 const APP_UPDATED = "2026-11-22";
 /* 外部アプリ（日報）の初期リンク。設定から変更できる */
 const EXT_DEFAULT = {
@@ -2707,6 +2707,39 @@ function App() {
   const kyScrollRef = useRef(null);
   const [nippoYm, setNippoYm] = useState(null); // 一覧の月（"YYYY-MM"）
   const [nippoPast, setNippoPast] = useState(false);
+  /* 出勤簿で事務が付ける、休みの種類（有給・特別休暇・欠勤）。「人_日付」ごとに覚える */
+  const KMARK = {
+    paid: "有給",
+    special: "特別休暇",
+    absent: "欠勤"
+  };
+  const [kMarks, setKMarks] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("gc-kmarks") || "{}");
+    } catch (e) {
+      return {};
+    }
+  });
+  const setKMark = (by, dk, v) => {
+    const key = by + "_" + dk;
+    setKMarks(p => {
+      const n = {
+        ...p,
+        [key]: v || ""
+      };
+      try {
+        localStorage.setItem("gc-kmarks", JSON.stringify(n));
+      } catch (e) {}
+      return n;
+    });
+    if (dbRef.current) dbWrite(() => dbRef.current.doc("settings/kmarks").set({
+      marks: {
+        [key]: v || ""
+      }
+    }, {
+      merge: true
+    }));
+  };
   const [kintaiView, setKintaiView] = useState(null); // 出勤簿（事務用）の窓 { ym, by }
   const [nippoConfirm, setNippoConfirm] = useState(null); // 提出前の確認の窓（{ checked }）
   const [nippoOpenRow, setNippoOpenRow] = useState(null); // 日報を書く画面で、いま開いて直している行
@@ -2954,6 +2987,9 @@ function App() {
       }, () => {});
       db.doc("settings/kintai").onSnapshot(sn => {
         if (sn.exists && sn.data().url) setKintaiUrl(sn.data().url);
+      }, () => {});
+      db.doc("settings/kmarks").onSnapshot(sn => {
+        if (sn.exists) setKMarks(sn.data().marks || {});
       }, () => {});
       unsubS = db.doc("settings/subs").onSnapshot(sn => {
         if (sn.exists && Array.isArray(sn.data().list)) setSubs(sn.data().list);
@@ -3830,10 +3866,17 @@ function App() {
           ...base,
           kind: "未確認",
           id: n.id
+        });else if (KMARK[kMarks[m.id + "_" + dk]]) days.push({
+          ...base,
+          kind: "休み",
+          mark: kMarks[m.id + "_" + dk],
+          label: KMARK[kMarks[m.id + "_" + dk]],
+          note: lv ? "申請あり" : ""
         });else if (lv) days.push({
           ...base,
           kind: "休み",
-          note: leavePartText(lv)
+          label: "休み（種類を選ぶ）",
+          note: "申請あり・" + leavePartText(lv)
         });else days.push({
           ...base,
           kind: ""
@@ -3852,6 +3895,9 @@ function App() {
           holMin: h.reduce((p, x) => p + x.work, 0),
           std: w.reduce((p, x) => p + x.std, 0),
           early: w.reduce((p, x) => p + x.early, 0),
+          paid: days.filter(x => x.mark === "paid").length,
+          special: days.filter(x => x.mark === "special").length,
+          absent: days.filter(x => x.mark === "absent").length,
           leave: days.filter(x => x.kind === "休み").length,
           wait: days.filter(x => x.kind === "未確認").length
         }
@@ -3876,15 +3922,15 @@ function App() {
       const body = [];
       for (let i = 0; i < 31; i++) {
         const x = days[i];
-        body.push(!x ? `<tr><td class="g"></td><td class="g"></td>${"<td></td>".repeat(3)}${'<td class="g"></td>'.repeat(3)}${"<td></td>".repeat(3)}</tr>` : `<tr><td class="g r">${Number(x.dk.slice(8))}</td><td class="g c">${x.dow}</td>` + (x.rows ? `<td>${x.start.replace(/^0/, "")}</td><td>${x.end.replace(/^0/, "")}</td><td>${z(x.brk)}</td><td class="g">${z(x.std)}</td><td class="g">${z(x.early)}</td><td class="g">${z(x.ot)}</td><td>${z(x.holMin)}</td><td class="l">${x.kind === "休日出勤" ? "休日出勤" : ""}</td><td class="l s">${esc(x.sites)}</td>` : `<td></td><td></td><td></td><td class="g"></td><td class="g"></td><td class="g"></td><td></td><td class="l">${x.kind === "休み" ? "休み" : x.kind === "未確認" ? "（未確認）" : ""}</td><td class="l s">${esc(x.note || "")}</td>`) + `</tr>`);
+        body.push(!x ? `<tr><td class="g"></td><td class="g"></td>${"<td></td>".repeat(3)}${'<td class="g"></td>'.repeat(3)}${"<td></td>".repeat(3)}</tr>` : `<tr><td class="g r">${Number(x.dk.slice(8))}</td><td class="g c">${x.dow}</td>` + (x.rows ? `<td>${x.start.replace(/^0/, "")}</td><td>${x.end.replace(/^0/, "")}</td><td>${z(x.brk)}</td><td class="g">${z(x.std)}</td><td class="g">${z(x.early)}</td><td class="g">${z(x.ot)}</td><td>${z(x.holMin)}</td><td class="l">${x.kind === "休日出勤" ? "休日出勤" : ""}</td><td class="l s">${esc(x.sites)}</td>` : `<td></td><td></td><td></td><td class="g"></td><td class="g"></td><td class="g"></td><td></td><td class="l">${x.kind === "休み" ? x.mark ? x.label : "休み" : x.kind === "未確認" ? "（未確認）" : ""}</td><td class="l s">${esc(x.note || "")}</td>`) + `</tr>`);
       }
       return `<section><div class="top"><h1>出 勤 簿</h1><div class="ym"><span class="bx">${y}</span>年　<span class="bx sm">${mo}</span>月度</div></div>
 <table class="hd"><tr><th>所属部署</th><td></td><th>社員ID</th><td></td><th>氏名</th><td class="nm">${esc(m.name)}<span class="in">㊞</span></td></tr></table>
 <div class="wk"><span>勤務時間：<span class="bx">${WORK_FROM.replace(/^0/, "")}</span>　〜　<span class="bx">${WORK_TO}</span></span><span>通常休憩<span class="bx">2:00</span>時間</span></div>
 <table class="mn"><thead><tr><th class="g">日付</th><th class="g">曜日</th><th>出勤時間</th><th>退勤時間</th><th class="t">休憩・中抜け</th><th class="g">所定</th><th class="g">早出</th><th class="g">時間外</th><th class="t">深夜・休出</th><th>摘要</th><th>備考</th></tr></thead>
 <tbody>${body.join("")}<tr class="sum"><td colspan="5" class="c">勤務時間合計</td><td class="g">${hm(tot.std)}</td><td class="g">${hm(tot.early)}</td><td class="g">${hm(tot.ot)}</td><td class="g">${hm(tot.holMin)}</td><td colspan="2" class="nb"></td></tr></tbody></table>
-<div class="ft"><div><p>当月勤務日数<span class="bx w"></span>日</p><p>当月出勤日数<span class="v">${tot.days}</span>日</p><p>当月欠勤日数<span class="v"></span>日</p></div>
-<div><p>所定勤務時間<span class="v">8:00</span>時間</p><p>有給休暇取得日数<span class="v"></span>日</p><p>特別休暇取得日数<span class="v"></span>日</p></div></div></section>`;
+<div class="ft"><div><p>当月勤務日数<span class="bx w"></span>日</p><p>当月出勤日数<span class="v">${tot.days}</span>日</p><p>当月欠勤日数<span class="v">${tot.absent}</span>日</p></div>
+<div><p>所定勤務時間<span class="v">8:00</span>時間</p><p>有給休暇取得日数<span class="v">${tot.paid}</span>日</p><p>特別休暇取得日数<span class="v">${tot.special}</span>日</p></div></div></section>`;
     };
     const html = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>出勤簿 ${y}年${mo}月度</title><style>
 @page{size:A4 portrait;margin:9mm 10mm}*{box-sizing:border-box}body{margin:0;font-family:"Hiragino Kaku Gothic ProN","Yu Gothic","Meiryo",sans-serif;color:#000;font-size:10.5pt}
@@ -3939,11 +3985,11 @@ table{border-collapse:collapse;width:100%}.hd{border:1.6px solid #000;margin-bot
     const month = nippoList.filter(n => n.date.slice(0, 7) === ym && n.rows.length && n.status === "checked");
     const [sy, sm] = ym.split("-").map(Number),
       z = v => v ? hm(v) : "";
-    const summary = [["氏名", "出勤日数", "所定", "早出", "時間外", "休出", "休日出勤日数", "休み（日）", "未確認の日報（件）"]];
+    const summary = [["氏名", "出勤日数", "所定", "早出", "時間外", "休出", "休日出勤日数", "有給（日）", "特別休暇（日）", "欠勤（日）", "未確認の日報（件）"]];
     data.forEach(({
       m,
       tot
-    }) => summary.push([m.name, tot.days, hm(tot.std), hm(tot.early), hm(tot.ot), hm(tot.holMin), tot.hol, tot.leave, tot.wait]));
+    }) => summary.push([m.name, tot.days, hm(tot.std), hm(tot.early), hm(tot.ot), hm(tot.holMin), tot.hol, tot.paid, tot.special, tot.absent, tot.wait]));
     /* 明細：会社の出勤簿の雛形と同じ並びで、人ごとに1か月分を続けて書く */
     const detail = [["出勤簿", `${sy}年`, `${sm}月度`, "", "勤務時間", `${WORK_FROM.replace(/^0/, "")}〜${WORK_TO}`, "", "通常休憩", "2:00"]];
     data.forEach(({
@@ -3954,9 +4000,10 @@ table{border-collapse:collapse;width:100%}.hd{border:1.6px solid #000;margin-bot
       detail.push([]);
       detail.push(["氏名", m.name]);
       detail.push(["日付", "曜日", "出勤時間", "退勤時間", "休憩・中抜け", "所定", "早出", "時間外", "深夜・休出", "摘要", "備考"]);
-      days.forEach(x => detail.push(x.rows ? [Number(x.dk.slice(8)), x.dow, x.start.replace(/^0/, ""), x.end.replace(/^0/, ""), z(x.brk), z(x.std), z(x.early), z(x.ot), z(x.holMin), x.kind === "休日出勤" ? "休日出勤" : "", x.sites] : [Number(x.dk.slice(8)), x.dow, "", "", "", "", "", "", "", x.kind === "休み" ? "休み" : x.kind === "未確認" ? "（未確認）" : "", x.note || ""]));
+      days.forEach(x => detail.push(x.rows ? [Number(x.dk.slice(8)), x.dow, x.start.replace(/^0/, ""), x.end.replace(/^0/, ""), z(x.brk), z(x.std), z(x.early), z(x.ot), z(x.holMin), x.kind === "休日出勤" ? "休日出勤" : "", x.sites] : [Number(x.dk.slice(8)), x.dow, "", "", "", "", "", "", "", x.kind === "休み" ? x.mark ? x.label : "休み" : x.kind === "未確認" ? "（未確認）" : "", x.note || ""]));
       detail.push(["勤務時間合計", "", "", "", "", hm(tot.std), hm(tot.early), hm(tot.ot), hm(tot.holMin)]);
       detail.push(["当月出勤日数", tot.days, "日", "", "所定勤務時間", "8:00", "時間"]);
+      detail.push(["当月欠勤日数", tot.absent, "日", "", "有給休暇取得日数", tot.paid, "日", "特別休暇取得日数", tot.special, "日"]);
     });
     const lvRows = [["氏名", "種類", "開始", "終了", "区分", "日数", "状態"]];
     leaves.filter(l => l.from.slice(0, 7) <= ym && l.to.slice(0, 7) >= ym).sort((a, b) => a.from.localeCompare(b.from)).forEach(l => lvRows.push([memberOf(l.by)?.name || l.by, l.type, l.from, l.to, leavePartText(l), leaveDays(l), {
@@ -16581,7 +16628,7 @@ table{border-collapse:collapse;width:100%}.hd{border:1.6px solid #000;margin-bot
         margin: "0 4px 8px",
         lineHeight: 1.6
       }
-    }, "会社の出勤簿と同じ並びです（横に動かせます）。所定＝7:30〜17:30の実働、早出＝7:30より前、時間外＝17:30より後。休日出勤は、会社カレンダーに合わせて事務が右端のボタンで決めます。日付を押すと日報が開きます。"), /*#__PURE__*/React.createElement("div", {
+    }, "会社の出勤簿と同じ並びです（横に動かせます）。所定＝7:30〜17:30の実働、早出＝7:30より前、時間外＝17:30より後。休日出勤と、休みの種類（有給・特別休暇・欠勤）は、事務が右端で決めます。日付を押すと日報が開きます。"), /*#__PURE__*/React.createElement("div", {
       style: {
         background: "#fff",
         borderRadius: 14,
@@ -16701,7 +16748,7 @@ table{border-collapse:collapse;width:100%}.hd{border:1.6px solid #000;margin-bot
             fontWeight: 700,
             color: x.kind === "休日出勤" ? "#b91c1c" : x.kind === "未確認" ? "#c2410c" : "#0e7490"
           }
-        }, x.kind === "休日出勤" ? "休日出勤" : x.kind === "休み" ? "休み" : x.kind === "未確認" ? "未確認" : ""), /*#__PURE__*/React.createElement("td", {
+        }, x.kind === "休日出勤" ? "休日出勤" : x.kind === "休み" ? x.label : x.kind === "未確認" ? "未確認" : ""), /*#__PURE__*/React.createElement("td", {
           style: {
             ...TD,
             textAlign: "left",
@@ -16737,7 +16784,28 @@ table{border-collapse:collapse;width:100%}.hd{border:1.6px solid #000;margin-bot
             background: "#fff",
             color: x.kind === "休日出勤" ? "#666" : "#b91c1c"
           }
-        }, x.kind === "休日出勤" ? "出勤にもどす" : "休日出勤にする")));
+        }, x.kind === "休日出勤" ? "出勤にもどす" : "休日出勤にする"), !x.rows && x.kind !== "未確認" && /*#__PURE__*/React.createElement("select", {
+          value: x.mark || "",
+          onChange: e => setKMark(cur.m.id, x.dk, e.target.value),
+          style: {
+            fontSize: 12,
+            fontWeight: 700,
+            padding: "5px 4px",
+            borderRadius: 8,
+            minHeight: 32,
+            border: `1.5px solid ${x.kind === "休み" && !x.mark ? "#0e7490" : "#d1d5db"}`,
+            background: "#fff",
+            color: x.mark ? "#0e7490" : "#888"
+          }
+        }, /*#__PURE__*/React.createElement("option", {
+          value: ""
+        }, "休みの種類"), /*#__PURE__*/React.createElement("option", {
+          value: "paid"
+        }, "有給"), /*#__PURE__*/React.createElement("option", {
+          value: "special"
+        }, "特別休暇"), /*#__PURE__*/React.createElement("option", {
+          value: "absent"
+        }, "欠勤"))));
       }), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
         colSpan: 5,
         style: {
@@ -16767,7 +16835,7 @@ table{border-collapse:collapse;width:100%}.hd{border:1.6px solid #000;margin-bot
           fontSize: 12,
           fontWeight: 700
         }
-      }, "当月出勤日数 ", cur.tot.days, "日", cur.tot.leave > 0 ? `　休み ${cur.tot.leave}日` : ""))));
+      }, "出勤 ", cur.tot.days, "日\u3000有給 ", cur.tot.paid, "日\u3000特別 ", cur.tot.special, "日\u3000欠勤 ", cur.tot.absent, "日"))));
     })())), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
