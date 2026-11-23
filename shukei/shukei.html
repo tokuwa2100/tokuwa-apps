@@ -829,7 +829,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "shukei";
-const APP_VERSION   = "1.11.2";
+const APP_VERSION   = "1.11.3";
 const APP_BUILD     = "2026-11-23";
 
 (function(){
@@ -4208,6 +4208,13 @@ function tkCloudSafe(v){
       });
       return o;
     }
+    if(typeof val === "string" && val.length > 100000){
+      // 100KBを超える文字列は画像データ。共有には入らないので外す（原本はドライブにあります）
+      const kb = Math.round(val.length / 1024);
+      problems.push((path || "?") + "：大きすぎるため外しました（" + kb + "KB" +
+        (val.slice(0, 11) === "data:image/" ? "・画像データ" : "") + "）");
+      return "（大きすぎるため共有には保存していません：" + kb + "KB）";
+    }
     if(typeof val === "number" && !isFinite(val)){ problems.push(path + "：数値がおかしい"); return null; }
     if(typeof val === "function" || typeof val === "symbol"){ problems.push(path + "：保存できない値"); return null; }
     return val;
@@ -4215,7 +4222,24 @@ function tkCloudSafe(v){
   const value = walk(v, "", false);
   let bytes = 0;
   try{ bytes = new Blob([JSON.stringify(value)]).size; }catch(e){}
-  if(bytes > 900000) problems.push("大きすぎます（" + Math.round(bytes/1024) + "KB／上限1MB）");
+  if(bytes > 900000){
+    problems.push("大きすぎます（" + Math.round(bytes/1024) + "KB／上限1MB）");
+    try{
+      const sizes = [];
+      const scan = (o, pre, depth) => {
+        if(!o || typeof o !== "object" || depth > 3) return;
+        Object.keys(o).forEach(k => {
+          let b = 0;
+          try{ b = JSON.stringify(o[k]).length; }catch(e){}
+          const kp = pre ? pre + "." + k : k;
+          if(b > 50000){ sizes.push([kp, b]); scan(o[k], kp, depth + 1); }
+        });
+      };
+      scan(value, "", 0);
+      sizes.sort((a, b) => b[1] - a[1]);
+      sizes.slice(0, 3).forEach(([k, b]) => problems.push("大きい項目：" + k + "（" + Math.round(b/1024) + "KB）"));
+    }catch(e){}
+  }
   return { value, problems, bytes };
 }
 function tkStrip(r){
@@ -4293,7 +4317,7 @@ function tkRebuild(){
 
 /* ---------- 取り込み（画像・JSON） ---------- */
 async function tkImport(records, fileName){
-  const res = { added: [], skipped: 0, deletedSkipped: 0, failed: [] };
+  const res = { added: [], skipped: 0, deletedSkipped: 0, failed: [], fixed: [] };
   for(const r of records){
     const id = String(r.id);
     if(TK.mode === "cloud"){
@@ -4303,6 +4327,11 @@ async function tkImport(records, fileName){
         if(ok === "created"){ TK.reports.set(id, w); res.added.push(id); }
         else if(ok === "deleted") res.deletedSkipped++;
         else res.skipped++;
+        if(ok === "created" && TK.lastFix){
+          res.fixed.push({ id, date: r.date || "", client: getClientName(r) || "",
+                           site: r.site || "", problems: TK.lastFix });
+          TK.lastFix = null;
+        }
       }catch(e){
         // この1件は飛ばして、ほかの日報の取り込みは続ける
         console.error("共有に登録できませんでした", id, e, e.tkDetail || "", r);
@@ -4551,8 +4580,12 @@ function tkFirebaseBackend(cfg){
       return s.docs.map(d => d.data());
     },
     async createIfAbsent(docId, w){
+      TK.lastFix = null;
       const safe = tkCloudSafe(w);
-      if(safe.problems.length) console.warn("共有に入れる前に直しました", docId, safe.problems);
+      if(safe.problems.length){
+        console.warn("共有に入れる前に直しました", docId, safe.problems);
+        TK.lastFix = safe.problems;
+      }
       return db.runTransaction(async tx => {
         const ref = R.doc(docId);
         const s = await tx.get(ref);
@@ -5462,7 +5495,7 @@ const DR_SINCE_LS  = "TOKUWA_SHUKEI_DRIVE_SINCE_V1";
 const DR_PEND_LS   = "TOKUWA_SHUKEI_DRIVE_PENDING_V1";
 const DR_IMGFILL_LS = "TOKUWA_SHUKEI_DRIVE_IMGFILL_V1";
 const DR_INTERVAL  = 5 * 60 * 1000;
-const DR = { busy: false, lastAt: "", lastAdded: 0, lastAddedAt: "", error: "", failed: [] };
+const DR = { busy: false, lastAt: "", lastAdded: 0, lastAddedAt: "", error: "", failed: [], fixed: [] };
 
 function drLs(k, v){
   try{
@@ -5514,7 +5547,7 @@ async function drPull(manual){
   if(!navigator.onLine){ if(manual) showToast("⚠️ インターネットにつながっていません"); return; }
   DR.busy = true; DR.error = ""; DR.failed = []; drRender();
   let added = 0, skipped = 0;
-  const fill = [], failed = [];
+  const fill = [], failed = [], fixed = [];
   try{
     let since = drLs(DR_SINCE_LS);
     if(drLs(DR_IMGFILL_LS) !== "1") since = "";          // 初回だけ全部見て、原本画像IDを補う
@@ -5544,6 +5577,7 @@ async function drPull(manual){
         added += out.added.length;
         skipped += out.skipped + out.deletedSkipped;
         if(out.failed && out.failed.length) failed.push(...out.failed);
+        if(out.fixed && out.fixed.length) fixed.push(...out.fixed);
       }
       since = res.next || since;
       drLs(DR_SINCE_LS, since);
@@ -5561,6 +5595,7 @@ async function drPull(manual){
   }finally{
     DR.busy = false;
     DR.failed = failed;
+    DR.fixed = fixed;
     if(failed.length) showToast(`⚠️ ${failed.length}件の日報が共有に登録できませんでした（下の「☁ Googleドライブの日報」に出ています）`);
   }
   await drFlush();
@@ -5741,6 +5776,15 @@ function drRender(){
               `${esc(f.date)}　${esc(f.client)}　${esc(f.site)}　(${esc(f.type)})　${esc(f.code)}${f.detail ? "　" + esc(f.detail) : ""}　[${esc(f.id)}]`
             ).join("<br>")
           + (DR.failed.length > 10 ? `<br>ほか ${DR.failed.length - 10}件` : "")
+          + `</div></div>` : "")
+      + ((DR.fixed && DR.fixed.length) ? `<div style="margin-top:8px;padding:8px 10px;border:1.5px solid #90caf9;background:#e3f2fd;border-radius:8px;">
+          <div style="color:#0d47a1;font-weight:800;">大きすぎる項目を外して登録した日報が ${DR.fixed.length}件あります</div>
+          <div style="font-size:12px;margin-top:4px;">日報の数量や内容はそのまま入っています。外したのは画像などの大きなデータで、原本はドライブに残っています。</div>
+          <div style="font-size:12px;margin-top:6px;font-family:monospace;">`
+          + DR.fixed.slice(0, 5).map(f =>
+              `${esc(f.date)}　${esc(f.client)}　${esc(f.site)}<br>　${esc(f.problems.join("／"))}`
+            ).join("<br>")
+          + (DR.fixed.length > 5 ? `<br>ほか ${DR.fixed.length - 5}件` : "")
           + `</div></div>` : "")
     : `「ドライブ連携の設定」に事務所用の合言葉を入れると、日報アプリからドライブに届いた日報を自動で取り込みます。`;
   info.innerHTML = html;
