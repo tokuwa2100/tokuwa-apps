@@ -827,7 +827,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "shukei";
-const APP_VERSION   = "1.10.1";
+const APP_VERSION   = "1.11.0";
 const APP_BUILD     = "2026-11-23";
 
 (function(){
@@ -4554,6 +4554,22 @@ function tkFirebaseBackend(cfg){
         return saved;
       });
     },
+    // 取引先マスタ（1ドキュメントにまとめて持つ）
+    listenMaster(onChange){
+      unsubs.push(db.collection("torihiki").doc("master")
+        .onSnapshot(d => { if(d.exists) onChange(d.data() || {}); },
+                    err => console.error("listenMaster", err)));
+    },
+    setMaster: data => db.collection("torihiki").doc("master").set(data),
+    // 納品書・請求書の発行記録（締め期間ごとに1ドキュメント）
+    listenSeikyu(onChange){
+      unsubs.push(db.collection("seikyu").onSnapshot(snap => {
+        const ch = snap.docChanges().map(c => ({
+          removed: c.type === "removed", key: c.doc.data().key, val: c.doc.data().val }));
+        if(ch.length) onChange(ch);
+      }, err => console.error("listenSeikyu", err)));
+    },
+    setSeikyu: (docId, data) => db.collection("seikyu").doc(docId).set(data),
     stop(){ unsubs.splice(0).forEach(u => { try{ u(); }catch(e){} }); }
   };
 }
@@ -4594,6 +4610,7 @@ function tkStartCloud(backend){
     TK.user = user;
     if(!user){
       backend.stop();
+      try{ if(typeof nbCloudStop === "function") nbCloudStop(); }catch(e){}
       TK.mode = "cloud-wait"; TK.reports.clear(); TK.status = "";
       cfDocs = {}; cfSkip = {}; TK.cfSynced.clear(); TK.skipSynced.clear();
       tkRebuild();
@@ -4619,6 +4636,7 @@ function tkStartCloud(backend){
     });
     backend.listenKakunin(tkApplyKakunin);
     backend.listenSkip(tkApplySkip);
+    try{ if(typeof nbCloudStart === "function") nbCloudStart(backend); }catch(e){ console.error(e); }
     TK.ready = true;
     tkRebuild();
   });
@@ -5732,13 +5750,77 @@ async function nbIdbGet(key){
     r.onsuccess = () => res(r.result || null); r.onerror = () => rej(r.error);
   });
 }
-function nbSave(){
+/* ---------- 共有（Firestore）との行き来 ---------- */
+let nbBackend = null;      // 共有の口。null ならこのPCだけ
+let nbPushTimer = null;
+let nbPushing = false;
+
+function nbSaveLocal(){
   try{
     localStorage.setItem(NB_CL_KEY, JSON.stringify(nbClients));
     localStorage.setItem(NB_IT_KEY, JSON.stringify(nbItems));
     localStorage.setItem(NB_MT_KEY, JSON.stringify(nbMeta));
   }catch(e){ showToast("⚠️ 取引先を保存できませんでした（容量不足）"); }
 }
+function nbSave(){
+  nbSaveLocal();
+  nbPushMaster();
+}
+/* まとめて共有へ送る（打っている途中に何度も送らないよう少し待つ） */
+function nbPushMaster(){
+  if(!nbBackend) return;
+  clearTimeout(nbPushTimer);
+  nbPushTimer = setTimeout(() => {
+    nbPushing = true;
+    const body = {
+      clients: nbClients,
+      items: nbItems,
+      meta: nbMeta || null,
+      updatedAt: tkNowIso(),
+      updatedBy: tkEditor() || "",
+    };
+    Promise.resolve(nbBackend.setMaster(body))
+      .catch(e => { console.error(e); showToast("⚠️ 取引先マスタを共有に送れませんでした"); })
+      .then(() => { setTimeout(() => { nbPushing = false; }, 300); });
+  }, 700);
+}
+/* 入力中に一覧を作り直すと打てなくなるので、そのときは描き直さない */
+function nbListBusy(){
+  const a = document.activeElement;
+  return !!(a && (a.tagName === "INPUT" || a.tagName === "SELECT") && a.closest("#nb-list"));
+}
+function nbCloudStart(backend){
+  nbBackend = backend;
+  backend.listenMaster(data => {
+    if(nbPushing) return;
+    const cl = Array.isArray(data.clients) ? data.clients : null;
+    const it = Array.isArray(data.items) ? data.items : null;
+    if(!cl && !it) return;
+    if(cl) nbClients = cl;
+    if(it) nbItems = it;
+    if(data.meta) nbMeta = data.meta;
+    nbSaveLocal();
+    nbRenderCard(!nbListBusy());
+    nbRenderAlert();
+    try{ nbRenderCheck(); }catch(e){}
+  });
+  backend.listenSeikyu(ch => {
+    ch.forEach(c => {
+      if(!c.key) return;
+      if(c.removed) delete nbIssued[c.key];
+      else nbIssued[c.key] = c.val || {};
+    });
+    nbIssuedSaveLocal();
+    try{ nbRenderCheck(); }catch(e){}
+  });
+  nbRenderCard();
+}
+function nbCloudStop(){
+  nbBackend = null;
+  clearTimeout(nbPushTimer);
+  nbRenderCard();
+}
+function nbShared(){ return !!nbBackend; }
 function nbLoadLocal(){
   try{ nbClients = JSON.parse(localStorage.getItem(NB_CL_KEY) || "[]"); }catch(e){ nbClients = []; }
   try{ nbItems   = JSON.parse(localStorage.getItem(NB_IT_KEY) || "[]"); }catch(e){ nbItems = []; }
@@ -5867,6 +5949,20 @@ async function nbPickTemplate(ev){
       it.push({ 品番: nbCellText(hm.getCell(r,1)), 品名: nm, 単位: nbCellText(hm.getCell(r,3)),
                 標準単価: nbCellNum(hm.getCell(r,4)), 備考: nbCellText(hm.getCell(r,5)) });
     }
+    if(nbShared() && nbClients.length){
+      const ok = confirm(
+        `共有の取引先マスタ（${nbClients.length}件）を、このファイルの内容（${cl.length}件）で置き換えます。\n` +
+        `他のPCの表示もこの内容に変わり、締日などの入力が消えることがあります。\n\nよろしいですか？\n` +
+        `（雛形だけ読み込んで取引先マスタは共有のままにしたい場合は「キャンセル」を押してください）`);
+      if(!ok){
+        nbTmplBuf = buf;
+        try{ await nbIdbPut("template", buf); }catch(e){}
+        if(msg) msg.textContent = "";
+        nbRenderCard(); nbUpdateButtons();
+        showToast("✅ 雛形だけ読み込みました（取引先マスタは共有のまま）");
+        return;
+      }
+    }
     nbClients = cl; nbItems = it; nbTmplBuf = buf;
     nbMeta = { fileName: file.name, loadedAt: new Date().toISOString() };
     try{ await nbIdbPut("template", buf); }
@@ -5883,31 +5979,37 @@ async function nbPickTemplate(ev){
 }
 
 /* ---------- 画面：取引先マスタのカード ---------- */
-function nbRenderCard(){
+function nbRenderCard(redrawList){
   const card = document.getElementById("nb-card");
   if(!card) return;
   const st = document.getElementById("nb-status");
   const info = document.getElementById("nb-info");
-  const has = !!nbTmplBuf;
+  const has = nbClients.length > 0;
+  const shared = nbShared();
   if(st){
     st.textContent = has ? `取引先 ${nbClients.length}件` : "未読み込み";
     st.style.background = has ? "var(--green-light)" : "#eee";
     st.style.color = has ? "var(--green)" : "#777";
   }
   if(info){
+    const where = shared
+      ? `<span style="color:var(--green);font-weight:800;">🟢 取引先マスタは共有中（どのPCでも同じ内容）</span>`
+      : `<span style="color:var(--text2);">💻 取引先マスタはこのPCだけに保存（共有へログインすると全PCで同じになります）</span>`;
     if(!has){
-      info.innerHTML = "「納品書・請求書.xlsx」を読み込むと、ここから納品書と請求書が出せるようになります。得意先マスタと品目マスタもそのファイルから読みます。";
+      info.innerHTML = "「納品書・請求書.xlsx」を読み込むと、ここから納品書と請求書が出せるようになります。得意先マスタと品目マスタもそのファイルから読みます。<br>" + where;
     }else{
       const d = nbMeta && nbMeta.loadedAt ? new Date(nbMeta.loadedAt) : null;
       const noClose = nbClients.filter(c => !String(c["締日"]||"").trim()).length;
       info.innerHTML =
-        `雛形：<b>${esc((nbMeta && nbMeta.fileName) || "")}</b>` +
+        where +
+        `<br>雛形：<b>${esc((nbMeta && nbMeta.fileName) || "")}</b>` +
         (d ? `（${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} 読み込み）` : "") +
         `<br>取引先 <b>${nbClients.length}</b>件／品目 <b>${nbItems.length}</b>件` +
-        (noClose ? `<br><span style="color:var(--text2)">締日が空欄の取引先 ${noClose}件（空欄は月末として計算します。月末以外の取引先だけ入れてください）</span>` : "");
+        (noClose ? `<br><span style="color:var(--text2)">締日が空欄の取引先 ${noClose}件（空欄は月末として計算します。月末以外の取引先だけ入れてください）</span>` : "") +
+        (!nbTmplBuf ? `<br><span style="color:#e65100">このPCには雛形のファイルがまだありません。納品書・請求書を出すには一度「雛形を読み込む」をしてください（取引先マスタは共有から来ています）。</span>` : "");
     }
   }
-  nbRenderList();
+  if(redrawList !== false) nbRenderList();
 }
 
 let nbRowPick = "";
@@ -6536,9 +6638,26 @@ let nbIssued = {};
 function nbIssuedLoad(){
   try{ nbIssued = JSON.parse(localStorage.getItem(NB_ISSUED_KEY) || "{}"); }catch(e){ nbIssued = {}; }
 }
-function nbIssuedSave(){
+function nbIssuedSaveLocal(){
   try{ localStorage.setItem(NB_ISSUED_KEY, JSON.stringify(nbIssued)); }
   catch(e){ showToast("⚠️ 発行の記録を保存できませんでした"); }
+}
+/* 共有に送るときのドキュメント名（スラッシュなどは使えないので置き換える） */
+function nbSeikyuId(key){
+  let id = String(key).replace(/\u0001/g, "~").replace(/[\/.#$\[\]]/g, "-");
+  if(id.length > 280){
+    let h = 2166136261;
+    for(let i = 0; i < key.length; i++){ h ^= key.charCodeAt(i); h = Math.imul(h, 16777619); }
+    id = id.slice(0, 260) + "_" + (h >>> 0).toString(16);
+  }
+  return id;
+}
+function nbIssuedSave(key){
+  nbIssuedSaveLocal();
+  if(nbBackend && key){
+    Promise.resolve(nbBackend.setSeikyu(nbSeikyuId(key), { key, val: nbIssued[key] || {} }))
+      .catch(e => { console.error(e); showToast("⚠️ 発行の記録を共有に送れませんでした"); });
+  }
 }
 function nbKey(client, site, range){
   return [client, site || "*", range.start, range.end].join("\u0001");
@@ -6548,7 +6667,7 @@ function nbMark(client, site, range, kind, extra){
   const cur = nbIssued[k] || {};
   cur[kind] = Object.assign({ at: new Date().toISOString() }, extra || {});
   nbIssued[k] = cur;
-  nbIssuedSave();
+  nbIssuedSave(k);
 }
 function nbGet(client, site, range){
   return nbIssued[nbKey(client, site, range)] || {};
@@ -6816,7 +6935,7 @@ function nbCheckUnskip(i){
   const r = nbCheckRows[i];
   if(!r) return;
   const k = nbKey(r.client, null, r.range);
-  if(nbIssued[k]) { delete nbIssued[k].skip; nbIssuedSave(); }
+  if(nbIssued[k]) { delete nbIssued[k].skip; nbIssuedSave(k); }
   nbRenderCheck();
 }
 function nbPrintCheck(){
