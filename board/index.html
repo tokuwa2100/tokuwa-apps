@@ -45,7 +45,7 @@
   </form>
 </div>
 <div id="root"></div>
-<script>window.__tbVer = "4.11.0";</script>
+<script>window.__tbVer = "4.11.1";</script>
 <script>
 /* 新しい版が出ていたら自動で読み直す（ホーム画面のアイコンが古い画面を覚えたままにならないように） */
 (function(){
@@ -161,7 +161,7 @@ const {
    定数
 ══════════════════════════════════════════════════════════ */
 const APP_NAME = "TOKUWAボード";
-const APP_VERSION = "4.11.0";
+const APP_VERSION = "4.11.1";
 const APP_UPDATED = "2026-11-22";
 /* 外部アプリ（日報）の初期リンク。設定から変更できる */
 const EXT_DEFAULT = {
@@ -3785,7 +3785,7 @@ function App() {
       const days = [];
       for (let d = 1; d <= last; d++) {
         const dk = `${ym}-${pad(d)}`,
-          off = isOffDay(dk);
+          off = parseKey(dk).getDay() === 0; // 日曜は日付の色を変えるだけ。休日かどうかは事務が決める
         const n = month.find(x => x.by === m.id && x.date === dk);
         const lv = leaves.find(l => l.by === m.id && l.status === "approved" && l.from <= dk && l.to >= dk);
         const base = {
@@ -3799,7 +3799,7 @@ function App() {
             ot = otAfter(rs);
           days.push({
             ...base,
-            kind: off ? "休日出勤" : "出勤",
+            kind: n.dayKind === "holiday" ? "休日出勤" : "出勤",
             start: rs.map(r => r.from).sort()[0],
             end: rs.map(r => r.to).sort().slice(-1)[0],
             rest: rs.reduce((p, r) => p + (Number(r.rest) || 0), 0),
@@ -3817,12 +3817,6 @@ function App() {
           ...base,
           kind: "休み",
           note: leavePartText(lv)
-        });else if (off) days.push({
-          ...base,
-          kind: "休日"
-        });else if (dk <= todayKey) days.push({
-          ...base,
-          kind: "日報なし"
         });else days.push({
           ...base,
           kind: ""
@@ -3840,8 +3834,7 @@ function App() {
           hol: h.length,
           holMin: h.reduce((p, x) => p + x.work, 0),
           leave: days.filter(x => x.kind === "休み").length,
-          wait: days.filter(x => x.kind === "未確認").length,
-          none: days.filter(x => x.kind === "日報なし").length
+          wait: days.filter(x => x.kind === "未確認").length
         }
       };
     });
@@ -3867,17 +3860,17 @@ function App() {
     }
     const data = kintaiData(ym);
     const month = nippoList.filter(n => n.date.slice(0, 7) === ym && n.rows.length && n.status === "checked");
-    const summary = [["氏名", "出勤日数", "実働", "うち残業（17:30以降）", "休日出勤日数", "休日出勤時間", "休み（日）", "未確認の日報（件）", "日報なしの平日（日）"]];
+    const summary = [["氏名", "出勤日数", "実働", "うち残業（17:30以降）", "休日出勤日数", "休日出勤時間", "休み（日）", "未確認の日報（件）"]];
     data.forEach(({
       m,
       tot
-    }) => summary.push([m.name, tot.days, hm(tot.work), hm(tot.ot), tot.hol, hm(tot.holMin), tot.leave, tot.wait, tot.none]));
+    }) => summary.push([m.name, tot.days, hm(tot.work), hm(tot.ot), tot.hol, hm(tot.holMin), tot.leave, tot.wait]));
     const detail = [["氏名", "日付", "曜日", "区分", "始業", "終業", "休憩（分）", "実働", "残業", "現場", "作業内容", "事務への連絡"]];
     data.forEach(({
       m,
       days
     }) => days.forEach(x => {
-      if (!x.kind || x.kind === "休日") return;
+      if (!x.kind) return;
       if (x.rows) detail.push([m.name, x.dk, x.dow, x.kind, x.start, x.end, x.rest, hm(x.work), hm(x.ot), x.rows.map(r => [r.client, r.siteName].filter(Boolean).join(" ")).join(" ／ "), x.rows.map(r => r.work).filter(Boolean).join(" ／ "), x.memo]);else detail.push([m.name, x.dk, x.dow, x.kind, "", "", "", "", "", "", x.note || "", ""]);
     }));
     const lvRows = [["氏名", "種類", "開始", "終了", "区分", "日数", "状態"]];
@@ -4903,6 +4896,8 @@ function App() {
       date: f.date,
       holiday: !!f.holiday,
       rows,
+      dayKind: ex && ex.dayKind || "",
+      // dayKind＝事務が決めた「休日出勤」
       /* 給与計算で月ごとに集めるための項目：月・始業・終業・本人が確認した日時 */
       ym: f.date.slice(0, 7),
       startAt: rows.map(r => r.from).filter(Boolean).sort()[0] || "",
@@ -16522,9 +16517,9 @@ function App() {
       label: "休み",
       value: `${cur.tot.leave}日`
     }), /*#__PURE__*/React.createElement(Tot, {
-      label: "日報なしの平日",
-      value: `${cur.tot.none}日`,
-      color: cur.tot.none ? "#6b7280" : undefined
+      label: "未確認",
+      value: `${cur.tot.wait}件`,
+      color: cur.tot.wait ? "#c2410c" : undefined
     })), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
@@ -16532,7 +16527,7 @@ function App() {
         margin: "0 4px 8px",
         lineHeight: 1.6
       }
-    }, "実働は決まった休憩（10:00〜10:30・12:00〜13:00・15:00〜15:30）を引いた時間、残業は17:30より後の時間です。"), /*#__PURE__*/React.createElement("div", {
+    }, "実働は決まった休憩（10:00〜10:30・12:00〜13:00・15:00〜15:30）を引いた時間、残業は17:30より後の時間です。休日出勤は、会社カレンダーに合わせて、事務がその日の「休日出勤にする」を押して決めます。"), /*#__PURE__*/React.createElement("div", {
       style: {
         background: "#fff",
         borderRadius: 14,
@@ -16557,7 +16552,7 @@ function App() {
           borderTop: i ? "1px solid #f3f4f6" : "none",
           cursor: tap ? "pointer" : "default",
           minHeight: 44,
-          background: x.kind === "休日" || !x.kind ? "#fafafa" : "#fff"
+          background: !x.kind ? "#fafafa" : "#fff"
         }
       }, /*#__PURE__*/React.createElement("span", {
         style: {
@@ -16577,7 +16572,7 @@ function App() {
           width: 58,
           flexShrink: 0
         }
-      }, x.kind && x.kind !== "休日" && /*#__PURE__*/React.createElement("span", {
+      }, x.kind && /*#__PURE__*/React.createElement("span", {
         style: {
           fontSize: 11,
           fontWeight: 800,
@@ -16625,7 +16620,29 @@ function App() {
           fontSize: 12,
           color: "#999"
         }
-      }, x.kind === "未確認" ? "押して確認する" : x.note || "")), tap && /*#__PURE__*/React.createElement("span", {
+      }, x.kind === "未確認" ? "押して確認する" : x.note || "")), x.rows && /*#__PURE__*/React.createElement("button", {
+        onClick: e => {
+          e.stopPropagation();
+          const n = nippoList.find(q => q.id === x.id);
+          if (n) persistNippo({
+            ...n,
+            dayKind: x.kind === "休日出勤" ? "" : "holiday"
+          });
+        },
+        style: {
+          flexShrink: 0,
+          fontSize: 11,
+          fontWeight: 800,
+          padding: "7px 8px",
+          borderRadius: 9,
+          cursor: "pointer",
+          minHeight: 38,
+          lineHeight: 1.3,
+          border: `1.5px solid ${x.kind === "休日出勤" ? "#d1d5db" : "#fca5a5"}`,
+          background: "#fff",
+          color: x.kind === "休日出勤" ? "#666" : "#b91c1c"
+        }
+      }, x.kind === "休日出勤" ? /*#__PURE__*/React.createElement(React.Fragment, null, "出勤に", /*#__PURE__*/React.createElement("br", null), "もどす") : /*#__PURE__*/React.createElement(React.Fragment, null, "休日出勤", /*#__PURE__*/React.createElement("br", null), "にする")), tap && !x.rows && /*#__PURE__*/React.createElement("span", {
         style: {
           color: "#bbb",
           fontSize: 18
