@@ -237,6 +237,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
 .cf-badge.warn { background: #fef3c7; color: #92400e; }
 .cf-btnrow { display: flex; flex-wrap: wrap; gap: 8px; }
 .cf-btnrow button { width: auto; margin: 0; padding: 10px 16px; font-size: 13px; }
+/* 納品書・請求書まわりの小さいボタンは横に並べる（.btn の既定は幅いっぱいのため） */
+#nb-list .btn, #nb-check .btn, #nb-alert .btn, #nb-card > details .btn { width: auto; margin: 0 6px 6px 0; }
 #cf-sheet { background: #fff; color: #222; border: 1px solid var(--border); border-radius: 8px; padding: 24px 20px; font-size: 13px; line-height: 1.7; }
 #cf-sheet .sh-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; border-bottom: 3px solid var(--orange); padding-bottom: 10px; }
 #cf-sheet .sh-title { font-size: 22px; font-weight: 800; letter-spacing: .28em; }
@@ -770,7 +772,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   <!-- 請求もれチェック -->
   <div class="card hidden" id="nb-check">
     <div class="card-title amber" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">🧾 請求もれチェック <span id="nb-check-badge" class="tk-badge"></span></div>
-    <p class="tk-p">取引先ごとの締日で期間を区切って、日報がある現場に納品書・請求書を出したかを一覧にします。出した記録はこのPCに残ります。</p>
+    <p class="tk-p">取引先ごとの締日で期間を区切って、日報がある現場に納品書・請求書を出したかを一覧にします。出した記録は共有している全PCで同じになります。</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
       <label style="font-size:12px;">対象月
         <input type="month" id="nb-check-month" onchange="nbRenderCheck()">
@@ -827,7 +829,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "shukei";
-const APP_VERSION   = "1.11.0";
+const APP_VERSION   = "1.11.1";
 const APP_BUILD     = "2026-11-23";
 
 (function(){
