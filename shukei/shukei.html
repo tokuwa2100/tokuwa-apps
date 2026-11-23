@@ -829,7 +829,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "shukei";
-const APP_VERSION   = "1.11.1";
+const APP_VERSION   = "1.11.2";
 const APP_BUILD     = "2026-11-23";
 
 (function(){
@@ -4183,6 +4183,41 @@ function tkEditor(){
   if(!n && TK.user) n = TK.user.displayName || (TK.user.email || "").split("@")[0];
   return n || "（未設定）";
 }
+/* Firestoreに入れられない形を直す。直したところは problems に残す
+   （配列の中の配列・名前のない項目・__予約名__・数値でない数値は保存できない） */
+function tkCloudSafe(v){
+  const problems = [];
+  const walk = (val, path, inArray) => {
+    if(val === undefined || val === null) return null;
+    if(Array.isArray(val)){
+      if(inArray){
+        problems.push((path || "?") + "：配列の中に配列");
+        const o = {};
+        val.forEach((x, i) => { o["i" + i] = walk(x, path + "[" + i + "]", false); });
+        return o;
+      }
+      return val.map((x, i) => walk(x, path + "[" + i + "]", true));
+    }
+    if(typeof val === "object"){
+      const o = {};
+      Object.keys(val).forEach(k => {
+        const kp = path ? path + "." + k : k;
+        if(k === ""){ problems.push(kp + "：名前のない項目"); return; }
+        if(/^__.*__$/.test(k)){ problems.push(kp + "：使えない項目名"); return; }
+        o[k] = walk(val[k], kp, false);
+      });
+      return o;
+    }
+    if(typeof val === "number" && !isFinite(val)){ problems.push(path + "：数値がおかしい"); return null; }
+    if(typeof val === "function" || typeof val === "symbol"){ problems.push(path + "：保存できない値"); return null; }
+    return val;
+  };
+  const value = walk(v, "", false);
+  let bytes = 0;
+  try{ bytes = new Blob([JSON.stringify(value)]).size; }catch(e){}
+  if(bytes > 900000) problems.push("大きすぎます（" + Math.round(bytes/1024) + "KB／上限1MB）");
+  return { value, problems, bytes };
+}
 function tkStrip(r){
   const d = tkClone(r);
   delete d.signaturePng; delete d.sent; delete d.sentAt;
@@ -4258,15 +4293,29 @@ function tkRebuild(){
 
 /* ---------- 取り込み（画像・JSON） ---------- */
 async function tkImport(records, fileName){
-  const res = { added: [], skipped: 0, deletedSkipped: 0 };
+  const res = { added: [], skipped: 0, deletedSkipped: 0, failed: [] };
   for(const r of records){
     const id = String(r.id);
     if(TK.mode === "cloud"){
       const w = tkWrap(r, fileName);
-      const ok = await TK.backend.createIfAbsent(tkDocId(id), w);
-      if(ok === "created"){ TK.reports.set(id, w); res.added.push(id); }
-      else if(ok === "deleted") res.deletedSkipped++;
-      else res.skipped++;
+      try{
+        const ok = await TK.backend.createIfAbsent(tkDocId(id), w);
+        if(ok === "created"){ TK.reports.set(id, w); res.added.push(id); }
+        else if(ok === "deleted") res.deletedSkipped++;
+        else res.skipped++;
+      }catch(e){
+        // この1件は飛ばして、ほかの日報の取り込みは続ける
+        console.error("共有に登録できませんでした", id, e, e.tkDetail || "", r);
+        res.failed.push({
+          id,
+          date: r.date || "",
+          client: getClientName(r) || "",
+          site: r.site || "",
+          type: detectType(r),
+          code: e.code || e.message || "unknown",
+          detail: e.tkDetail || "",
+        });
+      }
     }else{
       const ex = TK.reports.get(id);
       if(ex){ ex.deleted ? res.deletedSkipped++ : res.skipped++; continue; }
@@ -4502,12 +4551,17 @@ function tkFirebaseBackend(cfg){
       return s.docs.map(d => d.data());
     },
     async createIfAbsent(docId, w){
+      const safe = tkCloudSafe(w);
+      if(safe.problems.length) console.warn("共有に入れる前に直しました", docId, safe.problems);
       return db.runTransaction(async tx => {
         const ref = R.doc(docId);
         const s = await tx.get(ref);
         if(s.exists) return s.data().deleted ? "deleted" : "exists";
-        tx.set(ref, w);
+        tx.set(ref, safe.value);
         return "created";
+      }).catch(err => {
+        err.tkDetail = safe.problems.join("／") || ("大きさ " + Math.round(safe.bytes/1024) + "KB");
+        throw err;
       });
     },
     async update(docId, expectRev, patchFn){
@@ -5408,7 +5462,7 @@ const DR_SINCE_LS  = "TOKUWA_SHUKEI_DRIVE_SINCE_V1";
 const DR_PEND_LS   = "TOKUWA_SHUKEI_DRIVE_PENDING_V1";
 const DR_IMGFILL_LS = "TOKUWA_SHUKEI_DRIVE_IMGFILL_V1";
 const DR_INTERVAL  = 5 * 60 * 1000;
-const DR = { busy: false, lastAt: "", lastAdded: 0, lastAddedAt: "", error: "" };
+const DR = { busy: false, lastAt: "", lastAdded: 0, lastAddedAt: "", error: "", failed: [] };
 
 function drLs(k, v){
   try{
@@ -5458,9 +5512,9 @@ async function drPull(manual){
     return;
   }
   if(!navigator.onLine){ if(manual) showToast("⚠️ インターネットにつながっていません"); return; }
-  DR.busy = true; DR.error = ""; drRender();
+  DR.busy = true; DR.error = ""; DR.failed = []; drRender();
   let added = 0, skipped = 0;
-  const fill = [];
+  const fill = [], failed = [];
   try{
     let since = drLs(DR_SINCE_LS);
     if(drLs(DR_IMGFILL_LS) !== "1") since = "";          // 初回だけ全部見て、原本画像IDを補う
@@ -5489,6 +5543,7 @@ async function drPull(manual){
         const out = await tkImport(recs, "Googleドライブ");
         added += out.added.length;
         skipped += out.skipped + out.deletedSkipped;
+        if(out.failed && out.failed.length) failed.push(...out.failed);
       }
       since = res.next || since;
       drLs(DR_SINCE_LS, since);
@@ -5500,10 +5555,13 @@ async function drPull(manual){
     if(added){ DR.lastAdded = added; DR.lastAddedAt = DR.lastAt; }
     if(manual || added) showToast(added ? `✅ ドライブから ${added}件を登録しました` : "ℹ️ ドライブに新しい日報はありません");
   }catch(e){
+    if(e && e.tkDetail) console.error("ドライブ取り込み", e, e.tkDetail);
     DR.error = e.code || e.message || "unknown";
     if(manual || DR.error === "bad_key" || DR.error === "office_only") showToast("❌ ドライブ：" + drErrText(DR.error));
   }finally{
     DR.busy = false;
+    DR.failed = failed;
+    if(failed.length) showToast(`⚠️ ${failed.length}件の日報が共有に登録できませんでした（下の「☁ Googleドライブの日報」に出ています）`);
   }
   await drFlush();
   drRender();
@@ -5675,6 +5733,15 @@ function drRender(){
       + (t ? `<br>最後の確認：<b>${t}</b>` + (DR.lastAddedAt ? `　最後に登録：${hm(DR.lastAddedAt)}（${DR.lastAdded}件）` : "") : "")
       + (DR.error ? `<br><span style="color:#c62828;font-weight:700">${esc(drErrText(DR.error))}</span>` : "")
       + (pend ? `<br><span style="color:#a64a00;font-weight:700">ドライブへ未反映の修正 ${pend}件（つながったら自動で反映します）</span>` : "")
+      + ((DR.failed && DR.failed.length) ? `<div style="margin-top:8px;padding:8px 10px;border:1.5px solid #ef6c00;background:#fff3e0;border-radius:8px;">
+          <div style="color:#c62828;font-weight:800;">共有に登録できなかった日報が ${DR.failed.length}件あります</div>
+          <div style="font-size:12px;margin-top:4px;">ほかの日報は登録できています。下の内容を渡辺に伝えてください。</div>
+          <div style="font-size:12px;margin-top:6px;font-family:monospace;">`
+          + DR.failed.slice(0, 10).map(f =>
+              `${esc(f.date)}　${esc(f.client)}　${esc(f.site)}　(${esc(f.type)})　${esc(f.code)}${f.detail ? "　" + esc(f.detail) : ""}　[${esc(f.id)}]`
+            ).join("<br>")
+          + (DR.failed.length > 10 ? `<br>ほか ${DR.failed.length - 10}件` : "")
+          + `</div></div>` : "")
     : `「ドライブ連携の設定」に事務所用の合言葉を入れると、日報アプリからドライブに届いた日報を自動で取り込みます。`;
   info.innerHTML = html;
   const k = document.getElementById("dr-key");
