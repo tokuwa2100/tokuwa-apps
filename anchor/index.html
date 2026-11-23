@@ -246,11 +246,6 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   /* 呼び・本数の2列 */
   .coreGrid2x{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:start}
   .coreRow input,.coreRow select{max-width:100%}
-  .tphotos{display:flex;gap:10px;margin-top:10px}
-  .tph{flex:1;border:1px dashed #b9c3cf;border-radius:8px;padding:6px;text-align:center;font-size:12px;color:#555;background:#fafbfc}
-  .tph .thumb{width:100%;height:96px;object-fit:cover;border-radius:6px;display:block;margin:4px 0}
-  .tph .none{height:96px;display:flex;align-items:center;justify-content:center;color:#999;background:#fff;border-radius:6px;margin:4px 0}
-  .tph .btn{width:100%;padding:8px 6px;font-size:13px}
   .judgeTag{display:inline-block;padding:2px 10px;border-radius:12px;font-weight:800;font-size:13px}
   .judgeTag.ok{background:#e8f5e9;color:#1b5e20}
   .judgeTag.ng{background:#fdecea;color:#b00020}
@@ -263,8 +258,6 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   /* 横に少し揺れる（横スクロールが出る）のを防ぐ
      ・flex／grid の中身は既定で「最小幅＝中身の幅」になり、写真や長い行がはみ出す
      ・はみ出しを止めたうえで、最後の保険として横スクロール自体を切る */
-  .tphotos > .tph{min-width:0}
-  .tph .thumb{max-width:100%}
   .coreGrid > *,.coreGrid2 > *,.coreGrid2x > *,.grid-basic > *{min-width:0}
   .coreRowTop{flex-wrap:wrap}
   .coreRow,.section,.card{overflow-wrap:anywhere}
@@ -368,6 +361,17 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
             <option value="KT-20">KT-20（20kN）</option>
             <option value="AT-200">AT-200（200kN）</option>
           </select>
+
+          <label style="margin-top:12px;">試験実施者（施工士）</label>
+          <select id="testTester" onchange="this.classList.remove('err');invalidatePhoto()">
+            <option value="">（選んでください）</option>
+            <option value="松沢">松沢</option>
+            <option value="渡部">渡部</option>
+          </select>
+
+          <label style="margin-top:12px;">試験場所（住所・任意）</label>
+          <input id="testPlace" type="text" placeholder="例：上越市大貫地内" oninput="invalidatePhoto()" />
+          <div class="hint" style="margin-top:4px;">※空のままなら現場名が入ります。報告書を作るときに直せます。</div>
           <div class="grid2" style="margin-top:12px;">
             <div>
               <div class="smallLabel">共通：呼び（サイズ）</div>
@@ -388,7 +392,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
           </div>
           <div class="hint" style="margin-top:8px;">実施荷重を入れた本数：<b><span id="testCount">0</span></b> 本（実施荷重が空の行は提出されません）</div>
         </div>
-        <div class="hint">※試験をした日だけ「あり」にしてください。写真は箇所ごとに「全体」「数値」の2枚セットです。報告書作成ツールへそのまま渡せます。</div>
+        <div class="hint">※試験をした日だけ「あり」にしてください。入力した内容は報告書作成ツールへそのまま渡せます（写真は報告書ツールで貼ってください）。</div>
       </div>
 
       <div class="section">
@@ -491,8 +495,9 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
         <div id="c-testNone" class="muted">（なし）</div>
         <div id="c-testWrap" class="hidden" style="overflow:auto">
           <div class="item" style="margin-bottom:6px;">試験機：<span id="c-testMachine"></span>／試験本数：<span id="c-testCount"></span> 本</div>
+          <div class="item" style="margin-bottom:6px;">試験実施者：<span id="c-testTester"></span>／試験場所：<span id="c-testPlace"></span></div>
           <table>
-            <thead><tr><th class="nowrap">№</th><th class="nowrap">呼び</th><th class="nowrap">指定</th><th class="nowrap">実施</th><th class="nowrap">判定</th><th class="nowrap">写真</th></tr></thead>
+            <thead><tr><th class="nowrap">№</th><th class="nowrap">呼び</th><th class="nowrap">指定</th><th class="nowrap">実施</th><th class="nowrap">判定</th><th>メモ</th></tr></thead>
             <tbody id="c-testTbody"></tbody>
           </table>
         </div>
@@ -573,7 +578,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "anchor";
-const APP_VERSION   = "1.5.5";
+const APP_VERSION   = "1.6.0";
 const APP_BUILD     = "2026-11-22";
 
 (function(){
@@ -1447,14 +1452,8 @@ function addTestRow(){
         <input class="t-memo" type="text" placeholder="例：躯体に異常なし" oninput="invalidatePhoto()" />
       </div>
     </div>
-    <div class="tphotos">
-      <div class="tph ph-overall" data-img=""></div>
-      <div class="tph ph-value" data-img=""></div>
-    </div>
   `;
   wrap.appendChild(row);
-  renderTestPhoto(row, "overall");
-  renderTestPhoto(row, "value");
   renumberTestRows();
   updateJudgeRow(row);
 }
@@ -1490,53 +1489,6 @@ function updateJudgeRow(row){
   tag.className = "t-judge judgeTag " + j.cls;
   tag.textContent = j.text;
 }
-/* 写真（箇所ごとに 全体・数値 の2枚） */
-function renderTestPhoto(row, which){
-  const cell = row.querySelector(".ph-" + which);
-  if(!cell) return;
-  const img = cell.dataset.img || "";
-  const label = (which === "overall") ? "全体写真" : "数値写真";
-  cell.innerHTML = `<div style="font-weight:700;color:#333">${label}</div>`
-    + (img ? `<img class="thumb" src="${img}">` : `<div class="none">写真なし</div>`)
-    + (img ? `<button class="btn btn-gray" type="button" onclick="clearTestPhoto(this,'${which}')">撮り直す／削除</button>`
-           : `<button class="btn btn-outline" type="button" onclick="pickTestPhoto(this,'${which}')">写真を撮る・選ぶ</button>`);
-}
-function pickTestPhoto(btn, which){
-  const row = btn.closest(".testRow");
-  const inp = document.createElement("input");
-  inp.type = "file"; inp.accept = "image/*";
-  inp.onchange = () => {
-    const f = inp.files[0]; if(!f) return;
-    const fr = new FileReader();
-    fr.onload = () => downscaleImg(fr.result, 1280, out=>{
-      row.querySelector(".ph-" + which).dataset.img = out;
-      renderTestPhoto(row, which);
-      invalidatePhoto();
-    });
-    fr.readAsDataURL(f);
-  };
-  inp.click();
-}
-function clearTestPhoto(btn, which){
-  const row = btn.closest(".testRow");
-  row.querySelector(".ph-" + which).dataset.img = "";
-  renderTestPhoto(row, which);
-  invalidatePhoto();
-}
-/* 写真は報告書用。長辺1280px・JPEGに縮めて持つ（報告書ツールと同じ条件） */
-function downscaleImg(dataUrl, maxW, cb){
-  const img = new Image();
-  img.onload = () => {
-    let w = img.width, h = img.height;
-    if(w > maxW){ h = Math.round(h * maxW / w); w = maxW; }
-    const c = document.createElement("canvas");
-    c.width = w; c.height = h;
-    c.getContext("2d").drawImage(img, 0, 0, w, h);
-    cb(c.toDataURL("image/jpeg", 0.82));
-  };
-  img.onerror = () => cb(dataUrl);
-  img.src = dataUrl;
-}
 function collectTest(){
   if(testOn !== true) return { on:false, machine:"", rows:[] };
   const rows = [];
@@ -1550,12 +1502,16 @@ function collectTest(){
       design: d === "" ? null : Number(d),
       measured: m === "" ? null : Number(m),
       judge: judgeOf(d, m).text,
-      memo: (r.querySelector(".t-memo").value || "").trim(),
-      overall: r.querySelector(".ph-overall").dataset.img || "",
-      value: r.querySelector(".ph-value").dataset.img || ""
+      memo: (r.querySelector(".t-memo").value || "").trim()
     });
   });
-  return { on:true, machine: document.getElementById("testMachine").value, rows };
+  return {
+    on: true,
+    machine: document.getElementById("testMachine").value,
+    tester: document.getElementById("testTester").value || "",
+    place: (document.getElementById("testPlace").value || "").trim(),
+    rows
+  };
 }
 function resetTest(){
   const wrap = document.getElementById("testRows");
@@ -1563,6 +1519,8 @@ function resetTest(){
   const cd = document.getElementById("testCommonDesign"); if(cd) cd.value = "";
   const cs = document.getElementById("testCommonSize");   if(cs) cs.value = "";
   const co = document.getElementById("testCommonSizeOther"); if(co){ co.value = ""; co.classList.add("hidden"); }
+  const tt = document.getElementById("testTester"); if(tt) tt.value = "";
+  const tp = document.getElementById("testPlace");  if(tp) tp.value = "";
   setTest(false);
   renumberTestRows();
 }
@@ -1709,6 +1667,7 @@ function goConfirm(){
       if(!(parseFloat(ms.value) > 0)) mark(ms);
     });
     if(!filled) mark(document.getElementById("testUseRow"));
+    if(!document.getElementById("testTester").value) mark(document.getElementById("testTester"));
   }
 
   // 高速道路：使用有無は必須、使用ありなら区間必須
@@ -1823,15 +1782,16 @@ function goConfirm(){
     tWrap.classList.remove("hidden");
     document.getElementById("c-testMachine").textContent = tt.machine || "—";
     document.getElementById("c-testCount").textContent = String(tt.rows.length);
+    document.getElementById("c-testTester").textContent = testerFullName(tt.tester) || "—";
+    document.getElementById("c-testPlace").textContent = tt.place || (data.site || "—");
     tt.rows.forEach((t,i)=>{
-      const ph = (t.overall ? 1 : 0) + (t.value ? 1 : 0);
       const tr = document.createElement("tr");
       tr.innerHTML = `<td class="nowrap">${i+1}</td>`
         + `<td class="nowrap">${escapeHtml(t.size || "—")}</td>`
         + `<td class="nowrap">${t.design != null ? t.design + " kN" : "—"}</td>`
         + `<td class="nowrap">${t.measured != null ? t.measured + " kN" : "—"}</td>`
         + `<td class="nowrap">${escapeHtml(t.judge || "—")}</td>`
-        + `<td class="nowrap">${ph}/2</td>`;
+        + `<td>${escapeHtml(t.memo || "")}</td>`;
       tBody.appendChild(tr);
     });
   }
@@ -2776,17 +2736,6 @@ const QR_MAGIC = "TKW1";                  // 集計表が「徳和の日報QR」
 function packForQR(p){
   const d = Object.assign({}, p);
   delete d.signaturePng; delete d.sent; delete d.sentAt; delete d._preview;
-  // 試験写真はQRに入らないので外す（写真はドライブ送信とJSON書き出しで渡す）
-  if(d.test && d.test.rows){
-    d.test = Object.assign({}, d.test, {
-      rows: d.test.rows.map(function(t){
-        const x = Object.assign({}, t);
-        x.overall = x.overall ? 1 : 0;
-        x.value   = x.value   ? 1 : 0;
-        return x;
-      })
-    });
-  }
   const z = fflate.deflateSync(fflate.strToU8(JSON.stringify(d)), { level: 9 });
   const head = fflate.strToU8(QR_MAGIC);
   const out = new Uint8Array(head.length + z.length);
@@ -3078,9 +3027,9 @@ function renderReportBody(p){
   if(!tt || tt.on !== true || !(tt.rows || []).length){
     h += `<div class="rp-muted">（なし）</div>`;
   }else{
-    const nph = (tt.rows || []).reduce((n, t) => n + (t.overall ? 1 : 0) + (t.value ? 1 : 0), 0);
     h += `<div style="margin:2px 0 3px;">試験機 ${e(tt.machine || "")}　／　試験本数 <b>${tt.rows.length}</b> 本`
-      +  `　／　写真 ${nph} 枚（報告書用に送信）</div>`;
+      +  `　／　試験実施者 ${e(testerFullName(tt.tester) || "—")}</div>`
+      +  `<div style="margin:0 0 3px;">試験場所 ${e(tt.place || p.site || "—")}</div>`;
     h += `<table class="rp-t"><thead><tr><th class="rp-nw">№</th><th class="rp-nw">呼び</th>`
       +  `<th class="rp-nw">指定荷重</th><th class="rp-nw">実施荷重</th><th class="rp-nw">判定</th><th>メモ</th></tr></thead><tbody>`;
     tt.rows.forEach((t, i) => {
@@ -3116,6 +3065,12 @@ function fmtDateKanji(iso){
   const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if(!m) return iso;
   return m[1] + "年" + Number(m[2]) + "月" + Number(m[3]) + "日";
+}
+/* 試験実施者（施工士）。報告書ツールに登録されている正式名に直して渡す */
+const TESTERS = { "松沢": "松沢　俊宏", "渡部": "渡部　徳史" };
+function testerFullName(v){
+  if(!v) return "";
+  return TESTERS[v] || v;
 }
 function dirForReport(dir){
   return dir === "上" ? "上向き　施工躯体面に対して直角"
@@ -3154,27 +3109,44 @@ function buildReportJson(r){
   const mainSize = (rows[0] && rows[0].size) ? rows[0].size : (first ? first.size : "");
   const jpDate = r.date ? fmtDateKanji(r.date) : "";
 
+  // サイズごとの試験本数
+  const cmap = new Map();
+  rows.forEach(t=>{
+    const sz = t.size || "";
+    cmap.set(sz, (cmap.get(sz) || 0) + 1);
+  });
+  const counts = [...cmap.entries()].map(([size,qty]) => ({ size, qty }));
+
+  // 指定荷重：サイズが1種類で全部同じなら共通、違えば空（№ごとの値を使う）
+  const designs = [...new Set(rows.map(t => t.design))];
+  const designCommon = (designs.length === 1 && designs[0] != null) ? String(designs[0]) : "";
+
   return {
     format: "TOKUWA_ANCHOR_TEST",
-    ver: 1,
+    ver: 2,
     app: "アンカー日報 v" + (r.appVersion || APP_VERSION),
     recordId: r.recordId || r.id || "",
     date: r.date || "",
     client: r.client || "",
     project: r.project || "",
-    place: r.site || "",
+    place: (tt.place || r.site || ""),
     testdate: jpDate,
     machine: tt.machine || "",
-    anchorClass: anchorClassText(first),
+    engineer: testerFullName(tt.tester),      // 試験を行った作業員（施工士）
+    tester: tt.tester || "",                  // 日報での表記
+    anchorClass: anchorClassText(first),      // ケミカル材・アンカーの種類
     anchorType: mainSize ? (sizeKind(mainSize) + "　" + mainSize) : "",
+    designCommon: designCommon,               // 共通の指定荷重（サイズ1種類のとき）
+    testTotal: rows.length,                   // 試験本数（合計）
+    counts: counts,                           // サイズごとの試験本数
     conditions: conditions,
     anchors: rows.map(t=>({
       date: jpDate,
       type: t.size || "",
       design: t.design != null ? String(t.design) : "",
       measured: t.measured != null ? String(t.measured) : "",
-      overall: t.overall || null,
-      value: t.value || null,
+      overall: null,
+      value: null,
       memo: t.memo || ""
     }))
   };
