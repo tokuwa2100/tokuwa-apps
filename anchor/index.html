@@ -578,8 +578,8 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "anchor";
-const APP_VERSION   = "1.6.0";
-const APP_BUILD     = "2026-11-22";
+const APP_VERSION   = "1.6.1";
+const APP_BUILD     = "2026-11-23";
 
 (function(){
   const tv = document.getElementById("titleVer");
@@ -2076,7 +2076,7 @@ function buildSignedPayload(){
   let signaturePng = "";
   try{ signaturePng = signatureForRecord(); }catch(e){}
 
-  const payload = { app:"core-nippo", version:3, appVersion: APP_VERSION, appBuild: APP_BUILD, recordId: draft.recordId || newRecordId(), sent:false, driveSent:false, ...draft, signaturePng };
+  const payload = { app:"anchor-nippo", version:3, appVersion: APP_VERSION, appBuild: APP_BUILD, recordId: draft.recordId || newRecordId(), sent:false, driveSent:false, ...draft, signaturePng };
   return payload;
 }
 function updateSignButtons(){
