@@ -829,7 +829,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "shukei";
-const APP_VERSION   = "1.11.3";
+const APP_VERSION   = "1.11.4";
 const APP_BUILD     = "2026-11-23";
 
 (function(){
@@ -5747,6 +5747,21 @@ tkSetDeleted = async function(id, del, reason, expectRev){
   return r;
 };
 
+/* 画面のお知らせを消す（取り込み自体はやり直せます） */
+const DR_SEEN_LS = "TOKUWA_SHUKEI_DR_SEEN_V1";
+function drClear(what){
+  try{
+    const keep = JSON.parse(localStorage.getItem(DR_SEEN_LS) || "[]");
+    if(what === "failed" && DR.failed.length) keep.push({ at: new Date().toISOString(), kind: "failed", list: DR.failed });
+    if(what === "fixed" && DR.fixed.length)   keep.push({ at: new Date().toISOString(), kind: "fixed",  list: DR.fixed });
+    localStorage.setItem(DR_SEEN_LS, JSON.stringify(keep.slice(-20)));
+  }catch(e){}
+  if(what === "error")  DR.error = "";
+  if(what === "failed") DR.failed = [];
+  if(what === "fixed")  DR.fixed = [];
+  drRender();
+}
+
 /* ---------- 表示・設定 ---------- */
 function drRender(){
   const b = document.getElementById("dr-status");
@@ -5766,10 +5781,14 @@ function drRender(){
   let html = drKey()
     ? `日報アプリから会社のGoogleドライブに届いた日報を、ここに自動で取り込みます（開いている間は5分ごと）。`
       + (t ? `<br>最後の確認：<b>${t}</b>` + (DR.lastAddedAt ? `　最後に登録：${hm(DR.lastAddedAt)}（${DR.lastAdded}件）` : "") : "")
-      + (DR.error ? `<br><span style="color:#c62828;font-weight:700">${esc(drErrText(DR.error))}</span>` : "")
+      + (DR.error ? `<br><span style="color:#c62828;font-weight:700">${esc(drErrText(DR.error))}</span>`
+            + ` <button onclick="drClear('error')" style="font-size:11px;padding:2px 8px;border:1px solid #ccc;background:#fff;border-radius:6px;cursor:pointer;">消す</button>` : "")
       + (pend ? `<br><span style="color:#a64a00;font-weight:700">ドライブへ未反映の修正 ${pend}件（つながったら自動で反映します）</span>` : "")
       + ((DR.failed && DR.failed.length) ? `<div style="margin-top:8px;padding:8px 10px;border:1.5px solid #ef6c00;background:#fff3e0;border-radius:8px;">
-          <div style="color:#c62828;font-weight:800;">共有に登録できなかった日報が ${DR.failed.length}件あります</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="color:#c62828;font-weight:800;flex:1;">共有に登録できなかった日報が ${DR.failed.length}件あります</div>
+            <button onclick="drClear('failed')" style="font-size:11px;padding:3px 10px;border:1px solid #ccc;background:#fff;border-radius:6px;cursor:pointer;">消す</button>
+          </div>
           <div style="font-size:12px;margin-top:4px;">ほかの日報は登録できています。下の内容を渡辺に伝えてください。</div>
           <div style="font-size:12px;margin-top:6px;font-family:monospace;">`
           + DR.failed.slice(0, 10).map(f =>
@@ -5778,7 +5797,10 @@ function drRender(){
           + (DR.failed.length > 10 ? `<br>ほか ${DR.failed.length - 10}件` : "")
           + `</div></div>` : "")
       + ((DR.fixed && DR.fixed.length) ? `<div style="margin-top:8px;padding:8px 10px;border:1.5px solid #90caf9;background:#e3f2fd;border-radius:8px;">
-          <div style="color:#0d47a1;font-weight:800;">大きすぎる項目を外して登録した日報が ${DR.fixed.length}件あります</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="color:#0d47a1;font-weight:800;flex:1;">大きすぎる項目を外して登録した日報が ${DR.fixed.length}件あります</div>
+            <button onclick="drClear('fixed')" style="font-size:11px;padding:3px 10px;border:1px solid #ccc;background:#fff;border-radius:6px;cursor:pointer;">消す</button>
+          </div>
           <div style="font-size:12px;margin-top:4px;">日報の数量や内容はそのまま入っています。外したのは画像などの大きなデータで、原本はドライブに残っています。</div>
           <div style="font-size:12px;margin-top:6px;font-family:monospace;">`
           + DR.fixed.slice(0, 5).map(f =>
