@@ -827,8 +827,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "shukei";
-const APP_VERSION   = "1.10.0";
-const APP_BUILD     = "2026-11-22";
+const APP_VERSION   = "1.10.1";
+const APP_BUILD     = "2026-11-23";
 
 (function(){
   const b = document.getElementById("verBadge");
@@ -5904,7 +5904,7 @@ function nbRenderCard(){
         `雛形：<b>${esc((nbMeta && nbMeta.fileName) || "")}</b>` +
         (d ? `（${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} 読み込み）` : "") +
         `<br>取引先 <b>${nbClients.length}</b>件／品目 <b>${nbItems.length}</b>件` +
-        (noClose ? `<br><span style="color:#c62828">締日が空の取引先が ${noClose}件あります</span>` : "");
+        (noClose ? `<br><span style="color:var(--text2)">締日が空欄の取引先 ${noClose}件（空欄は月末として計算します。月末以外の取引先だけ入れてください）</span>` : "");
     }
   }
   nbRenderList();
@@ -6166,8 +6166,8 @@ function nbRenderAlert(){
       </div>`).join("");
   }
   if(noClose.length){
-    html += `<div style="font-weight:800;color:#e65100;font-size:14px;margin:10px 0 4px;">締日が未設定の取引先が ${noClose.length}件あります</div>
-      <p class="tk-p">${noClose.map(esc).join("／")}<br>「📗 納品書・請求書」の取引先マスタから締日を入れてください。</p>`;
+    html += `<div style="font-weight:800;color:#e65100;font-size:14px;margin:10px 0 4px;">締日を確かめたい取引先が ${noClose.length}件あります</div>
+      <p class="tk-p">この期間に日報がある取引先のうち、締日が空欄のものです。<b>今は月末として計算しています。</b>月末でよければそのままで問題ありません。違う場合は「📗 納品書・請求書」の取引先マスタから締日を入れてください。<br>${noClose.map(esc).join("／")}</p>`;
   }
   const body = document.getElementById("nb-alert-body");
   if(body) body.innerHTML = html;
