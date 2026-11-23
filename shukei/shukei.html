@@ -235,6 +235,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
 .cf-item button { flex-shrink: 0; width: auto; margin: 0; padding: 9px 14px; font-size: 13px; }
 .cf-badge { font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 999px; margin-left: 6px; background: #eef2ff; color: #3730a3; }
 .cf-badge.warn { background: #fef3c7; color: #92400e; }
+.cf-badge.test { background: #b00020; color: #fff; }
 .cf-btnrow { display: flex; flex-wrap: wrap; gap: 8px; }
 .cf-btnrow button { width: auto; margin: 0; padding: 10px 16px; font-size: 13px; }
 /* 納品書・請求書まわりの小さいボタンは横に並べる（.btn の既定は幅いっぱいのため） */
@@ -840,7 +841,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "shukei";
-const APP_VERSION   = "1.12.0";
+const APP_VERSION   = "1.12.1";
 const APP_BUILD     = "2026-11-23";
 
 (function(){
@@ -1809,6 +1810,13 @@ function raDateKanji(iso){
   return m[1] + "年" + Number(m[2]) + "月" + Number(m[3]) + "日";
 }
 function raHasTest(r){ return !!(r && r.test && r.test.on === true && (r.test.rows || []).length); }
+/* 一覧に出す小さい印（🧪 引張試験 ○本） */
+function raTestBadge(rec){
+  if(!raHasTest(rec)) return "";
+  const rows = rec.test.rows || [];
+  const ng = rows.filter(x => x.judge === "不合格").length;
+  return `<span class="cf-badge test">🧪 引張試験 ${rows.length}本${ng ? "・不合格" + ng : ""}</span>`;
+}
 
 function raBuildReportJson(r){
   const agg  = aggregateAnchors(r);
@@ -3232,7 +3240,7 @@ function cfHalf(v){
   if(Number.isNaN(n)) return "";
   return String(Math.floor(n)).padStart(2,"0") + ((n%1===0.5) ? ":30" : ":00");
 }
-function cfKindLabel(t){ return t === "core" ? "コア・探査" : "常用"; }
+function cfKindLabel(t){ return t === "core" ? "コア・探査" : t === "anchor" ? "アンカー" : "常用"; }
 
 /* ---- 原本レコードのグループ化（日付＋お客様＋現場＋種別） ---- */
 function cfKeyOf(r){
@@ -5086,7 +5094,7 @@ function srRender(){
       return `<button type="button" class="sr-row${w.deleted ? " del" : ""}" onclick="edOpen('${esc(w.id).replace(/'/g, "\\'")}')">
         <span class="sr-d">${esc(cfDateSlash(w.date))}<small>${edWd(w.date)}</small></span>
         <span class="sr-m"><b>${esc(w.client || "（お客様名なし）")} 様</b><span>${esc(w.site || "")}${who ? "　／　" + esc(who) : ""}</span></span>
-        <span class="sr-b"><span class="cf-badge">${esc(cfKindLabel(w.type))}</span>${n ? `<span class="cf-badge warn">修正${n}</span>` : ""}${w.deleted ? `<span class="cf-badge" style="background:#fee2e2;color:#991b1b">削除済み</span>` : ""}</span>
+        <span class="sr-b"><span class="cf-badge">${esc(cfKindLabel(w.type))}</span>${raTestBadge(w.current)}${n ? `<span class="cf-badge warn">修正${n}</span>` : ""}${w.deleted ? `<span class="cf-badge" style="background:#fee2e2;color:#991b1b">削除済み</span>` : ""}</span>
       </button>`;
     }).join("") + `</div>` : `<div class="hint">条件に合う日報はありません。</div>`);
 }
@@ -5122,7 +5130,7 @@ function edRender(){
   const rec = edShowOrig ? w.original : w.current;
   const n = (w.edits || []).filter(e => !e.sys).length;
   document.getElementById("ed-title").innerHTML =
-    `<div class="dv-date">${esc(cfDateSlash(w.date))}${edWd(w.date)}　${esc(cfKindLabel(w.type))}</div>`
+    `<div class="dv-date">${esc(cfDateSlash(w.date))}${edWd(w.date)}　${esc(cfKindLabel(w.type))}${raTestBadge(rec)}</div>`
     + `<div class="dv-sub">${esc(w.client || "")} 様　${esc(w.site || "")}</div>`;
   const body = document.getElementById("ed-body"), foot = document.getElementById("ed-foot");
 
@@ -5602,7 +5610,7 @@ async function rpBuildImage(w){
   if(n){ rec.revision = w.rev; rec.revisedAt = w.updatedAt; rec.revisedBy = w.updatedBy; }
   const qr = rpMakeQR(rec);
   if(!qr) throw new Error("内容が多すぎてQRコードに入りません");
-  const title = w.type === "core" ? "コア・探査日報　作業確認書" : "常用日報　作業確認書";
+  const title = w.type === "core" ? "コア・探査日報　作業確認書" : w.type === "anchor" ? "アンカー日報　作業確認書" : "常用日報　作業確認書";
   const page = document.createElement("div");
   page.style.cssText = `position:fixed;left:0;top:0;z-index:-1;pointer-events:none;width:${RP_W}px;height:${RP_H}px;`;
   page.innerHTML = `<div class="rp rpimg" style="width:${RP_W}px;height:${RP_H}px">
@@ -5649,7 +5657,7 @@ async function edImage(){
     const blob = await rpBuildImage(w);
     const n = (w.edits || []).filter(e => !e.sys).length;
     const clean = s => String(s || "なし").replace(/[\\\/:*?"<>|\r\n\t\s]/g, "").slice(0, 16) || "なし";
-    const name = `${w.date || "nodate"}_${clean(w.client)}_${clean(w.site)}_${w.type === "core" ? "コア" : "常用"}_${n ? "修正版" + w.rev : "原本内容"}.png`;
+    const name = `${w.date || "nodate"}_${clean(w.client)}_${clean(w.site)}_${w.type === "core" ? "コア" : w.type === "anchor" ? "アンカー" : "常用"}_${n ? "修正版" + w.rev : "原本内容"}.png`;
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
