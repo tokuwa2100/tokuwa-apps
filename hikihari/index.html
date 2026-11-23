@@ -581,7 +581,7 @@ function renderReport(){
         <tr><th>試験日時</th><td>${v("f_testdate")}</td></tr>
         <tr><th>試験場所</th><td>${v("f_place")}</td></tr>
         <tr><th>試験実施者</th><td>${v("f_company")}</td></tr>
-        <tr><th>施工士</th><td>${v("f_qual")}　${v("f_engineer")}（登録番号 ${v("f_regno")}）${engineers[curEng()].cert?`<div class="qual-img"><img src="${engineers[curEng()].cert}"></div>`:""}</td></tr>
+        <tr><th>施工士</th><td>${v("f_qual")}　${v("f_engineer")}（登録番号 ${v("f_regno")}）${(engineers[curEng()]||{}).cert?`<div class="qual-img"><img src="${engineers[curEng()].cert}"></div>`:""}</td></tr>
       </table>
     </div>
 
@@ -744,17 +744,55 @@ function applyMachine(name){
   renderReport();
 }
 $("f_eq_machine").addEventListener('change', e=>applyMachine(e.target.value));
-const refreshQualDrop = initSingleDrop('drop_qual', ()=>engineers[curEng()].cert, v=>{engineers[curEng()].cert=v;});
+const refreshQualDrop = initSingleDrop('drop_qual', ()=>engRec(curEng()).cert, v=>{engRec(curEng()).cert=v;});
 
-/* 施工士の選択 → 資格名・登録番号・資格証を連携 */
-$("f_engineer").addEventListener('change', ()=>{
-  const e = engineers[curEng()];
-  $("f_qual").value = e.qual;
-  $("f_regno").value = e.regno;
+/* 施工士の名前合わせ（全角・半角スペースの違いや姓だけでも一致させる） */
+function engNorm(s){ return String(s||"").replace(/[\s\u3000]+/g,""); }
+function engRec(name){
+  const k = String(name||"");
+  if(!engineers[k]) engineers[k] = {qual:"", regno:"", cert:""};
+  return engineers[k];
+}
+function findEngineerKey(name){
+  const n = engNorm(name);
+  if(!n) return "";
+  if(engineers[name]) return name;
+  const keys = Object.keys(engineers);
+  return keys.find(k=>engNorm(k)===n)
+      || keys.find(k=>engNorm(k).startsWith(n) || n.startsWith(engNorm(k)))
+      || "";
+}
+/* 施工士を切り替える → 資格名・登録番号・資格証をまとめて連携 */
+function applyEngineer(name, opt){
+  const sel = $("f_engineer");
+  let key = findEngineerKey(name);
+  const known = !!key;
+  if(!known){
+    key = String(name||"").trim();
+    if(!key) return false;
+    engRec(key);
+  }
+  if(sel){
+    if(![].slice.call(sel.options).some(o=>o.value===key)){
+      const o = document.createElement("option");
+      o.value = key;
+      o.textContent = key + (known ? "" : "（未登録）");
+      sel.appendChild(o);
+    }
+    sel.value = key;
+  }
+  const e = engRec(key);
+  $("f_qual").value  = e.qual  || "";
+  $("f_regno").value = e.regno || "";
+  $("f_regno").readOnly = known;
+  $("f_regno").classList.toggle("ro", known);
   refreshQualDrop();
-  renderReport();
-});
-$("f_qual").addEventListener('input', ()=>{ engineers[curEng()].qual = $("f_qual").value; renderReport(); });
+  if(!opt || opt.render !== false) renderReport();
+  return known;
+}
+$("f_engineer").addEventListener('change', ()=>{ applyEngineer(curEng()); });
+$("f_qual").addEventListener('input',  ()=>{ engRec(curEng()).qual  = $("f_qual").value;  renderReport(); });
+$("f_regno").addEventListener('input', ()=>{ engRec(curEng()).regno = $("f_regno").value; renderReport(); });
 
 /* ---------- 指定荷重・アンカー種類 共通／個別 ---------- */
 function applyCommon(){
@@ -841,7 +879,7 @@ $("addCondBtn").addEventListener("click", ()=>{
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "hikihari";
-const APP_VERSION   = "1.0.0";
+const APP_VERSION   = "1.1.0";
 const APP_BUILD     = "2026-11-23";
 
 (function(){
@@ -974,12 +1012,8 @@ function applyNippoJson(j){
   // 試験を行った施工士を自動で選ぶ（資格名・登録番号・資格証も切り替わる）
   let engNote = "";
   if(j.engineer){
-    if(engineers[j.engineer]){
-      $("f_engineer").value = j.engineer;
-      $("f_qual").value  = engineers[j.engineer].qual;
-      $("f_regno").value = engineers[j.engineer].regno;
-    }else{
-      engNote = "　※施工士「" + j.engineer + "」は未登録です。施工士を選び直してください";
+    if(!applyEngineer(j.engineer, {render:false})){
+      engNote = "　※施工士「" + j.engineer + "」は未登録です。資格名・登録番号・資格証を入力してください";
     }
   }
   if(Array.isArray(j.conditions) && j.conditions.length){

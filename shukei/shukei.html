@@ -405,6 +405,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
 .mgc-f .yes.keep { background:var(--green); }
 .mg-ign { background:none; border:none; color:var(--text2); font-size:11px; font-weight:700; text-decoration:underline; cursor:pointer; padding:4px 0 0; }
 .dv-chip { display:inline-block; background:var(--bg); border:1px solid var(--border); border-radius:999px; padding:3px 10px; font-size:12px; font-weight:700; margin:0 6px 6px 0; }
+/* 引張試験の書き出し（目立つように） */
+.ra-panel { margin:14px 0 0; border:2px solid #c62828; border-radius:12px; background:#fff6f6; padding:12px; }
+.ra-panel-t { font-size:15px; font-weight:800; color:#b00020; margin:0 0 8px; }
+.ra-item { background:#fff; border:1px solid #f3c8c8; border-radius:10px; padding:10px; margin:0 0 8px; }
+.ra-item-h { font-size:14px; font-weight:800; color:var(--text); }
+.ra-item-s { font-size:12px; color:var(--text2); margin:2px 0 8px; }
+.ra-ng { display:inline-block; margin-left:8px; background:#b00020; color:#fff; border-radius:999px; padding:1px 8px; font-size:11px; }
+.ra-btn { width:100%; padding:12px; border:0; border-radius:10px; background:#b00020; color:#fff; font-size:15px; font-weight:800; cursor:pointer; }
+.ra-btn:active { opacity:.8; }
+.ra-btn.small { padding:8px 12px; font-size:13px; width:auto; margin:6px 0 0; }
+.diary-note.ra-line { background:#fdeaea; border-left-color:#c62828; color:#8a1c1c; font-weight:700; }
 .dv-note { padding:7px 10px; background:#fff3cd; border-left:3px solid #f59e0b; border-radius:6px; font-size:12.5px; font-weight:700; color:#7c4a00; white-space:pre-wrap; }
 .dv-note.blue { background:#e8f0fe; border-left-color:var(--primary); color:#1a3f8f; }
 .dv-note.plain { background:var(--bg); border-left-color:var(--text2); color:var(--text); font-weight:400; }
@@ -829,7 +840,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sa
   ★ 更新したら この3行 と version.json を書き換える
 ============================= */
 const APP_KEY       = "shukei";
-const APP_VERSION   = "1.11.4";
+const APP_VERSION   = "1.12.0";
 const APP_BUILD     = "2026-11-23";
 
 (function(){
@@ -1765,6 +1776,154 @@ function aggregateAnchorTansa(records){
   return { byDate, days };
 }
 
+/* =========================================================
+   引張試験の報告書作成ツールへ渡すデータ
+   （アンカー日報の書き出しと同じ形：TOKUWA_ANCHOR_TEST ver2）
+   ========================================================= */
+const RA_TESTERS = { "松沢":"松沢　俊宏", "渡部":"渡部　徳史" };
+const RA_CLASS = {
+  AP:    "接着系カプセル型　旭化成　ARケミカルセッター　AP",
+  EA500: "接着系注入型　旭化成　ARケミカルセッター　EA-500",
+  EL360: "接着系注入型　日本デコラックス　ケミチューブ　EL-360"
+};
+function raTesterFull(v){ return v ? (RA_TESTERS[v] || v) : ""; }
+function raDirForReport(dir){
+  return dir === "上" ? "上向き　施工躯体面に対して直角"
+                          : "下横向き　施工躯体面に対して直角";
+}
+function raSizeKind(sz){
+  if(!sz) return "";
+  if(String(sz).charAt(0) === "D") return "異形棒鉱";
+  if(String(sz).charAt(0) === "W") return "全ネジボルト（インチ）";
+  return "全ネジボルト";
+}
+function raClassText(a){
+  if(!a) return "";
+  if(a.type === "OTHER") return a.typeOther || "";
+  if(a.type === "METAL") return "金属系　打込み式" + (a.series ? "　" + a.series : "");
+  return RA_CLASS[a.type] || "";
+}
+function raDateKanji(iso){
+  const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m) return iso || "";
+  return m[1] + "年" + Number(m[2]) + "月" + Number(m[3]) + "日";
+}
+function raHasTest(r){ return !!(r && r.test && r.test.on === true && (r.test.rows || []).length); }
+
+function raBuildReportJson(r){
+  const agg  = aggregateAnchors(r);
+  const tt   = r.test || { on:false, rows:[] };
+  const rows = tt.rows || [];
+
+  /* 施工条件：試験した呼びを先に、残りの施工した呼びを後ろに */
+  const conditions = [];
+  const put = (sz, a) => {
+    if(!sz || conditions.some(c => c.label === sz)) return;
+    conditions.push({
+      label: sz,
+      dia:   (a && a.dia != null) ? String(a.dia) : "",
+      depth: (a && a.emb != null) ? String(a.emb) : "",
+      dir:   raDirForReport(a ? a.dir : "")
+    });
+  };
+  rows.forEach(t => { put(t.size, agg.filter(x => x.size === t.size)[0]); });
+  agg.forEach(a => { put(a.size, a); });
+
+  const firstTested = rows.length ? agg.filter(x => x.size === rows[0].size)[0] : null;
+  const first = firstTested || agg[0] || null;
+  const mainSize = (rows[0] && rows[0].size) ? rows[0].size : (first ? first.size : "");
+  const jpDate = raDateKanji(r.date);
+
+  const cmap = new Map();
+  rows.forEach(t => { const sz = t.size || ""; cmap.set(sz, (cmap.get(sz) || 0) + 1); });
+  const counts = [...cmap.entries()].map(([size, qty]) => ({ size, qty }));
+
+  const designs = [...new Set(rows.map(t => t.design))];
+  const designCommon = (designs.length === 1 && designs[0] != null) ? String(designs[0]) : "";
+
+  return {
+    format: "TOKUWA_ANCHOR_TEST",
+    ver: 2,
+    app: "集計表 v" + APP_VERSION,
+    recordId: r.recordId || r.id || "",
+    date: r.date || "",
+    client: getClientName(r) || r.client || "",
+    project: r.project || "",
+    place: tt.place || r.site || "",
+    testdate: jpDate,
+    machine: tt.machine || "",
+    engineer: raTesterFull(tt.tester),
+    tester: tt.tester || "",
+    anchorClass: raClassText(first),
+    anchorType: mainSize ? (raSizeKind(mainSize) + "　" + mainSize) : "",
+    designCommon: designCommon,
+    testTotal: rows.length,
+    counts: counts,
+    conditions: conditions,
+    anchors: rows.map(t => ({
+      date: jpDate,
+      type: t.size || "",
+      design:   t.design   != null ? String(t.design)   : "",
+      measured: t.measured != null ? String(t.measured) : "",
+      overall: null,
+      value: null,
+      memo: t.memo || ""
+    }))
+  };
+}
+function raSafe(v){ return String(v || "").replace(/[\\\/:*?"<>|\s　]/g, "_").slice(0, 30); }
+/* 日報ID → 報告書用JSONをダウンロード */
+function raExport(id){
+  let rec = null;
+  try{
+    const w = TK.reports.get(String(id));
+    if(w) rec = tkView(w);
+  }catch(e){}
+  if(!rec){
+    Object.keys(dvMap || {}).forEach(k => (dvMap[k] || []).forEach(x => {
+      if(String(x.id) === String(id)) rec = x;
+    }));
+  }
+  if(!rec){ showToast("⚠／日報が見つかりませんでした"); return; }
+  if(!raHasTest(rec)){ showToast("⚠／この日報には引張試験が入っていません"); return; }
+  try{
+    const j = raBuildReportJson(rec);
+    const name = [String(rec.date || "").replace(/-/g, ""), raSafe(getClientName(rec)), raSafe(rec.site), "引張試験"]
+                   .filter(Boolean).join("_") + ".json";
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(j)], { type:"application/json" }));
+    a.download = name;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { try{ URL.revokeObjectURL(a.href); a.remove(); }catch(e){} }, 2000);
+    showToast("✅ 報告書用データを書き出しました");
+  }catch(e){
+    console.error(e);
+    showToast("❌ 書き出しに失敗しました");
+  }
+}
+/* 引張試験の一覧（集計表の下に目立つように出す） */
+function raPanelHtml(records){
+  const list = (records || []).filter(raHasTest)
+    .sort((a,b) => String(a.date).localeCompare(String(b.date)));
+  if(!list.length) return "";
+  let h = `<div class="ra-panel"><div class="ra-panel-t">🧪 引張試験 ${list.length}件　報告書用データの書き出し</div>`;
+  list.forEach(r => {
+    const t = r.test || {}, rows = t.rows || [];
+    const sizes = [...new Set(rows.map(x => x.size).filter(Boolean))].join("・");
+    const ng = rows.filter(x => x.judge === "不合格").length;
+    const md = String(r.date || "").slice(5).replace("-", "/");
+    const q = String(r.id).replace(/'/g, "");
+    h += `<div class="ra-item">`
+      +  `<div class="ra-item-h">${esc(md)}　${esc(raTesterFull(t.tester) || "施工士未入力")}　`
+      +  `${rows.length}本${sizes ? "（" + esc(sizes) + "）" : ""}`
+      +  `${ng ? `<span class="ra-ng">不合格${ng}件</span>` : ""}</div>`
+      +  `<div class="ra-item-s">${esc(t.place || r.site || "")}${t.machine ? "　/　" + esc(t.machine) : ""}</div>`
+      +  `<button class="ra-btn" onclick="raExport('${q}')">📄 報告書用データを書き出す</button></div>`;
+  });
+  h += `<div class="hint" style="margin:6px 0 0">※ 書き出したファイルを「あと施工アンカー引張試験 報告書作成ツール」の「日報データを読み込む」で開くと、工事名・試験場所・施工士・施工条件・荷重が入ります。写真を貼ってからPDFにしてください。</div></div>`;
+  return h;
+}
+
 function aggregateHatsuri(records) {
   const byDate = {};
   let total = 0;
@@ -1977,6 +2136,7 @@ function renderAnchorTable(records, site, month, range, statsGrid, tableArea) {
   cols.forEach(dt => { const t = rowKeys.reduce((s,k) => s + (gridByDate[k][dt.key]||0), 0); grand += t; html += `<td>${t||""}</td>`; });
   html += `<td class="total-col">${grand}</td></tr></table></div>`;
   html += `<div class="hint">※ 日付（📄マーク）をタップすると、その日の日報がそのまま表示されます</div>`;
+  html += raPanelHtml(records);
   html += buildDiaryHTML(records, range);
   tableArea.innerHTML = html;
 }
@@ -2135,6 +2295,20 @@ function buildDiaryHTML(records, range) {
       if (p.length) svParts.push(p.join("・"));
     });
 
+    // 引張試験（あった日は目立つように出す）
+    const tParts = [];
+    dayRecs.forEach(r => {
+      if(!raHasTest(r)) return;
+      const t = r.test, rows = t.rows || [];
+      const sizes = [...new Set(rows.map(x => x.size).filter(Boolean))].join("・");
+      const ng = rows.filter(x => x.judge === "不合格").length;
+      const q = String(r.id == null ? "" : r.id).replace(/'/g, "");
+      tParts.push(`${rows.length}本${sizes ? "（" + esc(sizes) + "）" : ""}`
+        + `${t.machine ? "　" + esc(t.machine) : ""}`
+        + `${ng ? `<span class="ra-ng">不合格${ng}件</span>` : ""}`
+        + (q ? `<button class="ra-btn small" onclick="event.stopPropagation();raExport('${q}')">📄 報告書用データを書き出す</button>` : ""));
+    });
+
     // ハツリ作業
     const htParts = [];
     dayRecs.forEach(r => {
@@ -2222,6 +2396,9 @@ function buildDiaryHTML(records, range) {
     }
     if (htParts.length) {
       html += `<div class="diary-note" style="background:#fff3e0;border-left-color:#f59e0b;color:#92400e;">🔨 ハツリ：${htParts.join(' / ')}</div>`;
+    }
+    if (tParts.length) {
+      html += `<div class="diary-note ra-line">🧪 引張試験：${tParts.join(' / ')}</div>`;
     }
     if (notes.length) {
       html += `<div class="diary-note">⚠️ 特記：${notes.map(esc).join(' / ')}</div>`;
@@ -4016,16 +4193,19 @@ function dvDetailHtml(r){
   /* 引張試験 */
   const tst = r.test;
   if(tst && tst.on === true && (tst.rows || []).length){
-    h += `<div class="dv-sec"><div class="dv-sec-t">🧪 引張試験（${esc(tst.machine||"")}　${tst.rows.length}本）</div>` +
-         `<div class="dv-scroll"><table class="dv-tbl"><tr><th>№</th><th>呼び</th><th>指定荷重</th><th>実施荷重</th><th>判定</th><th>写真</th><th>メモ</th></tr>`;
+    const tq = String(r.id == null ? "" : r.id).replace(/'/g, "");
+    h += `<div class="dv-sec" style="border:2px solid #c62828;border-radius:12px;background:#fff6f6;padding:10px;">`
+      +  `<div class="dv-sec-t" style="color:#b00020;">🧪 引張試験（${esc(tst.machine||"")}　${tst.rows.length}本）</div>`
+      +  `<div class="ra-item-s">試験実施者：${esc(raTesterFull(tst.tester) || "未入力")}　/　試験場所：${esc(tst.place || r.site || "未入力")}</div>`;
+    if(tq) h += `<button class="ra-btn" onclick="event.stopPropagation();raExport('${tq}')">📄 報告書用データを書き出す</button>`;
+    h += `<div class="dv-scroll" style="margin-top:8px;"><table class="dv-tbl"><tr><th>№</th><th>呼び</th><th>指定荷重</th><th>実施荷重</th><th>判定</th><th>メモ</th></tr>`;
     tst.rows.forEach((x,i) => {
-      const ph = (x.overall ? 1 : 0) + (x.value ? 1 : 0);
       const ng = x.judge === "不合格";
       h += `<tr><td>${i+1}</td><td>${esc(x.size||"—")}</td>` +
            `<td class="n">${x.design!=null?x.design+" kN":"—"}</td>` +
            `<td class="n">${x.measured!=null?x.measured+" kN":"—"}</td>` +
            `<td style="${ng?"color:#b00020;font-weight:800;":""}">${esc(x.judge||"—")}</td>` +
-           `<td>${ph}/2</td><td class="l">${esc(x.memo||"")}</td></tr>`;
+           `<td class="l">${esc(x.memo||"")}</td></tr>`;
     });
     h += `</table></div></div>`;
   }
